@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 APP_NAME="AgentDeck"
 DEST="/Applications/$APP_NAME.app"
-BUILD="build/$APP_NAME.app"
+BUILD="build/$APP_NAME.app" # made by scripts/build-app.sh
 
 if ! xcrun --find swift >/dev/null 2>&1; then
   echo "AgentDeck needs Apple's developer tools to build."
@@ -20,23 +20,7 @@ if ! xcrun --find swift >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Building…"
-mkdir -p build
-if ! swift build -c release >build/build.log 2>&1; then
-  cat build/build.log
-  echo
-  echo "The build failed. The messages above say why."
-  exit 1
-fi
-BIN="$(swift build -c release --show-bin-path)/$APP_NAME"
-
-rm -rf "$BUILD"
-mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
-cp "$BIN" "$BUILD/Contents/MacOS/$APP_NAME"
-cp Resources/Info.plist "$BUILD/Contents/"
-cp Resources/AppIcon.icns Resources/report.sh "$BUILD/Contents/Resources/"
-cp -R Resources/web "$BUILD/Contents/Resources/"
-codesign --force --sign - "$BUILD"
+scripts/build-app.sh
 
 if pgrep -x "$APP_NAME" >/dev/null; then
   echo "Closing the running copy…"

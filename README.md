@@ -8,6 +8,10 @@ hard Claude thinks, or hold a button and talk to it. AgentDeck runs in your
 Mac's menu bar. Your phone connects to it over your Wi-Fi, so there's nothing
 to install from an app store.
 
+<p align="center">
+  <img src="docs/deck-portrait.png" alt="The deck on a phone: six session keys, a dial and a stick" width="300">
+</p>
+
 > AgentDeck is an independent project. It is not made by or affiliated with Anthropic.
 
 ## What's on the deck
@@ -40,10 +44,24 @@ Each session keeps its key until it ends. You can pin projects to specific keys 
   other terminal apps (iTerm, Ghostty, VS Code…) don't appear on the deck, because
   its buttons can only reach Terminal.
 - A phone on the same Wi-Fi as your Mac
-- Apple's free developer tools, used to build the app. The installer offers to
-  install them if you don't have them.
-
 ## Install
+
+There are two ways. Both give you the same app.
+
+### Download the app
+
+1. Download **AgentDeck.zip** from the
+   [latest release](https://github.com/Sauzze/agentdeck/releases/latest) and open it.
+2. Drag **AgentDeck** into your Applications folder, then open it.
+3. macOS will say it can't check AgentDeck for malicious software, because the
+   app isn't notarised by Apple. Click **Done**, then go to
+   **System Settings → Privacy & Security**, scroll down, and click
+   **Open Anyway** next to AgentDeck. You only do this once.
+
+### Or build it yourself
+
+You need Apple's free developer tools. The installer offers to install them if
+you don't have them. A copy you build yourself opens without the warning.
 
 ```bash
 git clone https://github.com/Sauzze/agentdeck.git
@@ -52,12 +70,18 @@ cd agentdeck
 ```
 
 This builds AgentDeck, puts it in your Applications folder and opens it.
-You'll see a small grid icon in the menu bar, and the setup page opens in your
-browser.
+
+Either way, you'll see a small grid icon in the menu bar, and the setup page
+opens in your browser.
 
 ## Set up
 
 The setup page walks you through three steps:
+
+<p align="center">
+  <img src="docs/setup.png" alt="The setup page: a three-step checklist, the keys, and a pairing code for your phone" width="720">
+</p>
+
 
 1. **Connect Claude Code.** This lets your Claude sessions tell AgentDeck what
    they're doing. Restart any Claude sessions that were already open.
@@ -80,6 +104,10 @@ Terminal. Click **Allow**.
    paired.
 
 You can also scan the QR code on the setup page with your phone's camera.
+
+<p align="center">
+  <img src="docs/deck-landscape.png" alt="The deck sideways: keys on the left, controls on the right" width="640">
+</p>
 
 ## Make it yours
 
@@ -126,8 +154,8 @@ sends your audio to Anthropic to be transcribed. AgentDeck itself never hears it
 Claude sessions. Claude needs to run in the Terminal app.
 
 **Buttons, the mic or the cursor do nothing.** Turn AgentDeck on in System
-Settings → Privacy & Security → Accessibility. Updating with `./install.sh`
-clears that permission, because macOS treats each build as a new app. Click
+Settings → Privacy & Security → Accessibility. Updating AgentDeck clears that
+permission, because macOS treats each version as a new app. Click
 **Open Settings** on the setup page again afterwards, and turn AgentDeck back on.
 
 **The mic types a space instead of listening.** Claude's input box has to be
@@ -174,6 +202,8 @@ Sources/AgentDeck/   the Mac app
 Resources/web/       the phone page, the pairing page and the setup page
 Resources/report.sh  the Claude Code hook
 install.sh           build and install
+scripts/             the build itself, and the release download
+docs/                screenshots for this page
 ```
 
 ## Windows
