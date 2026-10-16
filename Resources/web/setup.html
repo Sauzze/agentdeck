@@ -636,17 +636,19 @@
 
   /** Makes a change, shows it here and on the preview, and sends it on. */
   function change(edit) {
+    const before = JSON.stringify(layout);
     edit();
+    if (JSON.stringify(layout) === before) return; // already so, like Auto clicked again
     drawLayout();
-    markEdited();
     clearTimeout(unsaved);
     unsaved = setTimeout(() => { unsaved = null; sendLayout(); }, 250);
+    renderProfiles();
   }
 
   async function sendLayout() {
     sending++;
     try {
-      await fetch('/setup/layout', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(layout) });
+      await send('/setup/layout', layout);
     } finally {
       sending--;
     }
@@ -971,13 +973,32 @@
   // Dragging across the picker fires many changes; only the last is sent.
   let saving = null;
   function save() {
-    markEdited();
     clearTimeout(saving);
     saving = setTimeout(() => { saving = null; sendTheme(); }, 120);
+    renderProfiles();
   }
 
   function sendTheme() {
-    return fetch('/setup/theme', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(colours) });
+    return send('/setup/theme', colours);
+  }
+
+  const inFlight = new Set(); // changes sent that the computer hasn't answered yet
+
+  /** Sends a change of layout or colours, keeping track of it until it lands. */
+  async function send(path, body) {
+    const request = fetch(path, { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(body) });
+    inFlight.add(request);
+    try {
+      return await request;
+    } finally {
+      inFlight.delete(request);
+      // Once it has every change, the computer says whether the profile is edited.
+      if (!changesWaiting()) load();
+    }
+  }
+
+  function changesWaiting() {
+    return Boolean(unsaved || saving || inFlight.size);
   }
 
   /* -------------------------------------------------------------- profiles */
@@ -989,39 +1010,38 @@
     $('profiles-section').hidden = !state.profiles;
     if (!state.profiles) return;
     const active = state.activeProfile;
+    // A change still on its way counts before the computer has said so.
+    const edited = state.profileEdited || changesWaiting();
     $('profiles').replaceChildren(...[DEFAULT_PROFILE, ...state.profiles.map((p) => p.name)].map((name) =>
-      choice(name === active && state.profileEdited ? `${name} · edited` : name, name === active, () => switchTo(name))));
+      choice(name === active && edited ? `${name} · edited` : name, name === active, () => switchTo(name))));
     const isDefault = active === DEFAULT_PROFILE;
-    $('profile-save').disabled = isDefault || !state.profileEdited;
+    $('profile-save').disabled = isDefault || !edited;
     $('profile-rename').disabled = isDefault;
     $('profile-delete').disabled = isDefault;
   }
 
-  /** Sends any change still waiting, so a profile is saved from, or replaces, what you see. */
+  /**
+   * Sends any change still waiting and waits for every one sent to land, so
+   * a profile is saved from, or replaces, what you see.
+   */
   async function settle() {
     if (unsaved) {
       clearTimeout(unsaved);
       unsaved = null;
-      await sendLayout();
+      sendLayout();
     }
     if (saving) {
       clearTimeout(saving);
       saving = null;
-      await sendTheme();
+      sendTheme();
     }
+    await Promise.all(inFlight);
   }
 
   async function profileAction(action, name, extra = '', body) {
     await settle();
     const res = await post(`/setup/profiles?action=${action}&name=${encodeURIComponent(name)}${extra}`, body);
     if (!res.ok) alert(await res.text());
-  }
-
-  /** A change just made counts as one before the computer has said so. */
-  function markEdited() {
-    if (!state || state.profileEdited) return;
-    state.profileEdited = true;
-    renderProfiles();
   }
 
   async function switchTo(name) {

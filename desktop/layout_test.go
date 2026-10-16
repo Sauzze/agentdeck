@@ -123,6 +123,23 @@ func TestAutoKeepsTheKeysInOrderWhenOneGoes(t *testing.T) {
 	}
 }
 
+// With nine keys taken, a session left without one doesn't claim its old
+// key back from the session given it.
+func TestAutoDoesntSwapKeysWhenSessionsOutnumberThem(t *testing.T) {
+	d := newTestDeck(t)
+	running(d, 9)
+	d.config.Pin("/work/p0", 8) // s0 on key 9, the others on keys 1 to 8
+	d.layout()
+	d.config.Unpin(8)
+	d.layout()
+	d.config.Pin("/work/elsewhere", 0) // the others move up a key, and s0 has none
+	d.layout()
+	keys, overflow := d.layout()
+	if keys[8].session == nil || keys[8].session.ID != "s8" || len(overflow) != 1 || overflow[0].ID != "s0" {
+		t.Fatalf("key 9 went to %v, want s8 to keep it and s0 to wait", keys[8].session)
+	}
+}
+
 func TestTheSetupPageOffersEveryKeyToPinTo(t *testing.T) {
 	d := newTestDeck(t)
 	running(d, 1)

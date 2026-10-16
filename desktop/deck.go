@@ -226,6 +226,11 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 		}
 		place(s, free)
 	}
+	// A session left without a key forgets the one it had, or it would claim
+	// it back from the session that has it now.
+	for _, s := range remaining {
+		delete(d.keyOf, s.ID)
+	}
 	return keys, remaining
 }
 

@@ -138,6 +138,9 @@ final class Deck {
             guard let free = keys.indices.first(where: { keys[$0].pin == nil && keys[$0].session == nil }) else { break }
             place(session, at: free)
         }
+        // A session left without a key forgets the one it had, or it would
+        // claim it back from the session that has it now.
+        for session in remaining { keyOf[session.id] = nil }
         return (keys, remaining)
     }
 
