@@ -37,11 +37,12 @@
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
     touch-action: manipulation; overflow: hidden; }
 
-  /* The screen's real height: on an iPhone home-screen app, 100% stops short
-     of the bottom edge and leaves the deck sitting high. */
-  .deck { height: 100vh; height: 100dvh; display: flex; flex-direction: column; gap: var(--gap);
-    padding: calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 16px)
-             calc(env(safe-area-inset-bottom) + 12px) calc(env(safe-area-inset-left) + 16px); }
+  /* Pinned to the screen's edges rather than sized by height: on an iPhone
+     Home Screen app, percentage and viewport heights can stop short of the
+     bottom and leave the deck sitting high. */
+  .deck { position: fixed; inset: 0; display: flex; flex-direction: column; gap: var(--gap);
+    padding: calc(env(safe-area-inset-top) + 28px) calc(env(safe-area-inset-right) + 16px)
+             calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px); }
 
   /* ------------------------------------------------------------- keycaps */
   .cap { background: linear-gradient(var(--cap-top), var(--cap)); border: 1px solid var(--edge);
@@ -140,7 +141,8 @@
 
   /* Sideways: keys on the left, everything else on the right. */
   @media (orientation: landscape) {
-    .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px; }
+    .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
+      padding-top: calc(env(safe-area-inset-top) + 24px); }
     .keys { grid-template-rows: 1fr 1fr; height: 100%; align-content: center; }
     .key { aspect-ratio: auto; height: 100%; min-height: 0; }
     .controls { grid-row: 1; grid-column: 2; }
