@@ -1,0 +1,42 @@
+# Builds both apps on every push and pull request: the Mac app with Swift,
+# and the Windows and Linux app with Go, vetted and tested on each system,
+# then built for every download the releases carry.
+
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    name: Mac app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift build -c release
+
+  desktop:
+    name: Windows and Linux app, on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build every download
+        if: runner.os == 'Linux'
+        run: |
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            GOOS=${target%/*} GOARCH=${target#*/} go build -o /dev/null ./cmd/sauzzedeck
+          done
