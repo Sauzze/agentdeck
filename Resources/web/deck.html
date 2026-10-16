@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AgentDeck">
+<meta name="theme-color" content="#0e0e0e">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="/icon.png">
+<title>AgentDeck</title>
+<style>
+  :root {
+    --body: #0e0e0e;
+    --cap: #1f1f1f;
+    --cap-top: #262626;
+    --edge: #2c2c2c;
+    --ink: #ececec;
+    --dim: #6f6f6f;
+    --faint: #3a3a3a;
+    --idle: #f2f2f2;
+    --thinking: #3b82f6;
+    --asking: #ff8a1f;
+    --unread: #22c55e;
+    --error: #ef4444;
+    --gap: 12px;
+    /* Derived, so a custom theme reaches everything. */
+    --shadow: color-mix(in srgb, var(--body) 50%, #000);
+    --sheen: color-mix(in srgb, var(--ink) 4%, transparent);
+    --well: color-mix(in srgb, var(--body) 70%, #000);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--body); color: var(--ink);
+    font: 500 14px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    touch-action: manipulation; overflow: hidden; }
+
+  /* Pinned to the screen's edges rather than sized by height: on an iPhone
+     Home Screen app, percentage and viewport heights can stop short of the
+     bottom and leave the deck sitting high. */
+  .deck { position: fixed; inset: 0; display: flex; flex-direction: column; gap: var(--gap);
+    padding: calc(env(safe-area-inset-top) + 28px) calc(env(safe-area-inset-right) + 16px)
+             calc(env(safe-area-inset-bottom) + 16px) calc(env(safe-area-inset-left) + 16px); }
+
+  /* ------------------------------------------------------------- keycaps */
+  .cap { background: linear-gradient(var(--cap-top), var(--cap)); border: 1px solid var(--edge);
+    border-radius: 16px; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen);
+    transition: transform .06s, box-shadow .06s; position: relative; }
+  .cap.down { transform: translateY(2px); box-shadow: 0 1px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
+  .cap.off { opacity: .35; pointer-events: none; }
+
+  /* --------------------------------------------------------- session keys */
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); flex: none; }
+  .key { aspect-ratio: 1.08; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px; }
+  .key .row { display: flex; justify-content: space-between; align-items: center; }
+  .key .slot { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .key .light { width: 12px; height: 12px; border-radius: 50%; background: var(--faint); }
+  .key .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key .effort { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; min-height: 12px; }
+  .key.empty .name { color: var(--faint); font-weight: 500; }
+  .key.pinned .name { color: var(--dim); font-weight: 600; }
+  .key.pinned { border-style: dashed; }
+
+  .key[data-state] .light { background: var(--c); box-shadow: 0 0 10px var(--c), 0 0 2px var(--c); }
+  .key[data-state]:not([data-state="idle"]) { border-color: color-mix(in srgb, var(--c) 50%, var(--edge));
+    background: linear-gradient(color-mix(in srgb, var(--c) 14%, var(--cap-top)), color-mix(in srgb, var(--c) 8%, var(--cap))); }
+  .key[data-state="idle"]     { --c: var(--idle); }
+  .key[data-state="thinking"] { --c: var(--thinking); animation: pulse 1.6s ease-in-out infinite; }
+  .key[data-state="asking"]   { --c: var(--asking); animation: blink 1s steps(2, jump-none) infinite; }
+  .key[data-state="unread"]   { --c: var(--unread); }
+  .key[data-state="error"]    { --c: var(--error); }
+  .key.selected { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  @keyframes pulse { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 30%, var(--cap-top)), color-mix(in srgb, var(--c) 20%, var(--cap))); } }
+  @keyframes blink { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 38%, var(--cap-top)), color-mix(in srgb, var(--c) 28%, var(--cap))); } }
+
+  /* ------------------------------------------------------------- controls */
+  .controls { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--gap); }
+  .target { font-size: 12px; color: var(--dim); display: flex; justify-content: space-between; padding: 0 2px; }
+  .target b { color: var(--ink); font-weight: 600; }
+
+  .analog { flex: 1; min-height: 140px; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+
+  /* The dial: a knob in a well, five detents round a 270° sweep. */
+  .dial { display: grid; place-items: center; touch-action: none; padding: 6px; }
+  .dial svg { width: 100%; height: 100%; max-height: 220px; overflow: visible; }
+  .dial .tick { stroke: var(--faint); stroke-width: 3; stroke-linecap: round; }
+  .dial .tick.on { stroke: var(--ink); }
+  .dial .lbl { fill: var(--dim); font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; letter-spacing: .04em; }
+  .dial .lbl.on { fill: var(--ink); }
+  .dial .knob { transition: transform .18s cubic-bezier(.3,1.4,.6,1); transform-origin: 100px 100px; }
+  .dial .pointer { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; }
+  .dial.unknown .pointer { stroke: var(--faint); }
+
+  /* The stick: a trackpad well with a nub; its legend says what it drives. */
+  .stick { touch-action: none; overflow: hidden; display: grid; place-items: center;
+    background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--cap) 70%, var(--body)), var(--body) 70%); }
+  .stick .cross { position: absolute; inset: 30px 18px 18px; border: 1px dashed var(--faint); border-radius: 10px; }
+  .stick .nub { width: 44px; height: 44px; border-radius: 50%; z-index: 1;
+    background: linear-gradient(color-mix(in srgb, var(--cap-top) 75%, var(--ink)), var(--cap-top));
+    border: 1px solid var(--edge); box-shadow: 0 3px 8px var(--shadow);
+    transition: transform .18s cubic-bezier(.3,1.4,.6,1); }
+  .stick .mode { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); padding: 6px 12px;
+    font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; z-index: 2; }
+  .stick.down .nub { transition: none; }
+  .stick.down { transform: none; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
+  .stick.choices .mode { color: var(--asking); }
+  .stick .arrows { position: absolute; inset: 0; pointer-events: none; color: var(--faint); font-size: 12px; }
+  .stick .arrows span { position: absolute; }
+  .stick .arrows .u { top: 36px; left: 50%; transform: translateX(-50%); }
+  .stick .arrows .d { bottom: 12px; left: 50%; transform: translateX(-50%); }
+  .stick.choices .arrows { color: var(--asking); }
+
+  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); flex: none; }
+  .btn { height: 64px; display: grid; place-items: center; font-size: 15px; font-weight: 600; color: var(--ink); }
+  .btn.small { height: 48px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace;
+    color: color-mix(in srgb, var(--ink) 75%, var(--body)); }
+  .btn svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2.4;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .btn.accept.live { color: var(--unread); border-color: color-mix(in srgb, var(--unread) 50%, var(--edge)); }
+  .btn.reject.live { color: var(--error); border-color: color-mix(in srgb, var(--error) 50%, var(--edge)); }
+  .btn.accept:not(.live), .btn.reject:not(.live) { color: var(--faint); }
+  .btn.mic.down { color: var(--error); border-color: var(--error);
+    box-shadow: 0 1px 0 var(--shadow), 0 0 18px color-mix(in srgb, var(--error) 45%, transparent); }
+
+  .btn.armed { color: var(--error); border-color: var(--error); }
+  /* Off screen, not display:none — a hidden switch gives no haptic. */
+  #haptic { position: fixed; left: -100px; top: 0; opacity: 0; pointer-events: none; }
+
+  .install { position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 16px); z-index: 10;
+    background: var(--cap-top); border: 1px solid var(--edge); border-radius: 14px; padding: 14px 16px;
+    box-shadow: 0 8px 30px var(--shadow); font-size: 14px; line-height: 1.4; display: flex; gap: 12px; align-items: start; }
+  .install[hidden] { display: none; }
+  .install button { margin-left: auto; background: none; border: 0; color: var(--dim); font: inherit; padding: 0 0 0 8px; }
+
+  .status { font-size: 11px; color: var(--dim); text-align: center; min-height: 13px; flex: none; }
+  .status.off { color: var(--error); }
+  .status.flash { color: var(--ink); }
+
+  /* Sideways: keys on the left, everything else on the right. */
+  @media (orientation: landscape) {
+    .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
+      padding-top: calc(env(safe-area-inset-top) + 24px); }
+    .keys { grid-template-rows: 1fr 1fr; height: 100%; align-content: center; }
+    .key { aspect-ratio: auto; height: 100%; min-height: 0; }
+    .controls { grid-row: 1; grid-column: 2; }
+    .status { grid-column: 1 / -1; }
+    .analog { min-height: 0; }
+    .btn { height: 48px; }
+    .btn.small { height: 40px; }
+  }
+</style>
+</head>
+<body>
+<main class="deck">
+  <section class="keys" id="keys"></section>
+
+  <section class="controls">
+    <div class="target"><span id="target">no session selected</span><span id="target-state"></span></div>
+
+    <div class="analog">
+      <div class="cap dial" id="dial" data-control="dial">
+        <svg viewBox="0 0 200 200" aria-label="Thinking effort">
+          <g id="dial-ticks"></g>
+          <circle cx="100" cy="100" r="58" style="fill: var(--well)"/>
+          <g class="knob" id="knob">
+            <circle cx="100" cy="100" r="52" fill="url(#knob-face)" style="stroke: var(--edge)"/>
+            <line class="pointer" x1="100" y1="58" x2="100" y2="76"/>
+          </g>
+          <defs>
+            <radialGradient id="knob-face" cx="40%" cy="35%" r="75%">
+              <stop offset="0" style="stop-color: color-mix(in srgb, var(--cap-top) 70%, var(--ink))"/><stop offset="1" style="stop-color: var(--cap)"/>
+            </radialGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="cap stick" id="stick" data-control="stick">
+        <div class="cross"></div>
+        <div class="arrows"><span class="u">▲</span><span class="d">▼</span></div>
+        <div class="mode" id="stick-mode">CURSOR</div>
+        <div class="nub" id="nub"></div>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <div class="cap btn accept" data-action="accept" aria-label="Accept">
+        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <div class="cap btn reject" data-action="reject" aria-label="Reject">
+        <svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
+      </div>
+      <div class="cap btn mic" data-action="mic" data-hold aria-label="Hold to dictate">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <div class="cap btn small" data-action="esc">esc</div>
+      <div class="cap btn small" data-action="send">⏎ send</div>
+      <div class="cap btn small" data-action="clear">/clear</div>
+    </div>
+  </section>
+
+  <div class="status" id="status">connecting…</div>
+</main>
+<div class="install" id="install" hidden>
+  <div><b>Add AgentDeck to your Home Screen.</b><br>Tap Share, then “Add to Home Screen”. It opens full screen and stays paired.</div>
+  <button id="install-close" aria-label="Dismiss">✕</button>
+</div>
+<label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
+
+<script>
+  const SLOTS = 6;
+  const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
+  const LEVEL_LABELS = ['L', 'M', 'H', 'XH', 'MAX'];
+  const SWEEP = 270; // degrees the dial covers, centred on straight up
+  const STATE_WORDS = { idle: 'idle', thinking: 'working', asking: 'waiting on you', unread: 'done', error: 'error' };
+
+  const token = new URLSearchParams(location.search).get('t') || '';
+  const $ = (id) => document.getElementById(id);
+
+  let keyData = [];    // the six keys as the server lays them out
+  let sessions = [];   // the sessions on them
+  let overflow = 0;    // sessions running with no key to show them
+  let selected = null; // session id the controls act on
+
+  /* ---------------------------------------------------------------- keys */
+
+  for (let i = 0; i < SLOTS; i++) {
+    const el = document.createElement('div');
+    el.className = 'cap key empty';
+    el.innerHTML = `<div class="row"><span class="slot">${i + 1}</span><span class="light"></span></div>
+                    <div><div class="name">—</div><div class="effort"></div></div>`;
+    press(el, () => {
+      const id = el.dataset.session;
+      if (!id) return;
+      selected = id;
+      render();
+      post('/focus', { session: id });
+    });
+    $('keys').appendChild(el);
+  }
+
+  /* --------------------------------------------------------------- dial */
+
+  // Ticks and legends round the knob, drawn once.
+  (function drawDial() {
+    const g = $('dial-ticks');
+    LEVELS.forEach((_, i) => {
+      const a = angleOf(i) * Math.PI / 180;
+      const pt = (r) => [100 + r * Math.sin(a), 100 - r * Math.cos(a)];
+      const [x1, y1] = pt(64), [x2, y2] = pt(74), [lx, ly] = pt(90);
+      g.insertAdjacentHTML('beforeend',
+        `<line class="tick" data-i="${i}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>` +
+        `<text class="lbl" data-i="${i}" x="${lx}" y="${ly}">${LEVEL_LABELS[i]}</text>`);
+    });
+  })();
+
+  function angleOf(i) { return -SWEEP / 2 + (SWEEP / (LEVELS.length - 1)) * i; }
+
+  function showEffort(level) {
+    const i = LEVELS.indexOf(level);
+    $('dial').classList.toggle('unknown', i < 0);
+    $('knob').style.transform = `rotate(${i < 0 ? 0 : angleOf(i)}deg)`;
+    document.querySelectorAll('#dial-ticks [data-i]').forEach((n) => n.classList.toggle('on', Number(n.dataset.i) === i));
+  }
+
+  /* ----------------------------------------------------------- buttons */
+
+  document.querySelectorAll('[data-action]').forEach((el) => {
+    press(el, () => act(el, 'down'), el.hasAttribute('data-hold') ? () => act(el, 'up') : null);
+  });
+
+  let clearArmed = null;
+
+  function act(el, phase) {
+    const action = el.dataset.action;
+
+    // The Mac stops recording in the tab where it started, so a release has
+    // to arrive even if the selection has gone in the meantime.
+    if (action === 'mic' && phase === 'up') return send('/act', { session: selected || '', action, phase });
+    if (!selected) return;
+    if (action === 'mic') return send('/act', { session: selected, action, phase });
+
+    // /clear throws the conversation away: first tap arms it, second sends.
+    if (action === 'clear') {
+      if (!clearArmed) {
+        el.textContent = 'sure?';
+        el.classList.add('armed');
+        clearArmed = setTimeout(disarm, 2500);
+        return;
+      }
+      disarm();
+    }
+
+    send('/act', { session: selected, action });
+  }
+
+  function disarm() {
+    const el = document.querySelector('[data-action="clear"]');
+    clearTimeout(clearArmed);
+    clearArmed = null;
+    el.textContent = '/clear';
+    el.classList.remove('armed');
+  }
+
+  /** POST and say anything that is not a plain yes on the status line. */
+  async function send(pathname, params) {
+    const res = await post(pathname, params);
+    if (!res) return flash("Can't reach your Mac");
+    if (res.status === 202) return flash('queued — goes in when Claude is done');
+    if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
+  }
+
+  let flashTimer = null;
+  function flash(text) {
+    const el = $('status');
+    el.textContent = text;
+    el.classList.add('flash');
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => { el.classList.remove('flash'); render(); }, 2500);
+  }
+
+  /* ---------------------------------------------------- turning the dial */
+
+  /**
+   * Point at a level: the knob follows the finger round the sweep and snaps
+   * to the nearest detent, ticking as it passes each one. Letting go sends it.
+   */
+  const dial = $('dial');
+  let dragging = false;
+  let turning = -1; // detent under the finger
+
+  dial.addEventListener('pointerdown', (e) => {
+    if (!selected) return;
+    dial.setPointerCapture(e.pointerId);
+    dragging = true;
+    turning = LEVELS.indexOf(current()?.effort);
+    turnTo(e);
+  });
+  dial.addEventListener('pointermove', (e) => { if (dragging) turnTo(e); });
+  dial.addEventListener('pointerup', () => {
+    if (!dragging) return;
+    dragging = false;
+    const level = LEVELS[turning];
+    const sel = current();
+    if (sel && level && level !== sel.effort) send('/act', { session: selected, action: 'effort', level });
+    else render();
+  });
+  dial.addEventListener('pointercancel', () => { dragging = false; render(); });
+
+  function turnTo(e) {
+    const r = dial.querySelector('svg').getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    let a = Math.atan2(dx, -dy) * 180 / Math.PI; // 0 = straight up, clockwise positive
+    a = Math.max(-SWEEP / 2, Math.min(SWEEP / 2, a));
+    const i = Math.round((a + SWEEP / 2) / (SWEEP / (LEVELS.length - 1)));
+    if (i === turning) return;
+    turning = i;
+    showEffort(LEVELS[i]);
+    tick();
+  }
+
+  /**
+   * A detent you can feel. Android has vibrate; iOS Safari has none, but
+   * toggling a native switch control gives a haptic tick, so flip a hidden one.
+   */
+  function tick() {
+    if (navigator.vibrate) navigator.vibrate(8);
+    else $('haptic').click();
+  }
+
+  function current() { return sessions.find((s) => s.id === selected); }
+
+  /* ------------------------------------------------------------ the stick */
+
+  /**
+   * Two jobs, picked by what the selected session is doing:
+   *
+   *   choices  Claude is asking. Slide up or down to move through the
+   *            options, a notch per step; tap to confirm the highlighted one.
+   *   cursor   Everything else. A trackpad for the Mac: one finger moves,
+   *            tap clicks, two-finger tap right-clicks, two-finger drag scrolls.
+   *
+   * Tapping the CURSOR/CHOICES legend flips it by hand.
+   */
+  const SPEED = 1.6;   // points of cursor travel per point of finger travel…
+  const ACCEL = 0.045; // …plus this much more per point of speed, so flicks go far
+  const STEP = 34;     // finger travel per choice
+  const TAP_MS = 300, TAP_SLOP = 12;
+
+  let stickMode = 'cursor';
+  let stickAuto = 'cursor';
+  let stickOverride = null;
+
+  const stick = $('stick');
+  const touches = new Map(); // pointerId → { x, y, x0, y0 }
+  let gesture = null;        // { start, moved, fingers, acc } from first finger down to last up
+  let pending = { mx: 0, my: 0, sx: 0, sy: 0 };
+  let frame = 0;
+
+  $('stick-mode').addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    stickOverride = stickMode === 'choices' ? 'cursor' : 'choices';
+    tick();
+    render();
+  });
+
+  stick.addEventListener('pointerdown', (e) => {
+    stick.setPointerCapture(e.pointerId);
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
+    if (!gesture) gesture = { start: performance.now(), moved: 0, fingers: 0, acc: 0 };
+    gesture.fingers = Math.max(gesture.fingers, touches.size);
+    stick.classList.add('down');
+    if (stickMode === 'cursor') cursorSocket();
+  });
+
+  stick.addEventListener('pointermove', (e) => {
+    const t = touches.get(e.pointerId);
+    if (!t || !gesture) return;
+    const dx = e.clientX - t.x, dy = e.clientY - t.y;
+    t.x = e.clientX; t.y = e.clientY;
+    gesture.moved += Math.abs(dx) + Math.abs(dy);
+    nub(touches.values().next().value);
+
+    if (stickMode === 'choices') {
+      if (touches.size > 1) return;
+      gesture.acc += dy;
+      while (gesture.acc >= STEP) { gesture.acc -= STEP; choose('down'); }
+      while (gesture.acc <= -STEP) { gesture.acc += STEP; choose('up'); }
+      return;
+    }
+
+    if (touches.size >= 2) {
+      // Every finger reports; share the move between them.
+      pending.sx += (dx * 2) / touches.size;
+      pending.sy += (dy * 2) / touches.size;
+    } else {
+      const gain = SPEED * (1 + ACCEL * Math.hypot(dx, dy));
+      pending.mx += dx * gain;
+      pending.my += dy * gain;
+    }
+    if (!frame) frame = requestAnimationFrame(flush);
+  });
+
+  function lift(e, cancelled) {
+    if (!touches.delete(e.pointerId) || touches.size || !gesture) return;
+    const g = gesture;
+    gesture = null;
+    stick.classList.remove('down');
+    nub(null);
+    if (cancelled || performance.now() - g.start > TAP_MS || g.moved > TAP_SLOP) return;
+    tick();
+    if (stickMode === 'choices') choose('accept');
+    else cursorSend(g.fingers >= 2 ? 'r' : 'c');
+  }
+  stick.addEventListener('pointerup', (e) => lift(e, false));
+  stick.addEventListener('pointercancel', (e) => lift(e, true));
+
+  /** The nub leans toward the finger, and springs back when it lifts. */
+  function nub(t) {
+    const el = $('nub');
+    if (!t) { el.style.transform = ''; return; }
+    const dx = t.x - t.x0, dy = t.y - t.y0, d = Math.hypot(dx, dy), max = 26;
+    const k = d > max ? max / d : 1;
+    el.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+  }
+
+  /** One message per frame, however many moves the finger made. */
+  function flush() {
+    frame = 0;
+    const p = pending;
+    pending = { mx: 0, my: 0, sx: 0, sy: 0 };
+    if (p.mx || p.my) cursorSend(`m ${p.mx.toFixed(1)} ${p.my.toFixed(1)}`);
+    if (p.sx || p.sy) cursorSend(`s ${p.sx.toFixed(1)} ${p.sy.toFixed(1)}`);
+  }
+
+  /**
+   * Choices are keystrokes into the session, and order matters — two quick
+   * notches down must arrive as down, down — so they go one at a time.
+   */
+  let choosing = Promise.resolve();
+  function choose(action) {
+    if (!selected) return;
+    if (action !== 'accept') tick();
+    const params = { session: selected, action };
+    choosing = choosing.then(() => send('/act', params));
+  }
+
+  let sock = null;
+  function cursorSocket() {
+    if (sock && sock.readyState <= WebSocket.OPEN) return sock;
+    sock = new WebSocket(`ws://${location.host}/cursor?t=${encodeURIComponent(token)}`);
+    sock.onclose = () => { sock = null; };
+    return sock;
+  }
+  function cursorSend(line) {
+    const s = cursorSocket();
+    // Moves made while it is still connecting are stale by the time it is up.
+    if (s.readyState === WebSocket.OPEN) s.send(line);
+  }
+
+  /* ------------------------------------------------------------ render */
+
+  function render() {
+    if (selected && !sessions.some((s) => s.id === selected)) selected = null;
+    // Nothing chosen: whoever is waiting on you, else the first.
+    if (!selected && sessions.length) selected = (sessions.find((s) => s.state === 'asking') || sessions[0]).id;
+    const sel = sessions.find((s) => s.id === selected);
+
+    [...$('keys').children].forEach((el, i) => {
+      const k = keyData[i] || {};
+      const s = k.session;
+      el.classList.toggle('empty', !s);
+      el.classList.toggle('pinned', !s && !!k.pin);
+      el.classList.toggle('selected', !!s && s.id === selected);
+      if (s) { el.dataset.state = s.state; el.dataset.session = s.id; }
+      else { delete el.dataset.state; delete el.dataset.session; }
+      // A pinned project with nothing running keeps its name on its key.
+      el.querySelector('.name').textContent = s ? s.name : k.pin || '—';
+      el.querySelector('.effort').textContent = s ? s.effort : k.pin ? 'not running' : '';
+    });
+
+    $('target').innerHTML = sel ? `→ <b></b>` : 'no session selected';
+    if (sel) $('target').querySelector('b').textContent = sel.name;
+    $('target-state').textContent = !sel ? ''
+      : sel.pending ? `${STATE_WORDS[sel.state] || sel.state} · effort queued`
+      : STATE_WORDS[sel.state] || sel.state;
+
+    const asking = !!sel && sel.state === 'asking';
+    // The stick drives the cursor with or without a session; the rest need one.
+    document.querySelectorAll('.controls .cap:not(.stick)').forEach((el) => el.classList.toggle('off', !sel));
+    // An override lasts until the session's own situation changes.
+    const auto = asking ? 'choices' : 'cursor';
+    if (auto !== stickAuto) { stickAuto = auto; stickOverride = null; }
+    stickMode = stickOverride || auto;
+    document.querySelectorAll('.accept, .reject').forEach((el) => el.classList.toggle('live', asking));
+    $('stick').classList.toggle('choices', stickMode === 'choices');
+    $('stick-mode').textContent = stickMode === 'choices' ? 'CHOICES' : 'CURSOR';
+    // Leave the knob alone while a finger is on it.
+    if (!dragging) showEffort(sel ? sel.effort : '');
+
+    if (!$('status').classList.contains('off') && !$('status').classList.contains('flash')) {
+      $('status').textContent = overflow > 0 ? `${overflow} more session${overflow > 1 ? 's' : ''} without a key` : '';
+    }
+  }
+
+  /* ----------------------------------------------------------- plumbing */
+
+  /**
+   * Pressed look on touch, not on click: iOS fires click late and :active
+   * barely at all. `onUp` makes it a hold control — down and up both count,
+   * and the up must never go missing: iOS can take the touch away, or the
+   * page can be sent to the background, mid-hold.
+   */
+  function press(el, onDown, onUp) {
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture(e.pointerId);
+      el.classList.add('down');
+      onDown();
+    });
+    const up = () => {
+      if (!el.classList.contains('down')) return;
+      el.classList.remove('down');
+      if (onUp) onUp();
+    };
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(type, up);
+    if (onUp) document.addEventListener('visibilitychange', () => { if (document.hidden) up(); });
+  }
+
+  /** Colours from the setup page, live: each one overrides its CSS variable. */
+  let themeShown = '';
+  function applyTheme(colours) {
+    const key = JSON.stringify(colours || {});
+    if (key === themeShown) return;
+    themeShown = key;
+    for (const [name, value] of Object.entries(colours || {})) document.documentElement.style.setProperty(`--${name}`, value);
+    if (colours && colours.body) document.querySelector('meta[name="theme-color"]').content = colours.body;
+  }
+
+  function post(pathname, params = {}) {
+    const q = new URLSearchParams({ t: token, ...params });
+    return fetch(`${pathname}?${q}`, { method: 'POST' }).catch(() => {});
+  }
+
+  // EventSource reconnects by itself; this only says whether it is up.
+  const stream = new EventSource(`/events?t=${encodeURIComponent(token)}`);
+  stream.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    keyData = data.keys;
+    sessions = keyData.filter((k) => k.session).map((k) => k.session);
+    overflow = data.overflow;
+    applyTheme(data.theme);
+    $('status').classList.remove('off');
+    render();
+  };
+  stream.onerror = () => {
+    $('status').classList.add('off');
+    $('status').textContent = "Can't reach your Mac. Is AgentDeck running?";
+  };
+
+  // Installed, it runs standalone; in Safari it is a tab worth upgrading.
+  (function installHint() {
+    const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+    let dismissed = false;
+    try { dismissed = localStorage.getItem('install-hint') === 'dismissed'; } catch {}
+    if (standalone || dismissed) return;
+    $('install').hidden = false;
+    $('install-close').onclick = () => {
+      $('install').hidden = true;
+      try { localStorage.setItem('install-hint', 'dismissed'); } catch {}
+    };
+  })();
+
+  render();
+</script>
+</body>
+</html>
