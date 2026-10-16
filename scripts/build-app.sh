@@ -29,6 +29,9 @@ BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/$EXECUT
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/$EXECUTABLE"
+# Debug symbols name the folder the app was built in, which a download has no
+# business carrying. Stripping changes the binary, so it comes before signing.
+strip -S -no_code_signature_warning "$APP/Contents/MacOS/$EXECUTABLE"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns Resources/report.sh Resources/opencode-plugin.js "$APP/Contents/Resources/"
 cp -R Resources/web "$APP/Contents/Resources/"
