@@ -1,9 +1,9 @@
 // SauzzeDeck Pro's OpenCode plugin. OpenCode has no command hooks, so this
-// passes its session events to the hook script the other agents run, named
-// the way Claude Code names its hooks. The script finds the Terminal tab and
-// reports to the app; SauzzeDeck Pro writes this file when you connect your
-// agents, and keeps it up to date.
-const SCRIPT = "{{SCRIPT}}"
+// passes its session events to the hook the other agents run, named the way
+// Claude Code names its hooks. The hook finds the session's tab and reports
+// to the app; SauzzeDeck Pro writes this file when you connect your agents,
+// and keeps it up to date.
+const COMMAND = ["{{COMMAND}}"]
 
 export const SauzzeDeckPro = async ({ directory }) => {
   // Subagent sessions run inside their parent's tab and are not its state.
@@ -15,7 +15,7 @@ export const SauzzeDeckPro = async ({ directory }) => {
   const report = (sessionID, name, extra = {}) => {
     if (!sessionID || children.has(sessionID)) return
     const event = JSON.stringify({ session_id: sessionID, hook_event_name: name, cwd: directory, ...extra })
-    Bun.spawn([SCRIPT, "opencode"], { stdin: new TextEncoder().encode(event), stdout: "ignore", stderr: "ignore" })
+    Bun.spawn(COMMAND, { stdin: new TextEncoder().encode(event), stdout: "ignore", stderr: "ignore" })
   }
 
   return {

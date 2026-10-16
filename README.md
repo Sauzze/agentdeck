@@ -16,8 +16,9 @@ Code, Codex, Gemini CLI, OpenCode and Grok.
 Six keys light up to show what each of your agent sessions is doing. You can
 approve a permission request from across the room, interrupt an agent, turn a
 dial to change how hard Claude thinks, or hold a button and talk to it. SauzzeDeck Pro runs in
-your Mac's menu bar. Your phone connects to it over your Wi-Fi, so there's
-nothing to install from an app store.
+your Mac's menu bar, or in the tray on [Windows and Linux](#windows-and-linux-preview).
+Your phone connects to it over your Wi-Fi, so there's nothing to install from
+an app store.
 
 SauzzeDeck Pro was called AgentDeck up to version 1.0.1.
 
@@ -81,7 +82,8 @@ session's tab by its project folder.
 
 ## What you need
 
-- A Mac running macOS 13 or later
+- A Mac running macOS 13 or later. On Windows or Linux, see
+  [Windows and Linux](#windows-and-linux-preview).
 - One or more of the [supported agents](#supported-agents), running in the
   **Terminal** app. Sessions in other terminal apps (iTerm, Ghostty, VS Code…)
   don't appear on the deck, because its buttons can only reach Terminal.
@@ -201,7 +203,7 @@ hears it.
 ## Privacy and security
 
 - **SauzzeDeck Pro sends nothing off your network.** It talks only to your
-  phone and to the coding agents on your Mac. It has no accounts, no analytics and
+  phone and to the coding agents on your computer. It has no accounts, no analytics and
   no cloud service.
 - **Each phone has its own key.** Every request carries a long random key that
   only that phone has. The key is never typed: pairing hands it over. Your Mac
@@ -214,7 +216,7 @@ hears it.
   key, and disappears once the code is used.
 - **The agents have a key of their own.** Their hook script uses a separate
   key, read from a file only you can read, so it never shows up in the list of
-  running processes. It works only from your Mac, and only for reporting what
+  running processes. It works only from your computer, and only for reporting what
   an agent is doing. A phone's key can't pose as an agent, and the agents' key
   can't drive the deck.
 - **Scrolling is off until you turn it on.** Out of the box, a paired phone
@@ -223,7 +225,7 @@ hears it.
   reach it. Without a key, all another device gets is the pairing page. Its
   pages can't be shown inside other websites, and it turns away connections
   beyond a fixed limit, so a misbehaving device can't swamp it.
-- **The setup page only opens on your Mac.** Other devices can't reach it, and
+- **The setup page only opens on your computer.** Other devices can't reach it, and
   other websites can't press its buttons.
 - **Use a network you trust.** The connection is plain HTTP on your local
   network. Use SauzzeDeck Pro on home or office Wi-Fi, not public hotspots.
@@ -294,21 +296,88 @@ Controls work in one of two ways:
   Terminal's own View → Line Up and Line Down, so it moves the window's view
   and the agent receives nothing.
 
-The app is plain Swift with no dependencies. The phone side is a single web
-page.
+The Mac app is plain Swift with no dependencies. The Windows and Linux app is
+Go, with a handful: a tray icon, pseudo-terminals, QR codes. The phone side is
+a single web page, shared by both.
 
 ```
 Sources/AgentDeck/   the Mac app
-Resources/web/       the phone page, the pairing page and the setup page
-Resources/           the agents' hook script and OpenCode plugin
-install.sh           build and install
-scripts/             the build itself, and the release download
+desktop/             the Windows and Linux app, file for file where they match
+cmd/sauzzedeck/      its command: the app, the launcher and the hook
+Resources/web/       the phone page, the pairing page and the setup page, shared
+Resources/           the Mac's hook script, and the OpenCode plugin
+install.sh           build and install on a Mac
+packaging/linux/     the Linux installer
+scripts/             the builds, and the release downloads
 docs/                screenshots for this page
 ```
 
-## Windows
+## Windows and Linux (preview)
 
-A Windows version is planned.
+SauzzeDeck Pro also runs on Windows and Linux, with the same phone deck, the
+same pairing and the same agents. It's a preview: the Linux version is
+tested, the Windows version is built but hasn't been run on a real PC yet.
+Please report how it goes in [the issues](https://github.com/Sauzze/agentdeck/issues).
+
+What's different from the Mac:
+
+- **Start agents through SauzzeDeck Pro**, in any terminal:
+  `sauzzedeck run claude`, or `codex`, `gemini`, `opencode` or `grok`. The
+  agent runs exactly as usual, and the deck can press its keys, with no
+  permission to grant. Windows and Linux have no equivalent of Terminal's
+  scripting, so this is how the deck reaches a session.
+- **In tmux, WezTerm or kitty**, agents started the usual way work too: the
+  deck sends keys through the terminal's own commands. kitty needs its remote
+  control turned on (`allow_remote_control yes` and `listen_on` in
+  `kitty.conf`).
+- **Tapping a key** brings its pane forward in tmux, WezTerm and kitty. In the
+  launcher it only selects the session, because the launcher can't tell which
+  window it's in.
+- **The scroll wheel** works in tmux and kitty.
+- **No Accessibility step.** Nothing here needs that permission.
+
+### Linux
+
+Download **SauzzeDeck-Pro-Linux-x86_64.tar.gz** (or `-arm64`) from the
+[latest release](https://github.com/Sauzze/agentdeck/releases/latest), then:
+
+```bash
+tar -xzf SauzzeDeck-Pro-Linux-x86_64.tar.gz
+./SauzzeDeck-Pro-Linux-x86_64/install.sh
+```
+
+This installs it for you alone, in `~/.local`, with an entry in your app
+menu. Open **SauzzeDeck Pro** from the menu, or run `sauzzedeck`. The setup
+page opens in your browser.
+
+- On GNOME, the tray icon needs the AppIndicator extension, which Ubuntu
+  includes. Without it, SauzzeDeck Pro still runs: open
+  `http://localhost:7710/setup` yourself.
+- On a machine without a desktop, such as one you reach over SSH, run
+  `sauzzedeck serve`.
+
+### Windows
+
+1. Download **SauzzeDeck-Pro-Windows-x86_64.zip** (or `-arm64` for an ARM
+   PC) from the [latest release](https://github.com/Sauzze/agentdeck/releases/latest),
+   and extract it.
+2. Open **SauzzeDeck Pro.exe**. Windows SmartScreen warns about an unsigned
+   app: click **More info**, then **Run anyway**.
+3. When Windows Firewall asks, allow SauzzeDeck Pro on private networks, so
+   your phone can reach it.
+
+To type `sauzzedeck run claude` in a terminal, add the extracted folder to
+your PATH. The setup page also shows the full command for where it is.
+
+### Build it yourself
+
+You need [Go](https://go.dev) 1.26 or later:
+
+```bash
+go build ./cmd/sauzzedeck
+```
+
+`scripts/release-desktop.sh` builds the downloads for both systems.
 
 ## License
 

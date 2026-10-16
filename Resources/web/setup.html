@@ -50,6 +50,8 @@
   .step { display: flex; gap: 14px; align-items: center; background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; }
   .step .mark { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--faint); flex: none; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: transparent; }
   .step.done .mark { background: var(--unread); border-color: var(--unread); color: var(--body); }
+  .step[hidden] { display: none; }
+  .step code { font: 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); white-space: nowrap; }
   .step .text { flex: 1; min-width: 0; }
   .step .title { font-weight: 600; }
   .step .detail { color: var(--dim); font-size: 13px; }
@@ -158,6 +160,13 @@
         <button class="btn primary" data-pending-only id="hooks">Connect</button>
         <button class="btn" data-done-only id="unhook">Disconnect</button>
       </div>
+      <div class="step" id="step-launcher" hidden>
+        <div class="mark">✓</div>
+        <div class="text">
+          <div class="title">Start your agents through SauzzeDeck Pro</div>
+          <div class="detail">In any terminal, type <code id="launch"></code>, or codex, gemini, opencode or grok in place of claude. In tmux, WezTerm or kitty, start them as you always do.</div>
+        </div>
+      </div>
       <div class="step" id="step-accessibility">
         <div class="mark">✓</div>
         <div class="text">
@@ -178,7 +187,7 @@
         <div class="mark">✓</div>
         <div class="text">
           <div class="title">Open at login</div>
-          <div class="detail" data-pending="Keep the deck ready whenever your Mac is on." data-done="SauzzeDeck Pro starts when you log in."></div>
+          <div class="detail" data-pending="Keep the deck ready whenever your computer is on." data-done="SauzzeDeck Pro starts when you log in."></div>
         </div>
         <button class="switch" id="login" aria-label="Open at login"></button>
       </div>
@@ -188,8 +197,8 @@
   <aside class="phone" id="pair">
     <h2>Your phone</h2>
     <ol>
-      <li>Join the same Wi-Fi as this Mac.</li>
-      <li>In Safari, go to <span class="address" id="address"></span></li>
+      <li>Join the same Wi-Fi as this computer.</li>
+      <li>In your phone's browser, go to <span class="address" id="address"></span></li>
       <li>Enter this code:</li>
     </ol>
     <div class="code" id="code">— — —</div>
@@ -224,7 +233,7 @@
       <button data-logo="sauzze"><img src="/setup/logo/sauzze" alt="">Sauzze</button>
       <button data-logo="keys"><img src="/setup/logo/keys" alt="">Six keys</button>
     </div>
-    <p class="hint">Shown in the menu bar, on this page, and on your phone's Home Screen the next time you add the deck to it.</p>
+    <p class="hint">Shown as the app's icon, on this page, and on your phone's Home Screen the next time you add the deck to it.</p>
   </section>
 
   <section class="colours">
@@ -284,14 +293,17 @@
     const c = state.checklist;
     describeAgents();
     mark('step-hooks', c.hooks);
-    mark('step-accessibility', c.accessibility);
+    // Only the Mac app needs Accessibility to press keys.
+    $('step-accessibility').hidden = !('accessibility' in c);
+    if ('accessibility' in c) mark('step-accessibility', c.accessibility);
+    describeLauncher();
     mark('step-scroll', c.scroll);
     mark('step-login', c.openAtLogin);
     $('scroll').classList.toggle('on', c.scroll);
     $('login').classList.toggle('on', c.openAtLogin);
   }
 
-  /** Names the agents found on this Mac, and what connecting them takes. */
+  /** Names the agents found on this computer, and what connecting them takes. */
   function describeAgents() {
     const detail = $('step-hooks').querySelector('.detail');
     const names = (agents) => agents.map((a) => a.name).join(', ').replace(/, ([^,]*)$/, ' and $1');
@@ -303,6 +315,21 @@
     detail.dataset.pending = `Lets ${names(found)} tell SauzzeDeck Pro what they're doing.`;
     detail.dataset.done = `Connected: ${names(found)}. Sessions that were already open need a restart.`
       + (found.some((a) => a.id === 'codex') ? ' In Codex, run /hooks once and trust SauzzeDeck Pro.' : '');
+  }
+
+  /**
+   * The Windows and Linux app names its launcher. Its sessions run in the
+   * launcher or in tmux, WezTerm or kitty, and only tmux and kitty can scroll.
+   */
+  function describeLauncher() {
+    $('step-launcher').hidden = !state.launcher;
+    if (!state.launcher) return;
+    $('launch').textContent = `${state.launcher} claude`;
+    $('step-launcher').classList.toggle('done', state.sessions.length > 0);
+    const scroll = $('step-scroll');
+    scroll.querySelector('.title').textContent = 'Let the stick scroll tmux and kitty';
+    scroll.querySelector('.detail').dataset.pending = "Optional. Turns your phone's stick into a scroll wheel for sessions in tmux or kitty.";
+    scroll.querySelector('.detail').dataset.done = 'The stick scrolls the selected session in tmux or kitty.';
   }
 
   function mark(id, done) {
@@ -444,7 +471,9 @@
 
   function renderSessions() {
     if (!state.sessions.length) {
-      $('list').innerHTML = '<div class="empty">No sessions yet. Connect your coding agents above, then start one in Terminal.</div>';
+      const where = state.launcher ? `with ${state.launcher}, or in tmux, WezTerm or kitty` : 'in Terminal';
+      $('list').innerHTML = '<div class="empty"></div>';
+      $('list').firstChild.textContent = `No sessions yet. Connect your coding agents above, then start one ${where}.`;
       return;
     }
     $('list').replaceChildren(...state.sessions.map((s) => {
@@ -554,6 +583,8 @@
   load().then(() => {
     // Arriving from "Pair a Phone…" in the menu: have a code ready.
     if (location.hash === '#pair' && !state.pairing.code) post('/setup/pair');
+    // From "Unpair All Phones…" in the tray, which has no dialog of its own.
+    if (location.hash === '#unpair' && state.phones.length) $('unpair-all').click();
   });
   setInterval(() => { if (!document.querySelector('.over')) load(); }, 1500);
 </script>

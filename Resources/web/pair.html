@@ -30,8 +30,8 @@
 <body>
 <main>
   <img src="/icon.png" alt="">
-  <h1>Pair with your Mac</h1>
-  <p>On your Mac, click the SauzzeDeck Pro icon in the menu bar, choose <b>Pair a Phone…</b>, and enter the code it shows, or scan its QR code with your camera.</p>
+  <h1>Pair with your computer</h1>
+  <p>On your computer, click the SauzzeDeck Pro icon in the menu bar or tray, choose <b>Pair a Phone…</b>, and enter the code it shows, or scan its QR code with your camera.</p>
   <form id="form">
     <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Pairing code">
     <button id="go" disabled>Pair</button>
@@ -64,7 +64,7 @@
       // The key goes in the deck's URL, so Add to Home Screen keeps it.
       location.replace(`/?t=${encodeURIComponent(body.key)}`);
     } catch (err) {
-      error.textContent = err.message || 'Could not reach your Mac. Are you on the same Wi-Fi?';
+      error.textContent = err.message || 'Could not reach your computer. Are you on the same Wi-Fi?';
       code.value = '';
       code.focus();
     }
