@@ -12,6 +12,7 @@ import AppKit
 /// launches it.
 enum Terminal {
     static let queue = DispatchQueue(label: "io.github.sauzze.agentdeck.terminal")
+    private static let bundleID = "com.apple.Terminal"
 
     enum Key: CGKeyCode {
         case returnKey = 36
@@ -27,6 +28,17 @@ enum Terminal {
     /// The most lines one request may scroll. A notch of the phone's wheel
     /// is a few; anything beyond is clamped, not obeyed.
     static let maxScroll = 200
+
+    /// How long Terminal may take to come to the front. It usually needs about
+    /// 200 ms, more on a busy Mac; past this, the press is given up.
+    private static let activationTimeout: TimeInterval = 1.5
+    /// A moment more once it is in front, for its window to become key.
+    private static let settle: TimeInterval = 0.05
+    /// Notches arriving within this long of the last scroll of the same tab
+    /// belong to one turn of the wheel, and the tab is still in front.
+    private static let scrollGesture: TimeInterval = 1
+    /// The tab the last scroll went to, and when. Only touched on `queue`.
+    private static var lastScroll: (tty: String, at: Date)?
 
     /// The ttys of every open tab: none if Terminal isn't running, nil if it
     /// could not be asked.
@@ -77,8 +89,55 @@ enum Terminal {
     /// Brings the tab forward and presses `key`, `times` times. Posting keys
     /// needs Accessibility permission.
     static func press(_ key: Key, modifiers: CGEventFlags = [], times: Int = 1, tty: String) -> Bool {
-        guard focus(tty: tty) else { return false }
-        Thread.sleep(forTimeInterval: 0.12) // let the window take focus first
+        guard focus(tty: tty), waitUntilFrontmost() else { return false }
+        post(key, modifiers: modifiers, times: times)
+        return true
+    }
+
+    /// Scrolls the tab's window by `lines`, up when negative, with the View
+    /// menu's Line Up and Line Down (⌥⌘Page Up, ⌥⌘Page Down). They move
+    /// Terminal's view of the scrollback, so claude itself receives nothing.
+    ///
+    /// Only a turn's first notch brings the tab forward. Doing it for every
+    /// notch would make the wheel lag; a tab you switch to in the meantime
+    /// by hand gets the rest of that turn.
+    static func scroll(lines: Int, tty: String) -> Bool {
+        let count = min(abs(lines), maxScroll)
+        guard count > 0 else { return true }
+        let key: Key = lines < 0 ? .pageUp : .pageDown
+        let modifiers: CGEventFlags = [.maskCommand, .maskAlternate]
+        if let last = lastScroll, last.tty == tty, Date().timeIntervalSince(last.at) < scrollGesture, isFrontmost {
+            post(key, modifiers: modifiers, times: count)
+        } else {
+            guard press(key, modifiers: modifiers, times: count, tty: tty) else { return false }
+        }
+        lastScroll = (tty, Date())
+        return true
+    }
+
+    /// The View menu's Scroll to Bottom (⌘End): back to where claude is.
+    static func scrollToBottom(tty: String) -> Bool {
+        press(.end, modifiers: .maskCommand, tty: tty)
+    }
+
+    /// Keys go to whichever app is in front, so they wait until that is
+    /// Terminal. Posted any sooner, they land in the app you were using:
+    /// Space in Finder opens Quick Look.
+    private static func waitUntilFrontmost() -> Bool {
+        let deadline = Date().addingTimeInterval(activationTimeout)
+        while !isFrontmost {
+            guard Date() < deadline else { return false }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        Thread.sleep(forTimeInterval: settle)
+        return true
+    }
+
+    private static var isFrontmost: Bool {
+        NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID
+    }
+
+    private static func post(_ key: Key, modifiers: CGEventFlags, times: Int) {
         for _ in 0..<times {
             for down in [true, false] {
                 let event = CGEvent(keyboardEventSource: nil, virtualKey: key.rawValue, keyDown: down)
@@ -86,22 +145,6 @@ enum Terminal {
                 event?.post(tap: .cghidEventTap)
             }
         }
-        return true
-    }
-
-    /// Scrolls the tab's window by `lines`, up when negative, with the View
-    /// menu's Line Up and Line Down (⌥⌘Page Up, ⌥⌘Page Down). They move
-    /// Terminal's view of the scrollback, so claude itself receives nothing.
-    static func scroll(lines: Int, tty: String) -> Bool {
-        let count = min(abs(lines), maxScroll)
-        guard count > 0 else { return true }
-        return press(lines < 0 ? .pageUp : .pageDown, modifiers: [.maskCommand, .maskAlternate],
-                     times: count, tty: tty)
-    }
-
-    /// The View menu's Scroll to Bottom (⌘End): back to where claude is.
-    static func scrollToBottom(tty: String) -> Bool {
-        press(.end, modifiers: .maskCommand, tty: tty)
     }
 
     /// Runs `body` with `w` and `t` bound to the window and tab on `tty`.

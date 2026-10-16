@@ -403,7 +403,7 @@
    * Tapping the SCROLL/CHOICES legend flips it by hand.
    */
   const STEP = 34;           // finger travel per choice
-  const NOTCH = 14;          // finger travel per notch of the wheel…
+  const NOTCH = 10;          // finger travel per notch of the wheel…
   const LINES_PER_NOTCH = 3; // …and the lines each notch scrolls, as a mouse's does
   const TAP_MS = 300, TAP_SLOP = 12;
 
@@ -447,8 +447,8 @@
     }
 
     if (!scrollEnabled) return;
-    // Content follows the finger, as on the phone itself and on a Mac with
-    // natural scrolling: drawing down brings earlier lines into view.
+    // Counted the way natural scrolling does, drawing down for earlier lines.
+    // The Mac turns it round if natural scrolling is off there.
     g.roll += dy;
     $('wheel').style.setProperty('--roll', `${g.roll}px`);
     g.acc += dy;

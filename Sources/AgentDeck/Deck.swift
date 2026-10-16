@@ -14,6 +14,9 @@ final class Deck {
     private static let pingInterval: TimeInterval = 20
     /// Claude stops listening by itself after two minutes.
     private static let voiceLimit: TimeInterval = 120
+    /// Without Accessibility, posted keys vanish without a trace. The phone
+    /// says so instead, since every update turns the permission off.
+    private static let noKeyboard = "Keyboard access is off. Turn it on in setup, on your Mac."
 
     let access = Access()
     let sessions = Sessions()
@@ -179,9 +182,13 @@ final class Deck {
             guard Config.shared.scrollEnabled else {
                 return done(.status(403, "Scrolling is off. Turn it on in setup, on your Mac."))
             }
+            guard Permissions.hasAccessibility else { return done(.status(403, Deck.noKeyboard)) }
             if query["to"] == "bottom" { return inTab(tty, done: done) { Terminal.scrollToBottom(tty: tty) } }
             guard let lines = Int(query["lines"] ?? "") else { return done(.status(400, "Unknown amount")) }
-            inTab(tty, done: done) { Terminal.scroll(lines: lines, tty: tty) }
+            // The phone counts the way natural scrolling does. With it turned
+            // off on the Mac, the wheel turns the other way, as everything else does.
+            let direction = Scrolling.isNatural ? 1 : -1
+            inTab(tty, done: done) { Terminal.scroll(lines: lines * direction, tty: tty) }
         case "mic": pressMic(session, done: done)
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when Claude is done")) }
@@ -209,7 +216,11 @@ final class Deck {
             return done(.status(204))
         }
         micPress = (session.tty, Date())
-        press(.space, tty: session.tty, done: done)
+        press(.space, tty: session.tty) { [weak self] response in
+            // Nothing started, so the release must not send a Space either.
+            if response.status >= 400 { self?.micPress = nil }
+            done(response)
+        }
     }
 
     private func releaseMic(done: @escaping (Response) -> Void) {
@@ -223,6 +234,7 @@ final class Deck {
     }
 
     private func press(_ key: Terminal.Key, tty: String, done: @escaping (Response) -> Void) {
+        guard Permissions.hasAccessibility else { return done(.status(403, Deck.noKeyboard)) }
         inTab(tty, done: done) { Terminal.press(key, tty: tty) }
     }
 
