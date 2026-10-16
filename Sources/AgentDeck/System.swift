@@ -19,6 +19,14 @@ enum Permissions {
     }
 }
 
+/// How this Mac scrolls: System Settings → Trackpad (or Mouse) → Natural
+/// scrolling, which is on unless it was turned off.
+enum Scrolling {
+    static var isNatural: Bool {
+        UserDefaults.standard.object(forKey: "com.apple.swipescrolldirection") as? Bool ?? true
+    }
+}
+
 /// Opening AgentDeck at login, through a LaunchAgent that runs `open` on the
 /// app — the same as launching it by hand, so it can still be quit normally.
 enum LoginItem {
