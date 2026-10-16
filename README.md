@@ -199,7 +199,8 @@ hears it.
 **The keys stay empty.** Click **Connect** on the setup page, then restart your
 Claude sessions. Claude needs to run in the Terminal app.
 
-**Buttons, the mic or scrolling do nothing.** Turn SauzzeDeck Pro on in System
+**Buttons, the mic or scrolling do nothing, or the phone says keyboard access
+is off.** Turn SauzzeDeck Pro on in System
 Settings → Privacy & Security → Accessibility. Updating SauzzeDeck Pro clears
 that permission, because macOS treats each version as a new app. Click
 **Open Settings** on the setup page again afterwards, and turn SauzzeDeck Pro
