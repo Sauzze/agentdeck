@@ -53,15 +53,15 @@
 
   /* --------------------------------------------------------- session keys */
   /* The keys always take the same part of the screen, however many there
-     are, so the controls under them never change size: one key fills it, two
-     share it side by side, three make a row of squares along its top, four
-     make a 2×2, up to a 3×3 of nine. What's written on a key grows with it. */
-  .keys { display: grid; grid-template-columns: repeat(var(--columns, 3), 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
+     are, so the controls under them never change size. Rows share the keys
+     out evenly, shorter rows first, and a row's keys span its whole width,
+     on a grid of six columns: one key fills the space, two stack, three are
+     one over two, up to a 3×3 of nine, and no cell is ever left empty.
+     What's written on a key grows with it. */
+  .keys { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
     gap: var(--gap); height: 44dvh; flex: none; }
-  .key { min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px;
-    container-type: inline-size; }
-  .keys.row { grid-template-rows: auto; align-content: start; }
-  .keys.row .key { aspect-ratio: 1; }
+  .key { grid-column: span var(--span, 2); min-width: 0; min-height: 0; display: flex; flex-direction: column;
+    justify-content: space-between; padding: 11px 12px; container-type: inline-size; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
   .key .slot { font-size: clamp(11px, 7cqi, 18px); color: var(--dim); font-variant-numeric: tabular-nums; }
   .key .light { width: clamp(12px, 8cqi, 22px); height: clamp(12px, 8cqi, 22px); border-radius: 50%; background: var(--faint); }
@@ -191,7 +191,6 @@
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
     .keys { height: 100%; }
-    .keys.row { align-content: center; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
@@ -305,15 +304,26 @@
 
   /* ---------------------------------------------------------------- keys */
 
-  /** One, two or three keys share a row, four make two pairs, and more go three to a row. */
+  /**
+   * How many keys go on each row: one row for a single key, two rows up to
+   * six, three up to nine, sharing the keys out as evenly as they can with
+   * the shorter rows first.
+   */
+  function rowsOf(count) {
+    const rows = count === 1 ? 1 : count <= 6 ? 2 : 3;
+    const each = Math.floor(count / rows), longer = count % rows;
+    return Array.from({ length: rows }, (_, r) => each + (r >= rows - longer ? 1 : 0));
+  }
+
   function buildKeys(count) {
-    const columns = count <= 3 ? count : count === 4 ? 2 : 3;
-    $('keys').style.setProperty('--columns', columns);
-    $('keys').style.setProperty('--rows', Math.ceil(count / columns));
-    $('keys').classList.toggle('row', count === 3);
+    const rows = rowsOf(count);
+    // Each key spans six columns over the number of keys in its row.
+    const spans = rows.flatMap((keys) => Array(keys).fill(6 / keys));
+    $('keys').style.setProperty('--rows', rows.length);
     $('keys').replaceChildren(...Array.from({ length: count }, (_, i) => {
       const el = document.createElement('div');
       el.className = 'cap key empty';
+      el.style.setProperty('--span', spans[i]);
       el.innerHTML = `<div class="row"><span class="slot">${i + 1}</span><span class="light"></span></div>
                       <div><div class="name">—</div><div class="effort"></div></div>`;
       press(el, () => {
