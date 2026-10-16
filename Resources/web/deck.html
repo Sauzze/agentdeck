@@ -52,15 +52,18 @@
   .cap.off { opacity: .35; pointer-events: none; }
 
   /* --------------------------------------------------------- session keys */
-  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); flex: none; }
-  .key { aspect-ratio: 1.08; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px; }
-  /* A third row of keys comes out of their height, so the controls keep their room. */
-  .keys[data-count="9"] .key { aspect-ratio: 1.5; }
+  /* Square keys, as many to a row as suits how many there are: one fills the
+     width, two sit side by side, four make a 2×2, up to a 3×3 of nine. Their
+     rows never take more than --room, so the controls keep theirs; past it a
+     key gets wider than it is tall. What's written on a key grows with it. */
+  .keys { --room: 46dvh; display: grid; grid-template-columns: repeat(var(--columns, 3), 1fr); gap: var(--gap); flex: none; }
+  .key { aspect-ratio: 1; max-height: calc((var(--room) - (var(--rows, 2) - 1) * var(--gap)) / var(--rows, 2)); min-width: 0;
+    display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px; container-type: inline-size; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
-  .key .slot { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .key .light { width: 12px; height: 12px; border-radius: 50%; background: var(--faint); }
-  .key .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .key .effort { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; min-height: 12px; }
+  .key .slot { font-size: clamp(11px, 7cqi, 18px); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .key .light { width: clamp(12px, 8cqi, 22px); height: clamp(12px, 8cqi, 22px); border-radius: 50%; background: var(--faint); }
+  .key .name { font-size: clamp(13px, 11cqi, 30px); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key .effort { font-size: clamp(10px, 6.5cqi, 16px); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; min-height: 12px; }
   .key.empty .name { color: var(--faint); font-weight: 500; }
   .key.pinned .name { color: var(--dim); font-weight: 600; }
   .key.pinned { border-style: dashed; }
@@ -168,7 +171,7 @@
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
     .keys { grid-auto-rows: 1fr; height: 100%; align-content: center; }
-    .key, .keys[data-count="9"] .key { aspect-ratio: auto; height: 100%; min-height: 0; }
+    .key { aspect-ratio: auto; height: 100%; max-height: none; min-height: 0; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
@@ -222,9 +225,10 @@
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
 
 <script>
-  /** Today's deck, for a computer that sends no layout of its own. */
+  /** Today's controls, for a computer that sends no layout of its own. The
+      keys are whatever it sends: one per session, or a fixed number. */
   const STANDARD_LAYOUT = {
-    keys: 6, dial: true, stick: true,
+    dial: true, stick: true,
     rows: [
       { tall: true, buttons: [{ id: 'accept' }, { id: 'reject' }, { id: 'mic' }] },
       { tall: false, buttons: [{ id: 'esc' }, { id: 'send' }, { id: 'clear' }] },
@@ -258,7 +262,7 @@
   let sessions = [];   // the sessions on them
   let overflow = 0;    // sessions running with no key to show them
   let selected = null; // session id the controls act on
-  let layout = null;   // keys, dial, stick and rows of buttons, as set up on the computer
+  let layout = null;   // dial, stick and rows of buttons, as set up on the computer
 
   /* -------------------------------------------------------------- layout */
 
@@ -268,7 +272,6 @@
     if (key === layoutShown) return;
     layoutShown = key;
     layout = next;
-    buildKeys(layout.keys);
     $('dial').hidden = !layout.dial;
     $('stick').hidden = !layout.stick;
     $('analog').hidden = !layout.dial && !layout.stick;
@@ -278,8 +281,11 @@
 
   /* ---------------------------------------------------------------- keys */
 
+  /** One, two or three keys share a row, four make two pairs, and more go three to a row. */
   function buildKeys(count) {
-    $('keys').dataset.count = count;
+    const columns = count <= 3 ? count : count === 4 ? 2 : 3;
+    $('keys').style.setProperty('--columns', columns);
+    $('keys').style.setProperty('--rows', Math.ceil(count / columns));
     $('keys').replaceChildren(...Array.from({ length: count }, (_, i) => {
       const el = document.createElement('div');
       el.className = 'cap key empty';
@@ -699,6 +705,9 @@
   /** What the computer streams: the keys and who is on them, the theme and the layout. */
   function receive(data) {
     keyData = data.keys;
+    // There is always a key, even an empty one, to show where sessions will go.
+    const count = Math.max(1, keyData.length);
+    if (count !== $('keys').children.length) buildKeys(count);
     sessions = keyData.filter((k) => k.session).map((k) => k.session);
     overflow = data.overflow;
     scrollEnabled = data.scroll;
@@ -742,6 +751,7 @@
     };
   }
 
+  buildKeys(6);
   applyLayout(STANDARD_LAYOUT);
   if (preview) {
     addEventListener('message', (e) => {

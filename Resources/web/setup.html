@@ -140,6 +140,7 @@
   .note[hidden] { display: none; }
   /* The phone page at an everyday phone's size, scaled down to fit. */
   .preview { margin: 0; display: grid; gap: 10px; justify-items: center; --w: 390px; --h: 844px; --scale: .6; }
+  .preview .samples { min-width: 110px; text-align: center; align-self: center; color: var(--dim); font-size: 13px; }
   /* Sideways, the phone is too wide to sit beside the editor, so it goes under it. */
   .layout.sideways .layout-body { grid-template-columns: minmax(0, 1fr); }
   .layout.sideways .preview { --w: 844px; --h: 390px; justify-items: start; }
@@ -271,6 +272,7 @@
     <div class="layout-body">
       <div class="editor">
         <div class="field"><span>Session keys</span><div class="choices" id="key-count"></div></div>
+        <p class="hint" id="key-hint"></p>
         <div class="field"><span>Effort dial</span><button class="switch" id="show-dial" aria-label="Show the effort dial"></button></div>
         <div class="field"><span>Stick</span><button class="switch" id="show-stick" aria-label="Show the stick"></button></div>
         <h3>Buttons</h3>
@@ -292,6 +294,7 @@
       </div>
       <figure class="preview" id="preview">
         <div class="frame"><iframe id="preview-page" src="/setup/preview" title="Your phone's deck"></iframe></div>
+        <div class="choices"><button class="btn" id="fewer" aria-label="One session fewer">−</button><span class="samples" id="samples"></span><button class="btn" id="more" aria-label="One session more">+</button></div>
         <button class="btn" id="turn">Turn Sideways</button>
       </figure>
     </div>
@@ -565,7 +568,9 @@
 
   /* ---------------------------------------------------------------- layout */
 
-  const KEY_COUNTS = [3, 6, 9];
+  /** Auto: a key per running session, up to nine. Or always the same number. */
+  const KEY_COUNTS = ['auto', 3, 6, 9];
+  const MOST_KEYS = 9;
   const MAX_ROWS = 4, MAX_PER_ROW = 4, WIDTHS = [1, 2, 3];
   /** The deck's own buttons, as the phone draws them, and what each does. */
   const BUILT_IN = {
@@ -575,13 +580,19 @@
   };
   const KEY_NAMES = { enter: 'Return', escape: 'Esc', tab: 'Tab', 'shift-tab': 'Shift+Tab', up: '↑', down: '↓', 'ctrl-c': 'Ctrl+C' };
   const AGENTS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode', grok: 'Grok' };
-  /** Who the preview shows on its keys. */
+  /** Who the preview shows on its keys, as many as you choose under it. */
   const SAMPLES = [
     { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true },
     { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking' },
     { name: 'docs', agent: 'gemini', agentName: 'Gemini CLI', state: 'unread' },
     { name: 'infra', agent: 'opencode', agentName: 'OpenCode', state: 'idle' },
+    { name: 'mobile', agent: 'grok', agentName: 'Grok', state: 'thinking' },
+    { name: 'billing', agent: 'claude', agentName: 'Claude Code', state: 'idle', effort: 'medium', dial: true, mic: true },
+    { name: 'landing', agent: 'codex', agentName: 'Codex', state: 'unread' },
+    { name: 'search', agent: 'gemini', agentName: 'Gemini CLI', state: 'error' },
+    { name: 'data', agent: 'opencode', agentName: 'OpenCode', state: 'thinking' },
   ];
+  let samples = 4;
 
   let layout = null;  // the layout as edited here
   let chosen = null;  // [row, place] of the button being edited
@@ -620,7 +631,10 @@
 
   function drawLayout() {
     $('key-count').replaceChildren(...KEY_COUNTS.map((n) =>
-      choice(n, layout.keys === n, () => change(() => { layout.keys = n; }))));
+      choice(n === 'auto' ? 'Auto' : n, layout.keys === n, () => change(() => { layout.keys = n; }))));
+    $('key-hint').textContent = layout.keys === 'auto'
+      ? 'A key for each running session, up to nine. The fewer there are, the bigger they get.'
+      : `Always ${layout.keys} keys, each in the same place.`;
     $('show-dial').classList.toggle('on', layout.dial);
     $('show-stick').classList.toggle('on', layout.stick);
     $('stick-note').hidden = layout.stick || (uses('up') && uses('down'));
@@ -835,14 +849,21 @@
   function showPreview() {
     const page = $('preview-page').contentWindow;
     if (!page || !layout || !colours) return;
-    const keys = Array.from({ length: layout.keys }, (_, i) => {
-      const s = SAMPLES[i];
+    const count = layout.keys === 'auto' ? Math.max(1, samples) : layout.keys;
+    const keys = Array.from({ length: count }, (_, i) => {
+      const s = i < samples && SAMPLES[i];
       return { pin: null, session: s && { id: s.name, dial: false, mic: false, effort: '', ...s } };
     });
     page.postMessage({
-      keys, overflow: Math.max(0, SAMPLES.length - layout.keys), theme: colours, scroll: true, layout,
+      keys, overflow: Math.max(0, samples - count), theme: colours, scroll: true, layout,
     }, location.origin);
+    $('samples').textContent = `${samples} session${samples === 1 ? '' : 's'}`;
+    $('fewer').disabled = samples === 0;
+    $('more').disabled = samples === MOST_KEYS;
   }
+
+  $('fewer').onclick = () => { samples--; showPreview(); };
+  $('more').onclick = () => { samples++; showPreview(); };
 
   $('preview-page').onload = showPreview;
   $('turn').onclick = () => {
