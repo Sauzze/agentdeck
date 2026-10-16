@@ -22,10 +22,10 @@
     /* The phone panel runs beside two rows; the keys' row takes up whatever
        height it has to spare, rather than a gap opening above the keys. */
     grid-template-rows: auto auto 1fr;
-    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "layout layout" "logo logo" "colours colours"; }
+    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "profiles profiles" "layout layout" "logo logo" "colours colours"; }
   @media (max-width: 840px) {
     main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
-      grid-template-areas: "head" "start" "phone" "keys" "sessions" "layout" "logo" "colours"; }
+      grid-template-areas: "head" "start" "phone" "keys" "sessions" "profiles" "layout" "logo" "colours"; }
   }
   header { grid-area: head; display: flex; gap: 16px; align-items: center; }
   header img { width: 52px; height: 52px; border-radius: 12px; }
@@ -108,6 +108,11 @@
   .row .path { font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .where { font-size: 12px; color: var(--dim); white-space: nowrap; }
   .empty { color: var(--dim); padding: 16px; border: 1px dashed var(--edge); border-radius: 10px; }
+
+  /* Profiles: a layout and its colours, saved under a name to switch back to. */
+  .profiles { grid-area: profiles; display: grid; gap: 12px; }
+  .profiles[hidden] { display: none; }
+  .profiles .choices { flex-wrap: wrap; }
 
   /* Layout: the editor, and beside it the phone's own page as a preview. */
   .layout { grid-area: layout; }
@@ -267,6 +272,21 @@
     <div class="list" id="list"></div>
   </section>
 
+  <section class="profiles" id="profiles-section" hidden>
+    <h2>Profiles</h2>
+    <div class="choices" id="profiles"></div>
+    <div class="tools">
+      <button class="btn" id="profile-save">Save</button>
+      <button class="btn" id="profile-save-as">Save as…</button>
+      <button class="btn" id="profile-rename">Rename</button>
+      <button class="btn" id="profile-delete">Delete</button>
+      <button class="btn" id="profile-export">Export</button>
+      <button class="btn" id="profile-import">Import…</button>
+      <input type="file" id="profile-file" accept=".json,application/json" hidden>
+    </div>
+    <p class="hint">A profile keeps a layout and its colours. Switch, and your phone follows. Export one to back it up or share it.</p>
+  </section>
+
   <section class="layout" id="layout" hidden>
     <h2>Layout</h2>
     <div class="layout-body">
@@ -290,7 +310,6 @@
           <div class="field" id="field-agents"><span>Works with</span><div class="agents" id="agents"></div></div>
           <div class="tools"><button class="btn" id="move-back" aria-label="Move left">←</button><button class="btn" id="move-on" aria-label="Move right">→</button><button class="btn" id="remove">Remove</button></div>
         </div>
-        <div><button class="btn" id="reset-layout">Reset to Default</button></div>
       </div>
       <figure class="preview" id="preview">
         <div class="frame"><iframe id="preview-page" src="/setup/preview" title="Your phone's deck"></iframe></div>
@@ -358,6 +377,7 @@
     renderLogo();
     renderKeys();
     renderSessions();
+    renderProfiles();
     renderLayout();
     renderTheme();
   }
@@ -619,15 +639,16 @@
     edit();
     drawLayout();
     clearTimeout(unsaved);
-    unsaved = setTimeout(async () => {
-      unsaved = null;
-      sending++;
-      try {
-        await fetch('/setup/layout', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(layout) });
-      } finally {
-        sending--;
-      }
-    }, 250);
+    unsaved = setTimeout(() => { unsaved = null; sendLayout(); }, 250);
+  }
+
+  async function sendLayout() {
+    sending++;
+    try {
+      await fetch('/setup/layout', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(layout) });
+    } finally {
+      sending--;
+    }
   }
 
   function drawLayout() {
@@ -838,11 +859,6 @@
     layout.rows.push({ tall: false, buttons: [newButton()] });
     chosen = [layout.rows.length - 1, 0];
   });
-  $('reset-layout').onclick = () => {
-    layout = null;
-    chosen = null;
-    post('/setup/layout?reset=1');
-  };
 
   /* The preview: the phone's own page, sent what it would get from here,
      with sample sessions on its keys. */
@@ -955,10 +971,130 @@
   let saving = null;
   function save() {
     clearTimeout(saving);
-    saving = setTimeout(() => fetch('/setup/theme', {
-      method: 'POST', headers: setupHeaders(true), body: JSON.stringify(colours),
-    }), 120);
+    saving = setTimeout(() => { saving = null; sendTheme(); }, 120);
   }
+
+  function sendTheme() {
+    return fetch('/setup/theme', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(colours) });
+  }
+
+  /* -------------------------------------------------------------- profiles */
+
+  const DEFAULT_PROFILE = 'Default';
+  const NAME_LIMIT = 24;
+
+  function renderProfiles() {
+    $('profiles-section').hidden = !state.profiles;
+    if (!state.profiles) return;
+    const active = state.activeProfile;
+    $('profiles').replaceChildren(...[DEFAULT_PROFILE, ...state.profiles.map((p) => p.name)].map((name) =>
+      choice(name === active && state.profileEdited ? `${name} · edited` : name, name === active, () => switchTo(name))));
+    const isDefault = active === DEFAULT_PROFILE;
+    $('profile-save').disabled = isDefault || !state.profileEdited;
+    $('profile-rename').disabled = isDefault;
+    $('profile-delete').disabled = isDefault;
+  }
+
+  /** Sends any change still waiting, so a profile is saved from, or replaces, what you see. */
+  async function settle() {
+    if (unsaved) {
+      clearTimeout(unsaved);
+      unsaved = null;
+      await sendLayout();
+    }
+    if (saving) {
+      clearTimeout(saving);
+      saving = null;
+      await sendTheme();
+    }
+  }
+
+  async function profileAction(action, name, extra = '', body) {
+    await settle();
+    const res = await post(`/setup/profiles?action=${action}&name=${encodeURIComponent(name)}${extra}`, body);
+    if (!res.ok) alert(await res.text());
+  }
+
+  function switchTo(name) {
+    const active = state.activeProfile;
+    if (name === active && !state.profileEdited) return;
+    if (state.profileEdited && !confirm(name === active
+      ? `Go back to ${name} as it was saved? Your changes will be lost.`
+      : `Switch to ${name}? Your changes to ${active} haven't been saved.`)) return;
+    profileAction('switch', name);
+  }
+
+  /** A name for a profile, asked for; null if cancelled. */
+  function askName(question, suggestion) {
+    const name = (prompt(question, suggestion) || '').trim().slice(0, NAME_LIMIT);
+    if (!name) return null;
+    if (name.toLowerCase() === DEFAULT_PROFILE.toLowerCase()) {
+      alert('Default is taken: it\'s always the standard deck.');
+      return null;
+    }
+    return name;
+  }
+
+  $('profile-save').onclick = () => profileAction('save', state.activeProfile);
+  $('profile-save-as').onclick = () => {
+    const name = askName('Save this layout and its colours as:', '');
+    if (!name) return;
+    if (state.profiles.some((p) => p.name === name) && !confirm(`Replace the saved ${name}?`)) return;
+    profileAction('save', name);
+  };
+  $('profile-rename').onclick = () => {
+    const name = askName(`Rename ${state.activeProfile} to:`, state.activeProfile);
+    if (name && name !== state.activeProfile) profileAction('rename', state.activeProfile, `&to=${encodeURIComponent(name)}`);
+  };
+  $('profile-delete').onclick = () => {
+    if (confirm(`Delete the profile ${state.activeProfile}? Your deck stays as it is.`)) profileAction('delete', state.activeProfile);
+  };
+
+  /** What you see, as a file: the layout, and only the colours that differ from the default. */
+  $('profile-export').onclick = async () => {
+    await settle();
+    const standard = state.theme.presets[0].colours;
+    const file = {
+      sauzzedeckProfile: 1,
+      name: state.activeProfile,
+      layout,
+      colours: Object.fromEntries(Object.entries(colours).filter(([name, value]) => value !== standard[name])),
+    };
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    link.download = `${state.activeProfile}.sauzzedeck.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  /**
+   * A profile from a file. Its buttons can type into your agents, so before
+   * it's added you see everything they would type or press.
+   */
+  $('profile-import').onclick = () => $('profile-file').click();
+  $('profile-file').onchange = async () => {
+    const file = $('profile-file').files[0];
+    $('profile-file').value = '';
+    if (!file) return;
+    let profile;
+    try {
+      profile = JSON.parse(await file.text());
+    } catch {
+      return alert(`${file.name} isn't a profile: it isn't valid JSON.`);
+    }
+    if (!profile || typeof profile !== 'object' || !profile.layout || typeof profile.layout !== 'object') {
+      return alert(`${file.name} isn't a SauzzeDeck Pro profile.`);
+    }
+    const doings = (Array.isArray(profile.layout.rows) ? profile.layout.rows : [])
+      .flatMap((row) => (row && Array.isArray(row.buttons) ? row.buttons : []))
+      .filter((b) => b && typeof b.id === 'string' && b.id.startsWith('custom-'))
+      .map((b) => (KEY_NAMES[b.key] ? `• press ${KEY_NAMES[b.key]}` : `• type ${String(b.text || '').slice(0, 200)}`));
+    const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : 'Imported';
+    const asked = doings.length
+      ? `Add the profile ${name}? Its buttons would:\n\n${doings.join('\n')}\n\nOnly add profiles from people you trust.`
+      : `Add the profile ${name}? It has none of its own buttons, only the deck's.`;
+    if (confirm(asked)) profileAction('import', name, '', { name, layout: profile.layout, colours: profile.colours });
+  };
 
   /* ------------------------------------------------------------------ start */
 
