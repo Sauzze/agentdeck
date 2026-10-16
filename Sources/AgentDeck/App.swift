@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var server = HTTPServer(port: Deck.port, router: DeckRouter(deck: deck))
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if ClaudeHooks.isInstalled { try? ClaudeHooks.updateScript() }
+        if Hooks.found.contains(where: Hooks.isConnected) { try? Hooks.updateFiles() }
         LoginItem.refresh()
         server.onFailure = { [menu] _ in menu.showPortInUse() }
         do {

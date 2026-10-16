@@ -10,12 +10,12 @@
 >
 > Check the address after pasting it: transfers can't be reversed.
 
-A control pad on your phone for the AI coding agents in your terminal. It works
-with [Claude Code](https://claude.com/claude-code).
+A control pad on your phone for the AI coding agents in your terminal: Claude
+Code, Codex, Gemini CLI, OpenCode and Grok.
 
-Six keys light up to show what each of your Claude sessions is doing. You can
-approve a permission request from across the room, turn a dial to change how
-hard Claude thinks, or hold a button and talk to it. SauzzeDeck Pro runs in
+Six keys light up to show what each of your agent sessions is doing. You can
+approve a permission request from across the room, interrupt an agent, turn a
+dial to change how hard Claude thinks, or hold a button and talk to it. SauzzeDeck Pro runs in
 your Mac's menu bar. Your phone connects to it over your Wi-Fi, so there's
 nothing to install from an app store.
 
@@ -31,12 +31,12 @@ SauzzeDeck Pro was called AgentDeck up to version 1.0.1.
 
 | Control | What it does |
 |---|---|
-| **6 session keys** | One per Claude session. The colour shows its state. Tap a key to select that session and bring its Terminal window to the front. |
-| **Dial** | Thinking effort: low, medium, high, extra high, max. If Claude is mid-task, the change waits until it finishes. |
-| **Stick** | When Claude asks you something, slide up or down to choose an answer and tap to confirm. The rest of the time it's a scroll wheel for that session's Terminal window: roll it to scroll, tap to jump back to the bottom. Scrolling is off until you turn on **Let the stick scroll Terminal** on the setup page. Tap the stick's SCROLL / CHOICES label to switch by hand. |
+| **6 session keys** | One per agent session. The colour shows its state, and the line underneath its agent, or Claude Code's thinking effort. Tap a key to select that session and bring its Terminal window to the front. |
+| **Dial** | Claude Code's thinking effort: low, medium, high, extra high, max. If Claude is mid-task, the change waits until it finishes. |
+| **Stick** | When the agent asks you something, slide up or down to choose an answer and tap to confirm. The rest of the time it's a scroll wheel for that session's Terminal window: roll it to scroll, tap to jump back to the bottom. Scrolling is off until you turn on **Let the stick scroll Terminal** on the setup page. Tap the stick's SCROLL / CHOICES label to switch by hand. |
 | **✓ and ✕** | Accept or reject a permission request. |
-| **🎙 (hold)** | Talk to Claude. Release, and Claude sends what you said once it's three words or more. |
-| **esc · send · /clear** | Interrupt Claude, press Return, or start a fresh conversation. `/clear` asks you to tap twice, and waits until Claude isn't busy. |
+| **🎙 (hold)** | Talk to Claude Code. Release, and Claude sends what you said once it's three words or more. |
+| **esc · send · /clear** | Interrupt the agent, press Return, or start a fresh conversation. `/clear` asks you to tap twice, and waits until the agent isn't busy. |
 
 What the key colours mean:
 
@@ -57,12 +57,34 @@ Each session keeps its key until it ends. You can pin projects to specific keys 
 Four of these are built-in presets. Moonlight is a custom palette, made in the
 colour editor in a minute.
 
+## Supported agents
+
+Each agent tells SauzzeDeck Pro what it's doing through its own hooks, and the
+deck presses that agent's own keys:
+
+| Agent | Interrupt | Fresh conversation | Dial and mic |
+|---|---|---|---|
+| [Claude Code](https://claude.com/claude-code) | Esc | `/clear` | ✓ |
+| [Codex](https://github.com/openai/codex) | Esc | `/new` | – |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Esc | `/clear` | – |
+| [OpenCode](https://opencode.ai) | Esc, twice | `/new` | – |
+| [Grok](https://github.com/xai-org/grok-build) | Ctrl+C | `/new` | – |
+
+The dial and the mic drive Claude Code's own `/effort` and `/voice`, so they
+switch off when another agent's key is selected. In Grok, ✕ declines with
+Ctrl+C, the key Grok uses to cancel a request.
+
+**Codex** asks you to approve new hooks before it runs them: after connecting,
+run `/hooks` in Codex once and trust SauzzeDeck Pro's. Codex runs its hooks in
+a background service rather than in your tab, so the deck finds each Codex
+session's tab by its project folder.
+
 ## What you need
 
 - A Mac running macOS 13 or later
-- [Claude Code](https://docs.claude.com/en/docs/claude-code) running in the **Terminal** app. Sessions in
-  other terminal apps (iTerm, Ghostty, VS Code…) don't appear on the deck, because
-  its buttons can only reach Terminal.
+- One or more of the [supported agents](#supported-agents), running in the
+  **Terminal** app. Sessions in other terminal apps (iTerm, Ghostty, VS Code…)
+  don't appear on the deck, because its buttons can only reach Terminal.
 - A phone on the same Wi-Fi as your Mac
 
 ## Install
@@ -113,8 +135,9 @@ The setup page walks you through four steps:
   <img src="docs/setup.png" alt="The setup page: a four-step checklist, the keys, and a pairing code with its QR code for your phone" width="720">
 </p>
 
-1. **Connect Claude Code.** This lets your Claude sessions tell SauzzeDeck Pro
-   what they're doing. Restart any Claude sessions that were already open.
+1. **Connect your coding agents.** This lets every supported agent on your Mac
+   tell SauzzeDeck Pro what it's doing. Restart any sessions that were already
+   open. Install another agent later? Click **Connect** again.
 2. **Allow SauzzeDeck Pro to use your keyboard.** System Settings opens. Turn
    on **SauzzeDeck Pro** in the list. The buttons, the mic and scrolling need
    this.
@@ -178,7 +201,7 @@ hears it.
 ## Privacy and security
 
 - **SauzzeDeck Pro sends nothing off your network.** It talks only to your
-  phone and to Claude Code on your Mac. It has no accounts, no analytics and
+  phone and to the coding agents on your Mac. It has no accounts, no analytics and
   no cloud service.
 - **Each phone has its own key.** Every request carries a long random key that
   only that phone has. The key is never typed: pairing hands it over. Your Mac
@@ -189,11 +212,11 @@ hears it.
   device lock that device out until you get a new code, and twenty wrong tries
   in all withdraw the code. The QR code holds the same one-time code, never a
   key, and disappears once the code is used.
-- **Claude Code has a key of its own.** The hook script uses a separate key,
-  read from a file only you can read, so it never shows up in the list of
+- **The agents have a key of their own.** Their hook script uses a separate
+  key, read from a file only you can read, so it never shows up in the list of
   running processes. It works only from your Mac, and only for reporting what
-  Claude is doing. A phone's key can't pose as Claude Code, and Claude Code's
-  key can't drive the deck.
+  an agent is doing. A phone's key can't pose as an agent, and the agents' key
+  can't drive the deck.
 - **Scrolling is off until you turn it on.** Out of the box, a paired phone
   can only use the deck's buttons, dial and choices.
 - **SauzzeDeck Pro listens on port 7710 on your network,** so your phone can
@@ -208,7 +231,10 @@ hears it.
 ## Troubleshooting
 
 **The keys stay empty.** Click **Connect** on the setup page, then restart your
-Claude sessions. Claude needs to run in the Terminal app.
+agent sessions. They need to run in the Terminal app.
+
+**Codex sessions don't appear.** Run `/hooks` in Codex and trust SauzzeDeck
+Pro's hook. Codex skips new hooks until you do.
 
 **Buttons, the mic or scrolling do nothing, or the phone says keyboard access
 is off.** Turn SauzzeDeck Pro on in System
@@ -236,25 +262,29 @@ using that port. Quit it and open SauzzeDeck Pro again.
 
 ## Uninstall
 
-1. On the setup page, click **Disconnect** next to Claude Code, and turn off
-   **Open at login**.
+1. On the setup page, click **Disconnect** next to your coding agents, and turn
+   off **Open at login**.
 2. Quit SauzzeDeck Pro from the menu bar.
 3. Delete **SauzzeDeck Pro** from Applications, and the folder
    `~/Library/Application Support/AgentDeck`. It kept the app's original name.
 
-Connecting Claude Code also turned on its voice input, if it was off, and left a
-backup of your Claude settings at `~/.claude/settings.json.agentdeck.bak`.
-Disconnecting leaves voice as it is. Remove the `voice` entry from
-`~/.claude/settings.json` if you don't want it, and delete the backup once you
-no longer need it.
+Connecting left a backup of each settings file it changed next to it, ending
+in `.agentdeck.bak`: Claude Code's `~/.claude/settings.json`, Codex's
+`~/.codex/hooks.json` and Gemini CLI's `~/.gemini/settings.json`. Delete them
+once you no longer need them. Connecting Claude Code also turned on its voice
+input, if it was off. Disconnecting leaves voice as it is: remove the `voice`
+entry from `~/.claude/settings.json` if you don't want it.
 
 ## How it works
 
-Claude Code runs a small script ([`Resources/report.sh`](Resources/report.sh))
-at each step of a session, through its
-[hooks](https://docs.claude.com/en/docs/claude-code/hooks). The script tells
-SauzzeDeck Pro what happened and which Terminal tab it happened in. SauzzeDeck
-Pro works out each session's state and streams it to your phone.
+Each agent runs a small script ([`Resources/report.sh`](Resources/report.sh))
+at each step of a session, through its hooks: Claude Code's
+[hooks](https://code.claude.com/docs/en/hooks), and the matching settings in
+Codex, Gemini CLI and Grok. OpenCode has no command hooks, so a small plugin
+([`Resources/opencode-plugin.js`](Resources/opencode-plugin.js)) runs the same
+script. The script tells SauzzeDeck Pro what happened and which Terminal tab it
+happened in. SauzzeDeck Pro reads each agent's events in that agent's terms,
+works out each session's state and streams it to your phone.
 
 Controls work in one of two ways:
 
@@ -262,7 +292,7 @@ Controls work in one of two ways:
   through Terminal's scripting.
 - **Keys and scrolling** are sent as ordinary keystrokes. Scrolling uses
   Terminal's own View → Line Up and Line Down, so it moves the window's view
-  and Claude receives nothing.
+  and the agent receives nothing.
 
 The app is plain Swift with no dependencies. The phone side is a single web
 page.
@@ -270,7 +300,7 @@ page.
 ```
 Sources/AgentDeck/   the Mac app
 Resources/web/       the phone page, the pairing page and the setup page
-Resources/report.sh  the Claude Code hook
+Resources/           the agents' hook script and OpenCode plugin
 install.sh           build and install
 scripts/             the build itself, and the release download
 docs/                screenshots for this page

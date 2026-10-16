@@ -142,7 +142,7 @@
     <img id="header-logo" alt="">
     <div>
       <h1>SauzzeDeck Pro</h1>
-      <p>A control pad for Claude Code, on your phone.</p>
+      <p>A control pad for your coding agents, on your phone.</p>
     </div>
   </header>
 
@@ -152,8 +152,8 @@
       <div class="step" id="step-hooks">
         <div class="mark">✓</div>
         <div class="text">
-          <div class="title">Connect Claude Code</div>
-          <div class="detail" data-pending="Lets your Claude sessions tell SauzzeDeck Pro what they're doing." data-done="Connected. Sessions that were already open need a restart."></div>
+          <div class="title">Connect your coding agents</div>
+          <div class="detail"></div>
         </div>
         <button class="btn primary" data-pending-only id="hooks">Connect</button>
         <button class="btn" data-done-only id="unhook">Disconnect</button>
@@ -282,12 +282,27 @@
 
   function renderChecklist() {
     const c = state.checklist;
+    describeAgents();
     mark('step-hooks', c.hooks);
     mark('step-accessibility', c.accessibility);
     mark('step-scroll', c.scroll);
     mark('step-login', c.openAtLogin);
     $('scroll').classList.toggle('on', c.scroll);
     $('login').classList.toggle('on', c.openAtLogin);
+  }
+
+  /** Names the agents found on this Mac, and what connecting them takes. */
+  function describeAgents() {
+    const detail = $('step-hooks').querySelector('.detail');
+    const names = (agents) => agents.map((a) => a.name).join(', ').replace(/, ([^,]*)$/, ' and $1');
+    const found = state.agents;
+    if (!found.length) {
+      detail.dataset.pending = 'No coding agent found yet. Install Claude Code, Codex, Gemini CLI, OpenCode or Grok, open it once, then connect.';
+      return;
+    }
+    detail.dataset.pending = `Lets ${names(found)} tell SauzzeDeck Pro what they're doing.`;
+    detail.dataset.done = `Connected: ${names(found)}. Sessions that were already open need a restart.`
+      + (found.some((a) => a.id === 'codex') ? ' In Codex, run /hooks once and trust SauzzeDeck Pro.' : '');
   }
 
   function mark(id, done) {
@@ -429,7 +444,7 @@
 
   function renderSessions() {
     if (!state.sessions.length) {
-      $('list').innerHTML = '<div class="empty">No Claude sessions yet. Connect Claude Code above, then start <code>claude</code> in Terminal.</div>';
+      $('list').innerHTML = '<div class="empty">No sessions yet. Connect your coding agents above, then start one in Terminal.</div>';
       return;
     }
     $('list').replaceChildren(...state.sessions.map((s) => {
@@ -440,7 +455,7 @@
       el.querySelector('.dot').dataset.state = s.state;
       el.querySelector('.name').textContent = s.name;
       el.querySelector('.path').textContent = s.folder;
-      el.querySelector('.where').textContent = s.key === null ? 'No key' : `Key ${s.key + 1}`;
+      el.querySelector('.where').textContent = `${s.agentName} · ${s.key === null ? 'no key' : `key ${s.key + 1}`}`;
       el.ondragstart = (e) => e.dataTransfer.setData('text/plain', s.folder);
       el.onclick = () => { picked = picked === s.folder ? null : s.folder; renderKeys(); renderSessions(); };
       return el;

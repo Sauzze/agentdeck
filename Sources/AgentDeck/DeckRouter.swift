@@ -42,7 +42,8 @@ final class DeckRouter: Router {
             guard request.isLocal, request.method == "POST" else { return respond(.status(404)) }
             guard deck.access.isHookKey(request.headers["x-agentdeck-token"]) else { return respond(.status(401)) }
             let time = Double(request.headers["x-agentdeck-at"] ?? "") ?? Date().timeIntervalSince1970 * 1000
-            deck.ingest(request.json, tty: request.headers["x-agentdeck-tty"] ?? "", at: time)
+            deck.ingest(request.json, reportedAs: request.headers["x-agentdeck-agent"] ?? "",
+                        tty: request.headers["x-agentdeck-tty"] ?? "", at: time)
             return respond(.status(204))
         }
 
@@ -155,9 +156,9 @@ final class DeckRouter: Router {
         case ("POST", "/setup/hooks"):
             do {
                 if request.query["remove"] == nil {
-                    try ClaudeHooks.install()
+                    try Hooks.connect()
                 } else {
-                    try ClaudeHooks.uninstall()
+                    try Hooks.disconnect()
                 }
                 respond(.json(setupState()))
             } catch {
@@ -197,11 +198,12 @@ final class DeckRouter: Router {
 
         return [
             "checklist": [
-                "hooks": ClaudeHooks.isInstalled,
+                "hooks": Hooks.isConnected,
                 "accessibility": Permissions.hasAccessibility,
                 "scroll": Config.shared.scrollEnabled,
                 "openAtLogin": LoginItem.isEnabled,
             ],
+            "agents": Hooks.found.map { ["id": $0.rawValue, "name": $0.name, "connected": Hooks.isConnected($0)] },
             "pairing": pairing,
             // Times in milliseconds, as the page's Date counts them.
             "phones": deck.access.phones.all.map { phone -> [String: Any] in
@@ -219,7 +221,7 @@ final class DeckRouter: Router {
             },
             "sessions": deck.sessions.all.map { session -> [String: Any] in
                 [
-                    "id": session.id, "folder": session.folder, "name": session.name,
+                    "id": session.id, "folder": session.folder, "name": session.name, "agentName": session.agent.name,
                     "state": session.state.rawValue, "key": keyOf[session.id] ?? NSNull(),
                 ]
             },
