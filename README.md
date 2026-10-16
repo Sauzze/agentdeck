@@ -35,7 +35,14 @@ What the key colours mean:
 | 🟢 Green | Done, and you haven't looked yet |
 | 🔴 Red | Stopped on an error |
 
-Each session keeps its key until it ends. You can pin projects to specific keys and change every colour.
+Each session keeps its key until it ends. You can pin projects to specific keys and change every colour:
+
+<p align="center">
+  <img src="docs/themes.png" alt="The deck in five colour schemes: Default, Midnight, Moonlight, Light and High contrast" width="100%">
+</p>
+
+Four of these are built-in presets. Moonlight is a custom palette, made in the
+colour editor in a minute.
 
 ## What you need
 
