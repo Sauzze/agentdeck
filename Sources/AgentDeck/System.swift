@@ -29,6 +29,12 @@ enum LoginItem {
         set { newValue ? enable() : disable() }
     }
 
+    /// Points the LaunchAgent at this copy of the app. An update can move or
+    /// rename it, and the agent would go on opening the old path.
+    static func refresh() {
+        if isEnabled { enable() }
+    }
+
     private static func enable() {
         let plist: [String: Any] = [
             "Label": label,

@@ -17,11 +17,12 @@ final class Deck {
 
     let access = Access()
     let sessions = Sessions()
-    let pointer = Pointer()
     /// Called on every change, for the menu bar.
     var onChange: () -> Void = {}
 
-    private var streams: [ObjectIdentifier: EventStream] = [:]
+    /// Each open stream, with the phone that opened it, so unpairing a phone
+    /// can hang up on it at once.
+    private var streams: [ObjectIdentifier: (phone: String, stream: EventStream)] = [:]
     /// The key each session was given, so it keeps it.
     private var keyOf: [String: Int] = [:]
     /// The tab recording started in, and when. One Mac, one microphone.
@@ -42,7 +43,7 @@ final class Deck {
             self?.pruneClosedTabs()
         }
         Timer.scheduledTimer(withTimeInterval: Deck.pingInterval, repeats: true) { [weak self] _ in
-            self?.streams.values.forEach { $0.ping() }
+            self?.streams.values.forEach { $0.stream.ping() }
         }
     }
 
@@ -50,8 +51,9 @@ final class Deck {
 
     /// What a phone on the same network opens to pair.
     var phoneAddress: String { "http://\(LocalNetwork.address() ?? "localhost"):\(Deck.port)" }
-    /// The paired link, token included.
-    var phoneLink: String { "\(phoneAddress)/?t=\(access.token)" }
+
+    /// What the QR code opens: the pairing page with `code` filled in.
+    func pairingLink(for code: String) -> String { "\(phoneAddress)/?pair=\(code)" }
 
     // MARK: Hook events
 
@@ -62,7 +64,7 @@ final class Deck {
     private func changed() {
         applyQueuedEffort()
         let state = snapshotJSON()
-        streams.values.forEach { $0.send(state) }
+        streams.values.forEach { $0.stream.send(state) }
         onChange()
     }
 
@@ -121,19 +123,37 @@ final class Deck {
             },
             "overflow": overflow.count,
             "theme": Theme.current(),
+            "scroll": Config.shared.scrollEnabled,
         ]
         return (try? JSONSerialization.data(withJSONObject: state)) ?? Data()
     }
 
-    func attach(_ stream: EventStream) {
+    func attach(_ stream: EventStream, phone: String) {
         let id = ObjectIdentifier(stream)
-        streams[id] = stream
+        streams[id] = (phone, stream)
         stream.onClose = { [weak self] in self?.streams[id] = nil }
         stream.send(snapshotJSON())
     }
 
-    /// Re-sends the state, for changes the sessions do not see (pins, colours).
+    /// Re-sends the state, for changes the sessions do not see (the setup page's).
     func refresh() { changed() }
+
+    // MARK: Phones
+
+    func isConnected(_ phone: String) -> Bool {
+        streams.values.contains { $0.phone == phone }
+    }
+
+    /// Forgets a phone and hangs up on it now, rather than at its next request.
+    func unpair(_ phone: String) {
+        access.phones.remove(phone)
+        streams.values.filter { $0.phone == phone }.forEach { $0.stream.close() }
+    }
+
+    func unpairAll() {
+        access.phones.removeAll()
+        streams.values.forEach { $0.stream.close() }
+    }
 
     // MARK: Controls
 
@@ -155,6 +175,13 @@ final class Deck {
         case "reject", "esc": press(.escape, tty: tty, done: done)
         case "up": press(.up, tty: tty, done: done)
         case "down": press(.down, tty: tty, done: done)
+        case "scroll":
+            guard Config.shared.scrollEnabled else {
+                return done(.status(403, "Scrolling is off. Turn it on in setup, on your Mac."))
+            }
+            if query["to"] == "bottom" { return inTab(tty, done: done) { Terminal.scrollToBottom(tty: tty) } }
+            guard let lines = Int(query["lines"] ?? "") else { return done(.status(400, "Unknown amount")) }
+            inTab(tty, done: done) { Terminal.scroll(lines: lines, tty: tty) }
         case "mic": pressMic(session, done: done)
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when Claude is done")) }
@@ -196,10 +223,16 @@ final class Deck {
     }
 
     private func press(_ key: Terminal.Key, tty: String, done: @escaping (Response) -> Void) {
+        inTab(tty, done: done) { Terminal.press(key, tty: tty) }
+    }
+
+    /// Runs `work`, which brings the tab on `tty` forward. A tab you have
+    /// been shown counts as seen.
+    private func inTab(_ tty: String, done: @escaping (Response) -> Void, _ work: @escaping () -> Bool) {
         onTerminal(done) {
-            let pressed = Terminal.press(key, tty: tty)
-            if pressed { DispatchQueue.main.async { self.sessions.markSeen(tty: tty) } }
-            return pressed
+            let reached = work()
+            if reached { DispatchQueue.main.async { self.sessions.markSeen(tty: tty) } }
+            return reached
         }
     }
 
@@ -212,11 +245,7 @@ final class Deck {
 
     func focus(_ id: String, done: @escaping (Response) -> Void) {
         guard let tty = sessions[id]?.tty, !tty.isEmpty else { return done(.status(404)) }
-        onTerminal(done) {
-            let focused = Terminal.focus(tty: tty)
-            if focused { DispatchQueue.main.async { self.sessions.markSeen(tty: tty) } }
-            return focused
-        }
+        inTab(tty, done: done) { Terminal.focus(tty: tty) }
     }
 
     /// Typed into a running turn, /effort would be queued as a message, so it

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Builds the download for a GitHub release: build/AgentDeck.zip, a universal
-# app for Apple silicon and Intel Macs.
+# Builds the download for a GitHub release: build/SauzzeDeck-Pro.zip, a
+# universal app for Apple silicon and Intel Macs, and prints its SHA-256 for
+# the release notes.
 #
 #   scripts/release.sh
 #
@@ -12,6 +13,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 scripts/build-app.sh universal
 
-rm -f build/AgentDeck.zip
-ditto -c -k --keepParent build/AgentDeck.app build/AgentDeck.zip
-echo "build/AgentDeck.zip ($(lipo -archs build/AgentDeck.app/Contents/MacOS/AgentDeck))"
+ZIP="build/SauzzeDeck-Pro.zip"
+rm -f "$ZIP"
+ditto -c -k --keepParent "build/SauzzeDeck Pro.app" "$ZIP"
+echo "$ZIP ($(lipo -archs "build/SauzzeDeck Pro.app/Contents/MacOS/AgentDeck"))"
+echo "SHA-256: $(shasum -a 256 "$ZIP" | cut -d ' ' -f 1)"

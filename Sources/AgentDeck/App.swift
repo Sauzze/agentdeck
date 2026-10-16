@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if ClaudeHooks.isInstalled { try? ClaudeHooks.updateScript() }
+        LoginItem.refresh()
         server.onFailure = { [menu] _ in menu.showPortInUse() }
         do {
             try server.start()

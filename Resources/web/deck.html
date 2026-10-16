@@ -6,11 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="AgentDeck">
+<meta name="apple-mobile-web-app-title" content="SauzzeDeck Pro">
 <meta name="theme-color" content="#0e0e0e">
 <link rel="apple-touch-icon" href="/icon.png">
 <link rel="icon" href="/icon.png">
-<title>AgentDeck</title>
+<title>SauzzeDeck Pro</title>
 <style>
   :root {
     --body: #0e0e0e;
@@ -94,7 +94,8 @@
   .dial .pointer { stroke: var(--ink); stroke-width: 4; stroke-linecap: round; }
   .dial.unknown .pointer { stroke: var(--faint); }
 
-  /* The stick: a trackpad well with a nub; its legend says what it drives. */
+  /* The stick: a mouse's scroll wheel, or a well with a nub for choices; its
+     legend says which. */
   .stick { touch-action: none; overflow: hidden; display: grid; place-items: center;
     background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--cap) 70%, var(--body)), var(--body) 70%); }
   .stick .cross { position: absolute; inset: 30px 18px 18px; border: 1px dashed var(--faint); border-radius: 10px; }
@@ -102,8 +103,19 @@
     background: linear-gradient(color-mix(in srgb, var(--cap-top) 75%, var(--ink)), var(--cap-top));
     border: 1px solid var(--edge); box-shadow: 0 3px 8px var(--shadow);
     transition: transform .18s cubic-bezier(.3,1.4,.6,1); }
+  /* Seen from above, sunk in its slot: shaded towards both ends, where it
+     curves away, with ridges that roll with the finger. */
+  .stick .wheel { width: 44px; height: min(64%, 150px); border-radius: 22px; z-index: 1;
+    border: 1px solid var(--edge); box-shadow: 0 0 0 6px var(--well), 0 0 0 7px var(--edge);
+    background:
+      linear-gradient(var(--well), transparent 30%, transparent 70%, var(--well)),
+      repeating-linear-gradient(color-mix(in srgb, var(--cap-top) 80%, var(--ink)) 0 5px, var(--cap) 5px 9px);
+    background-position: 0 0, 0 var(--roll, 0px); }
+  .stick:not(.choices) .nub, .stick:not(.choices) .cross, .stick.choices .wheel { display: none; }
+  .stick.unavailable .wheel { opacity: .35; }
+  .stick.unavailable .mode { color: var(--faint); }
   .stick .mode { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); padding: 6px 12px;
-    font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; z-index: 2; }
+    font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; z-index: 2; white-space: nowrap; }
   .stick.down .nub { transition: none; }
   .stick.down { transform: none; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
   .stick.choices .mode { color: var(--asking); }
@@ -180,8 +192,9 @@
       <div class="cap stick" id="stick" data-control="stick">
         <div class="cross"></div>
         <div class="arrows"><span class="u">▲</span><span class="d">▼</span></div>
-        <div class="mode" id="stick-mode">CURSOR</div>
+        <div class="mode" id="stick-mode">SCROLL</div>
         <div class="nub" id="nub"></div>
+        <div class="wheel" id="wheel"></div>
       </div>
     </div>
 
@@ -207,7 +220,7 @@
   <div class="status" id="status">connecting…</div>
 </main>
 <div class="install" id="install" hidden>
-  <div><b>Add AgentDeck to your Home Screen.</b><br>Tap Share, then “Add to Home Screen”. It opens full screen and stays paired.</div>
+  <div><b>Add SauzzeDeck Pro to your Home Screen.</b><br>Tap Share, then “Add to Home Screen”. It opens full screen and stays paired.</div>
   <button id="install-close" aria-label="Dismiss">✕</button>
 </div>
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
@@ -311,6 +324,7 @@
   async function send(pathname, params) {
     const res = await post(pathname, params);
     if (!res) return flash("Can't reach your Mac");
+    if (res.status === 401) return unpaired();
     if (res.status === 202) return flash('queued — goes in when Claude is done');
     if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
   }
@@ -382,100 +396,86 @@
    *
    *   choices  Claude is asking. Slide up or down to move through the
    *            options, a notch per step; tap to confirm the highlighted one.
-   *   cursor   Everything else. A trackpad for the Mac: one finger moves,
-   *            tap clicks, two-finger tap right-clicks, two-finger drag scrolls.
+   *   scroll   Everything else. A mouse's scroll wheel for the session's
+   *            Terminal window: roll it to scroll, tap to jump back to the
+   *            bottom. Off until it's turned on in setup on the Mac.
    *
-   * Tapping the CURSOR/CHOICES legend flips it by hand.
+   * Tapping the SCROLL/CHOICES legend flips it by hand.
    */
-  const SPEED = 1.6;   // points of cursor travel per point of finger travel…
-  const ACCEL = 0.045; // …plus this much more per point of speed, so flicks go far
-  const STEP = 34;     // finger travel per choice
+  const STEP = 34;           // finger travel per choice
+  const NOTCH = 14;          // finger travel per notch of the wheel…
+  const LINES_PER_NOTCH = 3; // …and the lines each notch scrolls, as a mouse's does
   const TAP_MS = 300, TAP_SLOP = 12;
 
-  let stickMode = 'cursor';
-  let stickAuto = 'cursor';
+  let stickMode = 'scroll';
+  let stickAuto = 'scroll';
   let stickOverride = null;
+  let scrollEnabled = false; // as set on the Mac
 
   const stick = $('stick');
-  const touches = new Map(); // pointerId → { x, y, x0, y0 }
-  let gesture = null;        // { start, moved, fingers, acc } from first finger down to last up
-  let pending = { mx: 0, my: 0, sx: 0, sy: 0 };
-  let frame = 0;
+  let gesture = null; // { id, start, x0, y0, x, y, moved, acc, roll } while a finger is down
 
   $('stick-mode').addEventListener('pointerdown', (e) => {
     e.stopPropagation();
-    stickOverride = stickMode === 'choices' ? 'cursor' : 'choices';
+    stickOverride = stickMode === 'choices' ? 'scroll' : 'choices';
     tick();
     render();
   });
 
+  // One finger at a time: a second one is ignored until the first lifts.
   stick.addEventListener('pointerdown', (e) => {
+    if (gesture) return;
     stick.setPointerCapture(e.pointerId);
-    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
-    if (!gesture) gesture = { start: performance.now(), moved: 0, fingers: 0, acc: 0 };
-    gesture.fingers = Math.max(gesture.fingers, touches.size);
+    gesture = { id: e.pointerId, start: performance.now(), x0: e.clientX, y0: e.clientY,
+                x: e.clientX, y: e.clientY, moved: 0, acc: 0, roll: 0 };
     stick.classList.add('down');
-    if (stickMode === 'cursor') cursorSocket();
   });
 
   stick.addEventListener('pointermove', (e) => {
-    const t = touches.get(e.pointerId);
-    if (!t || !gesture) return;
-    const dx = e.clientX - t.x, dy = e.clientY - t.y;
-    t.x = e.clientX; t.y = e.clientY;
-    gesture.moved += Math.abs(dx) + Math.abs(dy);
-    nub(touches.values().next().value);
+    const g = gesture;
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    g.x = e.clientX; g.y = e.clientY;
+    g.moved += Math.abs(dx) + Math.abs(dy);
 
     if (stickMode === 'choices') {
-      if (touches.size > 1) return;
-      gesture.acc += dy;
-      while (gesture.acc >= STEP) { gesture.acc -= STEP; choose('down'); }
-      while (gesture.acc <= -STEP) { gesture.acc += STEP; choose('up'); }
+      nub(g);
+      g.acc += dy;
+      while (g.acc >= STEP) { g.acc -= STEP; choose('down'); }
+      while (g.acc <= -STEP) { g.acc += STEP; choose('up'); }
       return;
     }
 
-    if (touches.size >= 2) {
-      // Every finger reports; share the move between them.
-      pending.sx += (dx * 2) / touches.size;
-      pending.sy += (dy * 2) / touches.size;
-    } else {
-      const gain = SPEED * (1 + ACCEL * Math.hypot(dx, dy));
-      pending.mx += dx * gain;
-      pending.my += dy * gain;
-    }
-    if (!frame) frame = requestAnimationFrame(flush);
+    if (!scrollEnabled) return;
+    // Content follows the finger, as on the phone itself and on a Mac with
+    // natural scrolling: drawing down brings earlier lines into view.
+    g.roll += dy;
+    $('wheel').style.setProperty('--roll', `${g.roll}px`);
+    g.acc += dy;
+    while (g.acc >= NOTCH) { g.acc -= NOTCH; tick(); scrollBy(-LINES_PER_NOTCH); }
+    while (g.acc <= -NOTCH) { g.acc += NOTCH; tick(); scrollBy(LINES_PER_NOTCH); }
   });
 
   function lift(e, cancelled) {
-    if (!touches.delete(e.pointerId) || touches.size || !gesture) return;
     const g = gesture;
+    if (!g || e.pointerId !== g.id) return;
     gesture = null;
     stick.classList.remove('down');
     nub(null);
     if (cancelled || performance.now() - g.start > TAP_MS || g.moved > TAP_SLOP) return;
-    tick();
-    if (stickMode === 'choices') choose('accept');
-    else cursorSend(g.fingers >= 2 ? 'r' : 'c');
+    if (stickMode === 'choices') { tick(); choose('accept'); }
+    else if (scrollEnabled) { tick(); scrollToBottom(); }
   }
   stick.addEventListener('pointerup', (e) => lift(e, false));
   stick.addEventListener('pointercancel', (e) => lift(e, true));
 
   /** The nub leans toward the finger, and springs back when it lifts. */
-  function nub(t) {
+  function nub(g) {
     const el = $('nub');
-    if (!t) { el.style.transform = ''; return; }
-    const dx = t.x - t.x0, dy = t.y - t.y0, d = Math.hypot(dx, dy), max = 26;
+    if (!g) { el.style.transform = ''; return; }
+    const dx = g.x - g.x0, dy = g.y - g.y0, d = Math.hypot(dx, dy), max = 26;
     const k = d > max ? max / d : 1;
     el.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
-  }
-
-  /** One message per frame, however many moves the finger made. */
-  function flush() {
-    frame = 0;
-    const p = pending;
-    pending = { mx: 0, my: 0, sx: 0, sy: 0 };
-    if (p.mx || p.my) cursorSend(`m ${p.mx.toFixed(1)} ${p.my.toFixed(1)}`);
-    if (p.sx || p.sy) cursorSend(`s ${p.sx.toFixed(1)} ${p.sy.toFixed(1)}`);
   }
 
   /**
@@ -490,17 +490,32 @@
     choosing = choosing.then(() => send('/act', params));
   }
 
-  let sock = null;
-  function cursorSocket() {
-    if (sock && sock.readyState <= WebSocket.OPEN) return sock;
-    sock = new WebSocket(`ws://${location.host}/cursor?t=${encodeURIComponent(token)}`);
-    sock.onclose = () => { sock = null; };
-    return sock;
+  /**
+   * The wheel turns faster than the Mac can scroll a window, so notches
+   * turned while a request is out are added up and go together in the next.
+   */
+  let unscrolled = 0;
+  let scrolling = false;
+  function scrollBy(lines) {
+    unscrolled += lines;
+    sendScroll();
   }
-  function cursorSend(line) {
-    const s = cursorSocket();
-    // Moves made while it is still connecting are stale by the time it is up.
-    if (s.readyState === WebSocket.OPEN) s.send(line);
+
+  function sendScroll() {
+    if (scrolling || !unscrolled || !selected) return;
+    const params = { session: selected, action: 'scroll', lines: unscrolled };
+    unscrolled = 0;
+    scrolling = true;
+    send('/act', params).finally(() => {
+      scrolling = false;
+      sendScroll();
+    });
+  }
+
+  function scrollToBottom() {
+    if (!selected) return;
+    unscrolled = 0;
+    send('/act', { session: selected, action: 'scroll', to: 'bottom' });
   }
 
   /* ------------------------------------------------------------ render */
@@ -531,15 +546,15 @@
       : STATE_WORDS[sel.state] || sel.state;
 
     const asking = !!sel && sel.state === 'asking';
-    // The stick drives the cursor with or without a session; the rest need one.
-    document.querySelectorAll('.controls .cap:not(.stick)').forEach((el) => el.classList.toggle('off', !sel));
+    document.querySelectorAll('.controls .cap').forEach((el) => el.classList.toggle('off', !sel));
     // An override lasts until the session's own situation changes.
-    const auto = asking ? 'choices' : 'cursor';
+    const auto = asking ? 'choices' : 'scroll';
     if (auto !== stickAuto) { stickAuto = auto; stickOverride = null; }
     stickMode = stickOverride || auto;
     document.querySelectorAll('.accept, .reject').forEach((el) => el.classList.toggle('live', asking));
     $('stick').classList.toggle('choices', stickMode === 'choices');
-    $('stick-mode').textContent = stickMode === 'choices' ? 'CHOICES' : 'CURSOR';
+    $('stick').classList.toggle('unavailable', stickMode === 'scroll' && !scrollEnabled);
+    $('stick-mode').textContent = stickMode === 'choices' ? 'CHOICES' : scrollEnabled ? 'SCROLL' : 'SCROLL OFF';
     // Leave the knob alone while a finger is on it.
     if (!dragging) showEffort(sel ? sel.effort : '');
 
@@ -593,14 +608,23 @@
     keyData = data.keys;
     sessions = keyData.filter((k) => k.session).map((k) => k.session);
     overflow = data.overflow;
+    scrollEnabled = data.scroll;
     applyTheme(data.theme);
     $('status').classList.remove('off');
     render();
   };
   stream.onerror = () => {
+    // Closed for good means the Mac answered, but not with the deck: it no
+    // longer knows this phone. Unreachable, the stream keeps retrying.
+    if (stream.readyState === EventSource.CLOSED) return unpaired();
     $('status').classList.add('off');
-    $('status').textContent = "Can't reach your Mac. Is AgentDeck running?";
+    $('status').textContent = "Can't reach your Mac. Is SauzzeDeck Pro running?";
   };
+
+  /** Unpaired on the Mac: the pairing page takes over, without the old key. */
+  function unpaired() {
+    location.replace('/');
+  }
 
   // Installed, it runs standalone; in Safari it is a tab worth upgrading.
   (function installHint() {

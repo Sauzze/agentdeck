@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key>
-  <string>AgentDeck</string>
+  <string>SauzzeDeck Pro</string>
   <key>CFBundleDisplayName</key>
-  <string>AgentDeck</string>
+  <string>SauzzeDeck Pro</string>
   <key>CFBundleIdentifier</key>
   <string>io.github.sauzze.agentdeck</string>
   <key>CFBundleExecutable</key>
@@ -15,9 +15,9 @@
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.1</string>
+  <string>1.1.0</string>
   <key>CFBundleVersion</key>
-  <string>2</string>
+  <string>3</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>LSUIElement</key>
@@ -25,6 +25,6 @@
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSAppleEventsUsageDescription</key>
-  <string>AgentDeck brings your Claude Code tabs forward in Terminal and types commands into them.</string>
+  <string>SauzzeDeck Pro brings your Claude Code tabs forward in Terminal and types commands into them.</string>
 </dict>
 </plist>

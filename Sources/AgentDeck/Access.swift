@@ -1,41 +1,59 @@
 import Foundation
 import Security
 
-/// The deck's secret, and the short code that hands it to a phone.
+/// Who may use the deck: the phones you paired, and the Claude Code hook.
 ///
-/// Every request from the phone and from the Claude Code hook carries the
-/// token: 32 random bytes, generated once and kept in Application Support.
-/// Nobody types it. To pair, you ask for a code on the Mac; the phone opens
-/// the deck's address and enters it, and gets the token in return.
+/// Each phone has a key of its own, handed over once when it pairs: see
+/// `Phones`. Nobody types it. To pair, you ask for a code on the Mac; the
+/// phone opens the deck's address and enters it, or scans it, and gets a new
+/// key in return.
 ///
-/// A code exists only after you ask for one, lasts five minutes, works once,
-/// and is withdrawn after five wrong attempts. Outside that window there is
-/// nothing to guess.
+/// A code exists only after you ask for one, lasts five minutes and works
+/// once. Five wrong tries lock out the address they came from until the
+/// next code, and twenty in all withdraw the code. Outside that window there
+/// is nothing to guess.
+///
+/// The hook has a separate key, kept in a header file next to its script so
+/// curl reads it from there rather than from its command line, where `ps`
+/// would show it. It opens `/hook` and nothing else, and no phone's key
+/// opens `/hook`.
 final class Access {
     static let codeLifetime: TimeInterval = 5 * 60
-    static let maxAttempts = 5
+    /// Wrong codes one address may try before it is locked out.
+    static let maxAttemptsPerAddress = 5
+    /// Wrong codes from everywhere before the code is withdrawn: the backstop
+    /// for a device that keeps changing its address.
+    static let maxAttempts = 20
+    static let hookHeaderName = "X-AgentDeck-Token"
 
-    let token: String
+    let phones = Phones()
+    let hookKey: String
     private(set) var code: String?
     private(set) var codeExpiry = Date.distantPast
-    private var failedAttempts = 0
+    /// Wrong codes since the current one was issued, by address.
+    private var misses: [String: Int] = [:]
+    private var totalMisses = 0
 
     init() {
-        token = Access.loadToken() ?? Access.createToken()
+        // 1.0 shared one key between the phone and the hook. It is retired
+        // rather than reused: the hook gets a fresh key and phones pair again.
+        try? FileManager.default.removeItem(at: Paths.legacyToken)
+        hookKey = Access.loadHookKey() ?? Access.createHookKey()
     }
 
-    func isValid(_ candidate: String?) -> Bool {
+    func isHookKey(_ candidate: String?) -> Bool {
         guard let candidate else { return false }
-        return constantTimeEqual(candidate, token)
+        return constantTimeEqual(candidate, hookKey)
     }
 
-    /// A fresh pairing code, replacing any earlier one.
+    /// A fresh pairing code, replacing any earlier one and lifting lockouts.
     @discardableResult
     func newCode() -> String {
         let fresh = String(format: "%06d", Int.random(in: 0..<1_000_000))
         code = fresh
         codeExpiry = Date().addingTimeInterval(Access.codeLifetime)
-        failedAttempts = 0
+        misses = [:]
+        totalMisses = 0
         return fresh
     }
 
@@ -45,38 +63,47 @@ final class Access {
         return code
     }
 
-    /// The token, if `attempt` is the active code. The code is spent on
-    /// success, or after `maxAttempts` misses.
-    func redeem(_ attempt: String) -> String? {
-        guard let active = activeCode else { return nil }
+    /// A key for a newly paired phone, if `attempt` is the active code and
+    /// `address` is not locked out. The code is spent on success.
+    func redeem(_ attempt: String, from address: String, userAgent: String) -> String? {
+        guard let active = activeCode, misses[address, default: 0] < Access.maxAttemptsPerAddress else { return nil }
         if constantTimeEqual(attempt, active) {
             code = nil
-            return token
+            return phones.pair(name: Phones.name(forUserAgent: userAgent))
         }
-        failedAttempts += 1
-        if failedAttempts >= Access.maxAttempts { code = nil }
+        misses[address, default: 0] += 1
+        totalMisses += 1
+        if totalMisses >= Access.maxAttempts { code = nil }
         return nil
     }
 
-    private static func loadToken() -> String? {
-        guard let saved = try? String(contentsOf: Paths.token, encoding: .utf8) else { return nil }
-        let trimmed = saved.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+    private static func loadHookKey() -> String? {
+        guard let saved = try? String(contentsOf: Paths.hookHeader, encoding: .utf8) else { return nil }
+        let prefix = "\(hookHeaderName): "
+        let line = saved.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard line.hasPrefix(prefix), line.count > prefix.count else { return nil }
+        return String(line.dropFirst(prefix.count))
     }
 
-    private static func createToken() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            fatalError("No secure random source available")
-        }
-        let token = Data(bytes).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        FileManager.default.createFile(atPath: Paths.token.path, contents: Data((token + "\n").utf8),
+    private static func createHookKey() -> String {
+        let key = randomKey()
+        FileManager.default.createFile(atPath: Paths.hookHeader.path,
+                                       contents: Data("\(hookHeaderName): \(key)\n".utf8),
                                        attributes: [.posixPermissions: 0o600])
-        return token
+        return key
     }
+}
+
+/// 32 random bytes, base64url-encoded so they travel in a URL unescaped.
+func randomKey() -> String {
+    var bytes = [UInt8](repeating: 0, count: 32)
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+        fatalError("No secure random source available")
+    }
+    return Data(bytes).base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
 }
 
 /// Compares without stopping at the first difference, so response timing

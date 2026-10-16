@@ -19,7 +19,14 @@ enum Terminal {
         case space = 49
         case up = 126
         case down = 125
+        case pageUp = 116
+        case pageDown = 121
+        case end = 119
     }
+
+    /// The most lines one request may scroll. A notch of the phone's wheel
+    /// is a few; anything beyond is clamped, not obeyed.
+    static let maxScroll = 200
 
     /// The ttys of every open tab: none if Terminal isn't running, nil if it
     /// could not be asked.
@@ -67,15 +74,34 @@ enum Terminal {
         withTab(tty, do: "do script (item 2 of argv) in t", extra: [text])
     }
 
-    /// Brings the tab forward and presses `key`. Posting keys needs
-    /// Accessibility permission.
-    static func press(_ key: Key, tty: String) -> Bool {
+    /// Brings the tab forward and presses `key`, `times` times. Posting keys
+    /// needs Accessibility permission.
+    static func press(_ key: Key, modifiers: CGEventFlags = [], times: Int = 1, tty: String) -> Bool {
         guard focus(tty: tty) else { return false }
         Thread.sleep(forTimeInterval: 0.12) // let the window take focus first
-        for down in [true, false] {
-            CGEvent(keyboardEventSource: nil, virtualKey: key.rawValue, keyDown: down)?.post(tap: .cghidEventTap)
+        for _ in 0..<times {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: key.rawValue, keyDown: down)
+                if !modifiers.isEmpty { event?.flags = modifiers }
+                event?.post(tap: .cghidEventTap)
+            }
         }
         return true
+    }
+
+    /// Scrolls the tab's window by `lines`, up when negative, with the View
+    /// menu's Line Up and Line Down (⌥⌘Page Up, ⌥⌘Page Down). They move
+    /// Terminal's view of the scrollback, so claude itself receives nothing.
+    static func scroll(lines: Int, tty: String) -> Bool {
+        let count = min(abs(lines), maxScroll)
+        guard count > 0 else { return true }
+        return press(lines < 0 ? .pageUp : .pageDown, modifiers: [.maskCommand, .maskAlternate],
+                     times: count, tty: tty)
+    }
+
+    /// The View menu's Scroll to Bottom (⌘End): back to where claude is.
+    static func scrollToBottom(tty: String) -> Bool {
+        press(.end, modifiers: .maskCommand, tty: tty)
     }
 
     /// Runs `body` with `w` and `t` bound to the window and tab on `tty`.
