@@ -1,5 +1,9 @@
 # SauzzeDeck Pro
 
+<p align="center">
+  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: an agent's key blinks orange and a tap on ✓ approves it, the stick answers its question, the dial raises Claude's effort, and the mic dictates the next prompt" width="800">
+</p>
+
 > **Support the project.** SauzzeDeck Pro is free. If it earns a place on your
 > desk and you'd like to say thanks, you can send ETH, BNB or any token to this
 > address, on Ethereum, BNB Smart Chain or another EVM network:
