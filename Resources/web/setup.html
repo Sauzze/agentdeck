@@ -638,6 +638,7 @@
   function change(edit) {
     edit();
     drawLayout();
+    markEdited();
     clearTimeout(unsaved);
     unsaved = setTimeout(() => { unsaved = null; sendLayout(); }, 250);
   }
@@ -970,6 +971,7 @@
   // Dragging across the picker fires many changes; only the last is sent.
   let saving = null;
   function save() {
+    markEdited();
     clearTimeout(saving);
     saving = setTimeout(() => { saving = null; sendTheme(); }, 120);
   }
@@ -1015,7 +1017,18 @@
     if (!res.ok) alert(await res.text());
   }
 
-  function switchTo(name) {
+  /** A change just made counts as one before the computer has said so. */
+  function markEdited() {
+    if (!state || state.profileEdited) return;
+    state.profileEdited = true;
+    renderProfiles();
+  }
+
+  async function switchTo(name) {
+    // Whether there's anything to lose is the computer's to say, once it has
+    // every change made here.
+    await settle();
+    await load();
     const active = state.activeProfile;
     if (name === active && !state.profileEdited) return;
     if (state.profileEdited && !confirm(name === active
@@ -1063,37 +1076,34 @@
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
     link.download = `${state.activeProfile}.sauzzedeck.json`;
+    document.body.append(link);
     link.click();
-    URL.revokeObjectURL(link.href);
+    link.remove();
+    // Safari starts the download after the click returns: the file must still be there.
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
   };
 
   /**
    * A profile from a file. Its buttons can type into your agents, so before
-   * it's added you see everything they would type or press.
+   * it's added you see everything they would type or press, as the computer
+   * would keep them: it reads the file, not this page, and what it keeps is
+   * what's added.
    */
   $('profile-import').onclick = () => $('profile-file').click();
   $('profile-file').onchange = async () => {
     const file = $('profile-file').files[0];
     $('profile-file').value = '';
     if (!file) return;
-    let profile;
-    try {
-      profile = JSON.parse(await file.text());
-    } catch {
-      return alert(`${file.name} isn't a profile: it isn't valid JSON.`);
-    }
-    if (!profile || typeof profile !== 'object' || !profile.layout || typeof profile.layout !== 'object') {
-      return alert(`${file.name} isn't a SauzzeDeck Pro profile.`);
-    }
-    const doings = (Array.isArray(profile.layout.rows) ? profile.layout.rows : [])
-      .flatMap((row) => (row && Array.isArray(row.buttons) ? row.buttons : []))
-      .filter((b) => b && typeof b.id === 'string' && b.id.startsWith('custom-'))
-      .map((b) => (KEY_NAMES[b.key] ? `• press ${KEY_NAMES[b.key]}` : `• type ${String(b.text || '').slice(0, 200)}`));
-    const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : 'Imported';
+    const checked = await fetch('/setup/profiles?action=check', { method: 'POST', headers: setupHeaders(true), body: await file.text() });
+    if (!checked.ok) return alert(`${file.name}: ${await checked.text()}`);
+    const profile = await checked.json();
+    const doings = profile.layout.rows.flatMap((row) => row.buttons)
+      .filter((b) => !BUILT_IN[b.id])
+      .map((b) => (b.key ? `• press ${KEY_NAMES[b.key]}` : b.text ? `• type ${b.text}` : '• type nothing yet'));
     const asked = doings.length
-      ? `Add the profile ${name}? Its buttons would:\n\n${doings.join('\n')}\n\nOnly add profiles from people you trust.`
-      : `Add the profile ${name}? It has none of its own buttons, only the deck's.`;
-    if (confirm(asked)) profileAction('import', name, '', { name, layout: profile.layout, colours: profile.colours });
+      ? `Add the profile ${profile.name}? Its buttons would:\n\n${doings.join('\n')}\n\nOnly add profiles from people you trust.`
+      : `Add the profile ${profile.name}? It has none of its own buttons, only the deck's.`;
+    if (confirm(asked)) profileAction('import', profile.name, '', profile);
   };
 
   /* ------------------------------------------------------------------ start */

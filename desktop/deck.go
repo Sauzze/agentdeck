@@ -151,30 +151,13 @@ type deckKey struct {
 	session *Session
 }
 
-// keyCount is how many keys the phone shows. Auto shows one for each running
-// session or pinned project, at least one and at most nine.
-func (d *Deck) keyCount() int {
-	if d.config.Layout.Keys != Auto {
-		return int(d.config.Layout.Keys)
-	}
-	count := len(d.sessions.All())
-	for i, pin := range d.config.Pins {
-		if pin != nil {
-			count = max(count, i+1)
-		}
-	}
-	return min(max(count, 1), mostKeys)
-}
-
 // layout: a pinned key shows its project's session when one is running and
-// stays reserved when none is. Every other session gets the first free key
-// and keeps it until it ends, so keys don't shuffle as sessions come and go.
+// stays reserved when none is. Every other session gets a free key. With a
+// fixed number of keys, a session keeps its key until it ends, so keys don't
+// shuffle as sessions come and go. With Auto, the keys grow and shrink with
+// the sessions, and those still running keep their order when one ends.
 // Sessions beyond the last key have none until one frees up.
 func (d *Deck) layout() ([]deckKey, []*Session) {
-	keys := make([]deckKey, d.keyCount())
-	for i := range keys {
-		keys[i].pin = d.config.Pins[i]
-	}
 	remaining := d.sessions.All()
 	live := map[string]bool{}
 	for _, s := range remaining {
@@ -184,6 +167,14 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 		if !live[id] {
 			delete(d.keyOf, id)
 		}
+	}
+	fixed := d.config.Layout.Keys != Auto
+	keys := make([]deckKey, mostKeys)
+	if fixed {
+		keys = keys[:d.config.Layout.Keys]
+	}
+	for i := range keys {
+		keys[i].pin = d.config.Pins[i]
 	}
 	place := func(s *Session, i int) {
 		keys[i].session = s
@@ -210,10 +201,23 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 			place(match, i)
 		}
 	}
-	for _, s := range slices.Clone(remaining) {
-		if i, ok := d.keyOf[s.ID]; ok && i < len(keys) && keys[i].pin == nil && keys[i].session == nil {
-			place(s, i)
+	if fixed {
+		for _, s := range slices.Clone(remaining) {
+			if i, ok := d.keyOf[s.ID]; ok && i < len(keys) && keys[i].pin == nil && keys[i].session == nil {
+				place(s, i)
+			}
 		}
+	} else {
+		// Every pinned key, and a free one for each other session.
+		pinned, last := 0, 0
+		for i, k := range keys {
+			if k.pin != nil {
+				pinned, last = pinned+1, i+1
+			}
+		}
+		keys = keys[:min(max(1, last, pinned+len(remaining)), mostKeys)]
+		// In the order their keys had, so the grid shrinks without shuffling.
+		slices.SortStableFunc(remaining, func(a, b *Session) int { return d.previousKey(a) - d.previousKey(b) })
 	}
 	for _, s := range slices.Clone(remaining) {
 		free := slices.IndexFunc(keys, func(k deckKey) bool { return k.pin == nil && k.session == nil })
@@ -223,6 +227,15 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 		place(s, free)
 	}
 	return keys, remaining
+}
+
+// previousKey is the key a session last had, or one past the last for a
+// session new to the deck.
+func (d *Deck) previousKey(s *Session) int {
+	if i, ok := d.keyOf[s.ID]; ok {
+		return i
+	}
+	return mostKeys
 }
 
 // snapshot is what the phone draws: the keys, the theme and the layout. No

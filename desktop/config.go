@@ -76,15 +76,6 @@ func (c *Config) Unpin(index int) {
 	c.save()
 }
 
-// SetLayout lays the deck out anew. A fixed number of keys has no room for
-// projects pinned beyond it.
-func (c *Config) SetLayout(layout Layout) {
-	c.Layout = layout
-	if layout.Keys != Auto {
-		clear(c.Pins[layout.Keys:])
-	}
-}
-
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if item == value {

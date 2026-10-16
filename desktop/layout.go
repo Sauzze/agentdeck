@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"unicode/utf8"
 )
 
 // Layout is how the phone's deck is laid out, as set up on the setup page: how
@@ -175,9 +174,8 @@ func (b Button) checked() (Button, bool) {
 // limit characters.
 func oneLine(text string, limit int) string {
 	text = strings.TrimSpace(controlCode.ReplaceAllString(text, ""))
-	for utf8.RuneCountInString(text) > limit {
-		_, size := utf8.DecodeLastRuneInString(text)
-		text = text[:len(text)-size]
+	if runes := []rune(text); len(runes) > limit {
+		return string(runes[:limit])
 	}
 	return text
 }

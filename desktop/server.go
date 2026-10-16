@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -360,7 +361,7 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 			return
 		}
 		d.mu.Lock()
-		config.SetLayout(layout)
+		config.Layout = layout
 		config.save()
 		d.changed()
 		d.mu.Unlock()
@@ -489,6 +490,17 @@ func (rt *router) profiles(w http.ResponseWriter, r *request) {
 	d := rt.deck
 	query := r.URL.Query()
 	name := query.Get("name")
+	// What a file's profile would be, without adding it.
+	if query.Get("action") == "check" {
+		data, _ := io.ReadAll(r.Body)
+		profile, err := checkedProfile(data)
+		if err != nil {
+			writeStatus(w)(http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+		return
+	}
 	d.mu.Lock()
 	var err error
 	switch query.Get("action") {
@@ -549,10 +561,16 @@ func (rt *router) setupState() map[string]any {
 			"connected": d.isConnected(phone.ID),
 		}
 	}
-	pins := make([]any, len(keys))
-	for i, key := range keys {
-		if key.pin != nil {
-			pins[i] = map[string]any{"folder": *key.pin, "name": lastPathComponent(*key.pin)}
+	// Every key a project can be pinned to: all nine with Auto, which grows to
+	// show a pinned key, or the fixed number of keys.
+	slots := mostKeys
+	if d.config.Layout.Keys != Auto {
+		slots = int(d.config.Layout.Keys)
+	}
+	pins := make([]any, slots)
+	for i, pin := range d.config.Pins[:slots] {
+		if pin != nil {
+			pins[i] = map[string]any{"folder": *pin, "name": lastPathComponent(*pin)}
 		}
 	}
 	sessions := []map[string]any{}
@@ -581,7 +599,8 @@ func (rt *router) setupState() map[string]any {
 		"layout":   d.config.Layout,
 		// Saved looks, besides Default, the one the deck was last switched
 		// to, and whether it has changed since.
-		"profiles":      d.config.Profiles,
+		// A copy: the reply is written after the lock is let go.
+		"profiles":      slices.Clone(d.config.Profiles),
 		"activeProfile": d.config.ActiveProfile,
 		"profileEdited": d.config.profileEdited(),
 	}

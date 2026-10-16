@@ -63,7 +63,7 @@ func (c *Config) SwitchProfile(name string) error {
 	if !ok {
 		return errNoProfile
 	}
-	c.SetLayout(p.Layout)
+	c.Layout = p.Layout
 	c.Colours = maps.Clone(p.Colours)
 	c.ActiveProfile = name
 	c.save()
@@ -122,29 +122,41 @@ func (c *Config) DeleteProfile(name string) {
 	c.save()
 }
 
-// ImportProfile adds a profile from a file, checked as a layout and colours
-// made here are, under a name of its own.
-func (c *Config) ImportProfile(data []byte) error {
+// checkedProfile is a profile from a file as this deck would keep it,
+// checked as a layout and colours made here are. The setup page shows its
+// buttons from this, before it's added, so what you're asked about is what's
+// kept.
+func checkedProfile(data []byte) (Profile, error) {
 	var file struct {
 		Name    string          `json:"name"`
 		Layout  json.RawMessage `json:"layout"`
 		Colours map[string]any  `json:"colours"`
 	}
 	if json.Unmarshal(data, &file) != nil || len(file.Layout) == 0 {
-		return errors.New("That isn't a profile this deck can add.")
+		return Profile{}, errors.New("That isn't a profile this deck can add.")
 	}
 	layout, err := parseLayout(file.Layout)
+	if err != nil {
+		return Profile{}, err
+	}
+	name, err := profileName(file.Name)
+	if err != nil {
+		name = "Imported"
+	}
+	return Profile{Name: name, Layout: layout, Colours: customisations(file.Colours)}, nil
+}
+
+// ImportProfile adds a profile from a file, under a name of its own.
+func (c *Config) ImportProfile(data []byte) error {
+	profile, err := checkedProfile(data)
 	if err != nil {
 		return err
 	}
 	if len(c.Profiles) >= mostProfiles {
 		return errTooMany
 	}
-	name, err := profileName(file.Name)
-	if err != nil {
-		name = "Imported"
-	}
-	c.Profiles = append(c.Profiles, Profile{Name: c.unusedName(name), Layout: layout, Colours: customisations(file.Colours)})
+	profile.Name = c.unusedName(profile.Name)
+	c.Profiles = append(c.Profiles, profile)
 	c.save()
 	return nil
 }
