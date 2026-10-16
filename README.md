@@ -1,14 +1,10 @@
 # SauzzeDeck Pro
 
-> **Support the project.** SauzzeDeck Pro is free. If it earns a place on your
-> desk and you'd like to say thanks, you can send ETH, BNB or any token to this
-> address, on Ethereum, BNB Smart Chain or another EVM network:
->
-> ```
-> 0x7a81788cf4cbb7357dfe3d98ab85a6422aab26c7
-> ```
->
-> Check the address after pasting it: transfers can't be reversed.
+[![CI](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml)
+
+<p align="center">
+  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: an agent's key blinks orange and a tap on ✓ approves it, the stick answers its question, the dial raises Claude's effort, and the mic dictates the next prompt" width="800">
+</p>
 
 A control pad on your phone for the AI coding agents in your terminal: Claude
 Code, Codex, Gemini CLI, OpenCode and Grok.
@@ -391,7 +387,20 @@ You need [Go](https://go.dev) 1.26 or later:
 go build ./cmd/sauzzedeck
 ```
 
-`scripts/release-desktop.sh` builds the downloads for both systems.
+`go test ./...` runs the tests, and `scripts/release-desktop.sh` builds the
+downloads for both systems.
+
+## Support the project
+
+SauzzeDeck Pro is free. If it earns a place on your desk and you'd like to say
+thanks, you can send ETH, BNB or any token to this address, on Ethereum, BNB
+Smart Chain or another EVM network:
+
+```
+0x7a81788cf4cbb7357dfe3d98ab85a6422aab26c7
+```
+
+Check the address after pasting it: transfers can't be reversed.
 
 ## License
 

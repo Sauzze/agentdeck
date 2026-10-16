@@ -1,4 +1,4 @@
 # The Sponsor button at the top of the repository page. GitHub's button
-# can't hold a crypto address, so it opens the README, where the address
-# comes first.
-custom: ["https://github.com/Sauzze/agentdeck#readme"]
+# can't hold a crypto address, so it opens the README's support section,
+# where the address is.
+custom: ["https://github.com/Sauzze/agentdeck#support-the-project"]
