@@ -33,7 +33,8 @@ final class Config: Codable {
         colours = try c.decodeIfPresent([String: String].self, forKey: .colours) ?? colours
         // Layouts are checked again as they load: their buttons type into sessions.
         layout = ((try? c.decodeIfPresent(Layout.self, forKey: .layout)) ?? layout).checked
-        profiles = ((try? c.decodeIfPresent([Profile].self, forKey: .profiles)) ?? []).map {
+        // One by one, so a profile this version can't read loses only itself.
+        profiles = ((try? c.decodeIfPresent([Lossy<Profile>].self, forKey: .profiles)) ?? []).compactMap(\.value).map {
             Profile(name: $0.name, layout: $0.layout.checked, colours: $0.colours)
         }
         activeProfile = (try? c.decodeIfPresent(String.self, forKey: .activeProfile)) ?? activeProfile
@@ -69,14 +70,15 @@ final class Config: Codable {
         pins[index] = nil
         save()
     }
+}
 
-    /// Lays the deck out anew. A fixed number of keys has no room for
-    /// projects pinned beyond it.
-    func setLayout(_ layout: Layout) {
-        self.layout = layout
-        if case .fixed(let count) = layout.keys {
-            for i in count..<pins.count { pins[i] = nil }
-        }
+/// A value decoded on its own, so one that can't be read is left out rather
+/// than taking the rest of a list with it.
+private struct Lossy<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
     }
 }
 
@@ -105,7 +107,7 @@ extension Config {
     /// Puts a saved profile's layout and colours on the deck.
     func switchProfile(to name: String) throws {
         guard let chosen = profile(named: name) else { throw ProfileError.missing }
-        setLayout(chosen.layout)
+        layout = chosen.layout
         colours = chosen.colours
         activeProfile = name
         save()
@@ -143,19 +145,26 @@ extension Config {
         save()
     }
 
-    /// Adds a profile from a file, checked as a layout and colours made here
-    /// are, under a name of its own.
-    func importProfile(_ data: Data) throws {
+    /// A profile from a file as this deck would keep it, checked as a layout
+    /// and colours made here are. The setup page shows its buttons from this,
+    /// before it's added, so what you're asked about is what's kept.
+    static func checkedProfile(_ data: Data) throws -> Profile {
         let file = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard let layoutObject = file["layout"] as? [String: Any],
               let layoutData = try? JSONSerialization.data(withJSONObject: layoutObject),
               let layout = Layout.parse(layoutData) else {
             throw ProfileError(message: "That isn't a profile this deck can add.")
         }
-        guard profiles.count < Profile.most else { throw ProfileError.tooMany }
         let name = Profile.checkedName(file["name"] as? String ?? "") ?? "Imported"
-        let colours = Theme.customisations(from: file["colours"] as? [String: Any] ?? [:])
-        profiles.append(Profile(name: unusedName(name), layout: layout, colours: colours))
+        return Profile(name: name, layout: layout, colours: Theme.customisations(from: file["colours"] as? [String: Any] ?? [:]))
+    }
+
+    /// Adds a profile from a file, under a name of its own.
+    func importProfile(_ data: Data) throws {
+        var profile = try Config.checkedProfile(data)
+        guard profiles.count < Profile.most else { throw ProfileError.tooMany }
+        profile.name = unusedName(profile.name)
+        profiles.append(profile)
         save()
     }
 

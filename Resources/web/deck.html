@@ -48,7 +48,7 @@
   .cap { background: linear-gradient(var(--cap-top), var(--cap)); border: 1px solid var(--edge);
     border-radius: 16px; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen);
     transition: transform .06s, box-shadow .06s; position: relative; }
-  .cap.down { transform: translateY(2px); box-shadow: 0 1px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
+  .cap.pressed { transform: translateY(2px); box-shadow: 0 1px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
   .cap.off { opacity: .35; pointer-events: none; }
 
   /* --------------------------------------------------------- session keys */
@@ -127,8 +127,8 @@
   .stick.unavailable .mode { color: var(--faint); }
   .stick .mode { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); padding: 6px 12px;
     font-size: 10px; letter-spacing: .14em; color: var(--dim); font-weight: 700; z-index: 2; white-space: nowrap; }
-  .stick.down .nub { transition: none; }
-  .stick.down { transform: none; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
+  .stick.pressed .nub { transition: none; }
+  .stick.pressed { transform: none; box-shadow: 0 3px 0 var(--shadow), inset 0 1px 0 var(--sheen); }
   .stick.choices .mode { color: var(--asking); }
   .stick .arrows { position: absolute; inset: 0; pointer-events: none; color: var(--faint); font-size: 12px; }
   .stick .arrows span { position: absolute; }
@@ -152,7 +152,7 @@
   .btn.accept.live { color: var(--unread); border-color: color-mix(in srgb, var(--unread) 50%, var(--edge)); }
   .btn.reject.live { color: var(--error); border-color: color-mix(in srgb, var(--error) 50%, var(--edge)); }
   .btn.accept:not(.live), .btn.reject:not(.live) { color: var(--faint); }
-  .btn.mic.down { color: var(--error); border-color: var(--error);
+  .btn.mic.pressed { color: var(--error); border-color: var(--error);
     box-shadow: 0 1px 0 var(--shadow), 0 0 18px color-mix(in srgb, var(--error) 45%, transparent); }
 
   .btn.armed { color: var(--error); border-color: var(--error); }
@@ -165,14 +165,14 @@
     box-shadow: 0 0 0 4px #141414, 0 4px 0 4px #0a0a0a, inset 0 -4px 8px rgba(0, 0, 0, .45), inset 0 3px 6px rgba(255, 255, 255, .35);
     transition: transform .06s; }
   .btn.max .dome svg { width: 18px; height: 18px; fill: #fff; stroke: none; }
-  .btn.max.down .dome { transform: translateY(3px); }
+  .btn.max.pressed .dome { transform: translateY(3px); }
 
   /* Effort steps: the dial's five levels as a row to tap, the current one lit. */
   .btn.efforts { display: flex; gap: 4px; padding: 4px; }
   .btn.efforts .step { flex: 1; align-self: stretch; display: grid; place-items: center; border-radius: 11px;
     font: 600 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); }
   .btn.efforts .step.on { color: var(--ink); background: var(--cap-top); box-shadow: inset 0 0 0 1.5px var(--ink); }
-  .btn.efforts .step.down { background: color-mix(in srgb, var(--ink) 14%, var(--cap)); }
+  .btn.efforts .step.pressed { background: color-mix(in srgb, var(--ink) 14%, var(--cap)); }
   /* Off screen, not display:none — a hidden switch gives no haptic. */
   #haptic { position: fixed; left: -100px; top: 0; opacity: 0; pointer-events: none; }
 
@@ -291,7 +291,7 @@
 
   let layoutShown = '';
   function applyLayout(next) {
-    const key = JSON.stringify(next);
+    const key = canonical(next);
     if (key === layoutShown) return;
     layoutShown = key;
     layout = next;
@@ -300,6 +300,16 @@
     $('analog').hidden = !layout.dial && !layout.stick;
     $('analog').classList.toggle('single', layout.dial !== layout.stick);
     buildButtons(layout.rows);
+  }
+
+  /**
+   * A value as JSON with every object's keys in order, so the same layout
+   * reads the same however the computer happened to write it.
+   */
+  function canonical(value) {
+    return JSON.stringify(value, (_, v) => (v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v));
   }
 
   /* ---------------------------------------------------------------- keys */
@@ -364,6 +374,9 @@
   /* ----------------------------------------------------------- buttons */
 
   function buildButtons(rows) {
+    // A control held down as the buttons are drawn afresh is let go first:
+    // its release would be lost with it, and the mic would keep listening.
+    if (held) held();
     disarm();
     $('buttons').replaceChildren(...rows.map((row) => {
       const line = document.createElement('div');
@@ -383,7 +396,8 @@
     const el = document.createElement('div');
     el.className = 'cap btn';
     el.style.setProperty('--weight', b.width || 1);
-    el.setAttribute('aria-label', face ? face.name : b.label || b.text || KEY_NAMES[b.key]);
+    const unset = 'A button to set up';
+    el.setAttribute('aria-label', face ? face.name : b.label || b.text || KEY_NAMES[b.key] || unset);
     if (face) {
       el.classList.add(b.id);
       el.dataset.action = b.id;
@@ -411,7 +425,7 @@
     } else {
       el.classList.add('text');
       el.innerHTML = '<span></span>';
-      el.firstChild.textContent = face ? face.word : b.label || b.text || KEY_NAMES[b.key];
+      el.firstChild.textContent = face ? face.word : b.label || b.text || KEY_NAMES[b.key] || '…';
     }
     if (b.id === 'clear' || b.confirm) el.dataset.confirm = '';
     const holds = b.id === 'mic';
@@ -419,14 +433,25 @@
     return el;
   }
 
+  let listening = Promise.resolve(); // the mic's press and release, in order
+  // Long enough for a busy computer, short enough that a request lost on the
+  // way doesn't hold up the presses after it.
+  const MIC_WAIT = 5000;
   function act(el, phase) {
     const action = el.dataset.action;
 
     // The Mac stops recording in the tab where it started, so a release has
-    // to arrive even if the selection has gone in the meantime.
-    if (action === 'mic' && phase === 'up') return send('/act', { session: selected || '', action, phase });
+    // to arrive even if the selection has gone in the meantime. It goes after
+    // its press: one that overtook it would stop nothing, and the press would
+    // then start a recording nothing stops.
+    if (action === 'mic' && (phase === 'up' || selected)) {
+      const params = { session: selected || '', action, phase };
+      listening = listening
+        .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
+        .catch(() => {}); // one that fails mustn't stop those after it
+      return listening;
+    }
     if (!selected) return;
-    if (action === 'mic') return send('/act', { session: selected, action, phase });
 
     // /clear throws the conversation away, and a made button can ask twice
     // too: the first tap arms it, the second sends.
@@ -472,9 +497,9 @@
   }
 
   /** POST and say anything that is not a plain yes on the status line. */
-  async function send(pathname, params) {
+  async function send(pathname, params, signal) {
     if (preview) return flash(rehearse(params));
-    const res = await post(pathname, params);
+    const res = await post(pathname, params, signal);
     if (!res) return flash("Can't reach your computer");
     if (res.status === 401) return unpaired();
     if (res.status === 202) return flash('queued — goes in when Claude is done');
@@ -580,7 +605,7 @@
     stick.setPointerCapture(e.pointerId);
     gesture = { id: e.pointerId, start: performance.now(), x0: e.clientX, y0: e.clientY,
                 x: e.clientX, y: e.clientY, moved: 0, acc: 0, roll: 0 };
-    stick.classList.add('down');
+    stick.classList.add('pressed');
   });
 
   stick.addEventListener('pointermove', (e) => {
@@ -612,7 +637,7 @@
     const g = gesture;
     if (!g || e.pointerId !== g.id) return;
     gesture = null;
-    stick.classList.remove('down');
+    stick.classList.remove('pressed');
     nub(null);
     if (cancelled || performance.now() - g.start > TAP_MS || g.moved > TAP_SLOP) return;
     if (stickMode === 'choices') { tick(); choose('accept'); }
@@ -735,19 +760,26 @@
    * page can be sent to the background, mid-hold.
    */
   function press(el, onDown, onUp) {
-    el.addEventListener('pointerdown', (e) => {
-      el.setPointerCapture(e.pointerId);
-      el.classList.add('down');
-      onDown();
-    });
     const up = () => {
-      if (!el.classList.contains('down')) return;
-      el.classList.remove('down');
+      if (!el.classList.contains('pressed')) return;
+      el.classList.remove('pressed');
+      if (held === up) held = null;
       if (onUp) onUp();
     };
+    el.addEventListener('pointerdown', (e) => {
+      el.setPointerCapture(e.pointerId);
+      el.classList.add('pressed');
+      if (onUp) held = up;
+      onDown();
+    });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(type, up);
-    if (onUp) document.addEventListener('visibilitychange', () => { if (document.hidden) up(); });
   }
+
+  // The hold control under a finger, let go if the page is sent to the
+  // background mid-hold. One listener for whichever it is: controls are
+  // drawn afresh whenever the layout changes.
+  let held = null;
+  document.addEventListener('visibilitychange', () => { if (document.hidden && held) held(); });
 
   /** Colours from the setup page, live: each one overrides its CSS variable. */
   let themeShown = '';
@@ -759,10 +791,10 @@
     if (colours && colours.body) document.querySelector('meta[name="theme-color"]').content = colours.body;
   }
 
-  function post(pathname, params = {}) {
+  function post(pathname, params = {}, signal) {
     if (preview) return Promise.resolve();
     const q = new URLSearchParams({ t: token, ...params });
-    return fetch(`${pathname}?${q}`, { method: 'POST' }).catch(() => {});
+    return fetch(`${pathname}?${q}`, { method: 'POST', signal }).catch(() => {});
   }
 
   /** What the computer streams: the keys and who is on them, the theme and the layout. */
@@ -785,7 +817,8 @@
     const name = current() ? ` · ${current().name}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
-      return `${b.text ? `types ${b.text}` : `presses ${KEY_NAMES[b.key]}`}${name}`;
+      const does = b.text ? `types ${b.text}` : b.key ? `presses ${KEY_NAMES[b.key]}` : 'types nothing yet';
+      return `${does}${name}`;
     }
     const words = {
       accept: 'accepts', reject: 'rejects', esc: 'interrupts', send: 'presses Return',

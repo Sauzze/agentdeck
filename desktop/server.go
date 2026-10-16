@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -360,7 +361,7 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 			return
 		}
 		d.mu.Lock()
-		config.SetLayout(layout)
+		config.Layout = layout
 		config.save()
 		d.changed()
 		d.mu.Unlock()
@@ -489,6 +490,23 @@ func (rt *router) profiles(w http.ResponseWriter, r *request) {
 	d := rt.deck
 	query := r.URL.Query()
 	name := query.Get("name")
+	// What a file's profile would be, without adding it.
+	if query.Get("action") == "check" {
+		data, _ := io.ReadAll(r.Body)
+		profile, err := checkedProfile(data)
+		// No room is said up front, not after the warning.
+		d.mu.Lock()
+		if len(d.config.Profiles) >= mostProfiles {
+			err = errTooMany
+		}
+		d.mu.Unlock()
+		if err != nil {
+			writeStatus(w)(http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, profile)
+		return
+	}
 	d.mu.Lock()
 	var err error
 	switch query.Get("action") {
@@ -549,10 +567,13 @@ func (rt *router) setupState() map[string]any {
 			"connected": d.isConnected(phone.ID),
 		}
 	}
-	pins := make([]any, len(keys))
-	for i, key := range keys {
-		if key.pin != nil {
-			pins[i] = map[string]any{"folder": *key.pin, "name": lastPathComponent(*key.pin)}
+	// Every key a project can be pinned to, even those the phone doesn't
+	// show: with Auto, a pin there adds keys up to it; with a fixed number,
+	// a pin left beyond them can still be undone.
+	pins := make([]any, mostKeys)
+	for i, pin := range d.config.Pins[:mostKeys] {
+		if pin != nil {
+			pins[i] = map[string]any{"folder": *pin, "name": lastPathComponent(*pin)}
 		}
 	}
 	sessions := []map[string]any{}
@@ -576,12 +597,15 @@ func (rt *router) setupState() map[string]any {
 		"phones":   phones,
 		"logo":     d.config.Logo,
 		"pins":     pins,
-		"sessions": sessions,
-		"theme":    themeEditor(d.config),
-		"layout":   d.config.Layout,
+		// How many keys the phone shows now.
+		"phoneKeys": len(keys),
+		"sessions":  sessions,
+		"theme":     themeEditor(d.config),
+		"layout":    d.config.Layout,
 		// Saved looks, besides Default, the one the deck was last switched
 		// to, and whether it has changed since.
-		"profiles":      d.config.Profiles,
+		// A copy: the reply is written after the lock is let go.
+		"profiles":      slices.Clone(d.config.Profiles),
 		"activeProfile": d.config.ActiveProfile,
 		"profileEdited": d.config.profileEdited(),
 	}

@@ -72,8 +72,9 @@ func TestAutoShowsAKeyPerSessionUpToNine(t *testing.T) {
 		sessions, pinned, want int
 	}{
 		{0, -1, 1}, {1, -1, 1}, {2, -1, 2}, {4, -1, 4}, {12, -1, 9},
-		// A pinned project keeps its key even when it isn't running.
-		{2, 6, 7},
+		// A pinned project keeps its key even when it isn't running, and the
+		// sessions running still get one each.
+		{2, 6, 7}, {2, 0, 3}, {1, 0, 2},
 	} {
 		d := newTestDeck(t)
 		running(d, c.sessions)
@@ -90,18 +91,139 @@ func TestAutoShowsAKeyPerSessionUpToNine(t *testing.T) {
 func TestAFixedNumberOfKeysStaysPut(t *testing.T) {
 	d := newTestDeck(t)
 	d.config.Pin("/work/pinned", 7)
-	d.config.SetLayout(Layout{Keys: 3, Dial: true, Stick: true, Rows: []ButtonRow{}})
+	d.config.Layout = Layout{Keys: 3, Dial: true, Stick: true, Rows: []ButtonRow{}}
 	running(d, 5)
 	keys, overflow := d.layout()
-	if len(keys) != 3 || len(overflow) != 2 || d.config.Pins[7] != nil {
-		t.Fatalf("%d keys, %d left over and pin 8 is %v, want 3, 2 and no pin beyond the keys", len(keys), len(overflow), d.config.Pins[7])
+	if len(keys) != 3 || len(overflow) != 2 {
+		t.Fatalf("%d keys and %d left over, want 3 and 2", len(keys), len(overflow))
 	}
+	// A pin beyond the keys waits, and comes back when there's room again.
+	d.config.Layout.Keys = Auto
+	if keys, _ := d.layout(); len(keys) != 8 || keys[7].pin == nil {
+		t.Fatalf("back on Auto, %d keys, want the pin on key 8 back", len(keys))
+	}
+	d.config.Layout.Keys = 3
 	var snapshot struct {
 		Keys   []any
 		Layout struct{ Keys int }
 	}
 	if json.Unmarshal(d.snapshot(), &snapshot) != nil || len(snapshot.Keys) != 3 || snapshot.Layout.Keys != 3 {
 		t.Fatal("the phone isn't sent three keys and the layout")
+	}
+}
+
+func TestAutoKeepsTheKeysInOrderWhenOneGoes(t *testing.T) {
+	d := newTestDeck(t)
+	running(d, 3)
+	d.layout()
+	d.sessions.Apply(map[string]any{"hook_event_name": "SessionEnd", "session_id": "s0"}, Claude, "tmux:%0@/tmp/tmux", 200)
+	keys, _ := d.layout()
+	if len(keys) != 2 || keys[0].session.ID != "s1" || keys[1].session.ID != "s2" {
+		t.Fatalf("after the first session ended, the keys hold %s and %s, want s1 then s2", keys[0].session.ID, keys[1].session.ID)
+	}
+}
+
+// With nine keys taken, a session left without one doesn't claim its old
+// key back from the session given it.
+func TestAutoDoesntSwapKeysWhenSessionsOutnumberThem(t *testing.T) {
+	d := newTestDeck(t)
+	running(d, 9)
+	d.config.Pin("/work/p0", 8) // s0 on key 9, the others on keys 1 to 8
+	d.layout()
+	d.config.Unpin(8)
+	d.layout()
+	d.config.Pin("/work/elsewhere", 0) // the others move up a key, and s0 has none
+	d.layout()
+	keys, overflow := d.layout()
+	if keys[8].session == nil || keys[8].session.ID != "s8" || len(overflow) != 1 || overflow[0].ID != "s0" {
+		t.Fatalf("key 9 went to %v, want s8 to keep it and s0 to wait", keys[8].session)
+	}
+}
+
+func TestTheSetupPageKnowsWhichKeysAreOnThePhone(t *testing.T) {
+	d := newTestDeck(t)
+	running(d, 1)
+	d.config.Pin("/work/pinned", 7)
+	d.config.Layout.Keys = 6
+	state := (&router{deck: d}).setupState()
+	// Every key, so a pin beyond the six can still be undone.
+	if pins := state["pins"].([]any); len(pins) != mostKeys || pins[7] == nil || state["phoneKeys"] != 6 {
+		t.Fatalf("with six keys, %d to pin to and %v on the phone, want all %d and 6", len(pins), state["phoneKeys"], mostKeys)
+	}
+	d.config.Layout.Keys = Auto
+	if keys := (&router{deck: d}).setupState()["phoneKeys"]; keys != 8 {
+		t.Fatalf("with Auto and a pin on key 8, %v keys on the phone, want 8", keys)
+	}
+}
+
+func TestTypingNeverTakesTextForAnOption(t *testing.T) {
+	for _, c := range []struct {
+		kind, text string
+		want       []string
+	}{
+		{"tmux", "--continue", []string{"send-keys", "-t", "%1", "-l", "--", "--continue"}},
+		{"tmux", "echo hi;", []string{"send-keys", "-t", "%1", "-l", "--", `echo hi\;`}},
+		{"wezterm", "-y", []string{"send-text", "--pane-id", "%1", "--no-paste", "--", "-y"}},
+		{"kitty", "-y", []string{"send-text", "--match", "id:%1", "--", "-y"}},
+	} {
+		if got := (commandTab{kind: c.kind, id: "%1"}).typeArgs(c.text); strings.Join(got, " | ") != strings.Join(c.want, " | ") {
+			t.Errorf("%s typing %q: %q, want %q", c.kind, c.text, got, c.want)
+		}
+	}
+}
+
+func TestHugeTextIsCutQuickly(t *testing.T) {
+	start := time.Now()
+	if got := oneLine(strings.Repeat("é", 1<<20), commandLimit); len([]rune(got)) != commandLimit {
+		t.Fatalf("cut to %d characters, want %d", len([]rune(got)), commandLimit)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("cutting a megabyte took %v", took)
+	}
+}
+
+func TestAProfileFileIsShownAsItWouldBeKept(t *testing.T) {
+	d := newTestDeck(t)
+	// Field names in another case, and a second "text" in another case: Go
+	// reads both, so the page must be shown what Go keeps, not the file.
+	file := `{"name": "Shared", "layout": {"rows": [{"buttons": [{"id": "accept"}], "Buttons": [{"id": "custom-x", "label": "compact", "text": "/compact", "TEXT": "/status"}]}]}}`
+	checked := serve(t, d, call{method: "POST", target: "/setup/profiles?action=check", host: "localhost:7710", from: thisComputer,
+		headers: map[string]string{setupHeader: "1"}, body: file})
+	var profile Profile
+	if err := json.Unmarshal(checked.Body.Bytes(), &profile); err != nil || len(profile.Layout.Rows) != 1 {
+		t.Fatalf("checking gave %d %s", checked.Code, checked.Body)
+	}
+	if b := profile.Layout.Rows[0].Buttons; len(b) != 1 || b[0].ID != "custom-x" || b[0].Text != "/status" {
+		t.Fatalf("shown %+v, want the button Go keeps, typing /status", b)
+	}
+	if len(d.config.Profiles) != 0 {
+		t.Fatal("checking a file added it")
+	}
+}
+
+// A profile file reads as the Mac app reads it: only its layout has to be right.
+func TestAProfileFileReadsAsOnTheMac(t *testing.T) {
+	profile, err := checkedProfile([]byte(`{"name": 5, "colours": "red", "layout": {"rows": [{"buttons": [{"id": "custom-a", "key": "", "text": "/compact"}]}]}}`))
+	if err != nil || profile.Name != "Imported" || len(profile.Colours) != 0 {
+		t.Fatalf("a name and colours of the wrong kind gave %+v, %v; want them left out", profile, err)
+	}
+	if rows := profile.Layout.Rows; len(rows) != 1 || rows[0].Buttons[0].Key != "" || rows[0].Buttons[0].Text != "/compact" {
+		t.Fatalf("an empty key gave %+v, want a button typing /compact", rows)
+	}
+	for _, file := range []string{`{"layout": null}`, `{"layout": []}`, `{"layout": {"rows": 5}}`} {
+		if _, err := checkedProfile([]byte(file)); err == nil {
+			t.Errorf("%s was taken for a profile", file)
+		}
+	}
+}
+
+func TestAProfileIsntOfferedWithNoRoomForIt(t *testing.T) {
+	d := newTestDeck(t)
+	d.config.Profiles = make([]Profile, mostProfiles)
+	checked := serve(t, d, call{method: "POST", target: "/setup/profiles?action=check", host: "localhost:7710", from: thisComputer,
+		headers: map[string]string{setupHeader: "1"}, body: `{"name": "Shared", "layout": {}}`})
+	if checked.Code != http.StatusBadRequest || !strings.Contains(checked.Body.String(), "most profiles") {
+		t.Fatalf("checking with %d profiles saved gave %d %s, want no room", mostProfiles, checked.Code, checked.Body)
 	}
 }
 
@@ -123,7 +245,7 @@ func madeButtonDeck(t *testing.T) (*Deck, *launcherTab) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.config.SetLayout(layout)
+	d.config.Layout = layout
 	return d, tab
 }
 
@@ -180,7 +302,7 @@ func TestProfilesKeepALookToSwitchBackTo(t *testing.T) {
 		t.Fatal("a fresh deck isn't the Default profile, unchanged")
 	}
 	couch := Layout{Keys: 3, Dial: false, Stick: true, Rows: []ButtonRow{{Tall: true, Buttons: []Button{{ID: "max", Width: 3}}}}}
-	c.SetLayout(couch)
+	c.Layout = couch
 	c.Colours = map[string]string{"thinking": "#2f6bff"}
 	if !c.profileEdited() {
 		t.Fatal("a changed deck doesn't show as edited")

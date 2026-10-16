@@ -92,24 +92,21 @@ final class Deck {
         var session: Session?
     }
 
-    /// How many keys the phone shows. Auto shows one for each running
-    /// session or pinned project, at least one and at most nine.
-    private var keyCount: Int {
-        let config = Config.shared
-        if case .fixed(let count) = config.layout.keys { return count }
-        let pinned = (config.pins.lastIndex { $0 != nil } ?? -1) + 1
-        return min(max(sessions.all.count, pinned, 1), KeyCount.most)
-    }
-
     /// A pinned key shows its project's session when one is running and stays
-    /// reserved when none is. Every other session gets the first free key and
-    /// keeps it until it ends, so keys don't shuffle as sessions come and go.
+    /// reserved when none is. Every other session gets a free key. With a fixed
+    /// number of keys, a session keeps its key until it ends, so keys don't
+    /// shuffle as sessions come and go. With Auto, the keys grow and shrink with
+    /// the sessions, and those still running keep their order when one ends.
     /// Sessions beyond the last key have none until one frees up.
     func layout() -> (keys: [Key], overflow: [Session]) {
-        var keys = Config.shared.pins.prefix(keyCount).map { Key(pin: $0, session: nil) }
+        let config = Config.shared
         var remaining = sessions.all
         let live = Set(remaining.map(\.id))
         keyOf = keyOf.filter { live.contains($0.key) }
+
+        var fixed: Int?
+        if case .fixed(let count) = config.layout.keys { fixed = count }
+        var keys = config.pins.prefix(fixed ?? KeyCount.most).map { Key(pin: $0, session: nil) }
 
         func place(_ session: Session, at index: Int) {
             keys[index].session = session
@@ -122,13 +119,28 @@ final class Deck {
             let candidates = remaining.filter { $0.folder == pin }
             if let match = candidates.first(where: { keyOf[$0.id] == i }) ?? candidates.first { place(match, at: i) }
         }
-        for session in remaining {
-            if let i = keyOf[session.id], i < keys.count, keys[i].pin == nil, keys[i].session == nil { place(session, at: i) }
+        if fixed != nil {
+            for session in remaining {
+                if let i = keyOf[session.id], i < keys.count, keys[i].pin == nil, keys[i].session == nil { place(session, at: i) }
+            }
+        } else {
+            // Every pinned key, and a free one for each other session.
+            let pinned = keys.filter { $0.pin != nil }.count
+            let last = (keys.lastIndex { $0.pin != nil } ?? -1) + 1
+            keys = Array(keys.prefix(min(max(1, last, pinned + remaining.count), KeyCount.most)))
+            // In the order their keys had, so the grid shrinks without shuffling.
+            let previous = { (session: Session) in self.keyOf[session.id] ?? KeyCount.most }
+            remaining = remaining.enumerated()
+                .sorted { (previous($0.element), $0.offset) < (previous($1.element), $1.offset) }
+                .map(\.element)
         }
         for session in remaining {
             guard let free = keys.indices.first(where: { keys[$0].pin == nil && keys[$0].session == nil }) else { break }
             place(session, at: free)
         }
+        // A session left without a key forgets the one it had, or it would
+        // claim it back from the session that has it now.
+        for session in remaining { keyOf[session.id] = nil }
         return (keys, remaining)
     }
 
@@ -154,7 +166,9 @@ final class Deck {
             "scroll": Config.shared.scrollEnabled,
             "layout": Config.shared.layout.jsonObject,
         ]
-        return (try? JSONSerialization.data(withJSONObject: state)) ?? Data()
+        // Keys in order: unsorted, the same layout can come out differently
+        // each time, and the phone would take it for a new one.
+        return (try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])) ?? Data()
     }
 
     func attach(_ stream: EventStream, phone: String) {

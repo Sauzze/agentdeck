@@ -100,21 +100,31 @@ func (t commandTab) sendKey(key Key) error {
 }
 
 func (t commandTab) Type(text string) error {
-	switch t.kind {
-	case "tmux":
-		if err := t.run("send-keys", "-t", t.id, "-l", text); err != nil {
-			return err
-		}
-	case "wezterm":
-		if err := t.run("send-text", "--pane-id", t.id, "--no-paste", text); err != nil {
-			return err
-		}
-	case "kitty":
-		if err := t.run("send-text", "--match", "id:"+t.id, kittyEscaped(text)); err != nil {
+	if args := t.typeArgs(text); args != nil {
+		if err := t.run(args...); err != nil {
 			return err
 		}
 	}
 	return t.sendKey(Enter)
+}
+
+// typeArgs are the terminal's arguments for typing text as it is. "--" ends
+// the options, so text starting with "-" is typed rather than read as one;
+// and tmux takes an argument ending in ";" for the end of its command unless
+// the ";" is escaped.
+func (t commandTab) typeArgs(text string) []string {
+	switch t.kind {
+	case "tmux":
+		if strings.HasSuffix(text, ";") {
+			text = strings.TrimSuffix(text, ";") + `\;`
+		}
+		return []string{"send-keys", "-t", t.id, "-l", "--", text}
+	case "wezterm":
+		return []string{"send-text", "--pane-id", t.id, "--no-paste", "--", text}
+	case "kitty":
+		return []string{"send-text", "--match", "id:" + t.id, "--", kittyEscaped(text)}
+	}
+	return nil
 }
 
 func (t commandTab) Focus() error {
