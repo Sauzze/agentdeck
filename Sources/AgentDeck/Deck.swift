@@ -24,7 +24,8 @@ final class Deck {
     private var streams: [ObjectIdentifier: EventStream] = [:]
     /// The key each session was given, so it keeps it.
     private var keyOf: [String: Int] = [:]
-    private var micPress: (sessionID: String, at: Date)?
+    /// The tab recording started in, and when. One Mac, one microphone.
+    private var micPress: (tty: String, at: Date)?
     private var checkingFront = false
     private var checkingTabs = false
     /// Ttys Terminal reported last time. Only these can be found closed:
@@ -141,6 +142,9 @@ final class Deck {
     /// Runs one of the phone's controls on a session. Keys bring its tab
     /// forward, since they need it focused; typed commands do not.
     func perform(_ action: String, on id: String, query: [String: String], done: @escaping (Response) -> Void) {
+        // Releasing the mic stops recording where it started, whatever is
+        // selected now — and even if that session has since gone.
+        if action == "mic" && query["phase"] != "down" { return releaseMic(done: done) }
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
 
@@ -151,7 +155,7 @@ final class Deck {
         case "reject", "esc": press(.escape, tty: tty, done: done)
         case "up": press(.up, tty: tty, done: done)
         case "down": press(.down, tty: tty, done: done)
-        case "mic": mic(session, pressed: query["phase"] == "down", done: done)
+        case "mic": pressMic(session, done: done)
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when Claude is done")) }
             onTerminal(done) { Terminal.type("/clear", tty: tty) }
@@ -169,19 +173,26 @@ final class Deck {
     /// Push to talk through Claude's own /voice, in tap mode: Space starts
     /// listening, Space again stops and sends. Hold mode cannot be used — it
     /// detects a held key by its key-repeat, and a posted key never repeats.
-    private func mic(_ session: Session, pressed: Bool, done: @escaping (Response) -> Void) {
-        if pressed {
-            micPress = (session.id, Date())
-            return press(.space, tty: session.tty, done: done)
-        }
-        // Only release a press made here, and not after Claude has stopped
-        // listening on its own: then the second Space would start it again.
-        defer { micPress = nil }
-        guard let press = micPress, press.sessionID == session.id,
-              Date().timeIntervalSince(press.at) < Deck.voiceLimit else {
+    ///
+    /// Every start is matched by exactly one stop. A second press while
+    /// recording, or a release with nothing recording, is ignored: an extra
+    /// Space would flip Claude's state and leave the two out of step.
+    private func pressMic(_ session: Session, done: @escaping (Response) -> Void) {
+        if let current = micPress, Date().timeIntervalSince(current.at) < Deck.voiceLimit {
             return done(.status(204))
         }
-        self.press(.space, tty: session.tty, done: done)
+        micPress = (session.tty, Date())
+        press(.space, tty: session.tty, done: done)
+    }
+
+    private func releaseMic(done: @escaping (Response) -> Void) {
+        defer { micPress = nil }
+        // After the limit Claude has stopped by itself, and a Space would
+        // start it again.
+        guard let started = micPress, Date().timeIntervalSince(started.at) < Deck.voiceLimit else {
+            return done(.status(204))
+        }
+        press(.space, tty: started.tty, done: done)
     }
 
     private func press(_ key: Terminal.Key, tty: String, done: @escaping (Response) -> Void) {

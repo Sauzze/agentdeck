@@ -278,8 +278,11 @@
 
   function act(el, phase) {
     const action = el.dataset.action;
-    if (!selected) return;
 
+    // The Mac stops recording in the tab where it started, so a release has
+    // to arrive even if the selection has gone in the meantime.
+    if (action === 'mic' && phase === 'up') return send('/act', { session: selected || '', action, phase });
+    if (!selected) return;
     if (action === 'mic') return send('/act', { session: selected, action, phase });
 
     // /clear throws the conversation away: first tap arms it, second sends.
@@ -549,7 +552,9 @@
 
   /**
    * Pressed look on touch, not on click: iOS fires click late and :active
-   * barely at all. `onUp` makes it a hold control — down and up both count.
+   * barely at all. `onUp` makes it a hold control — down and up both count,
+   * and the up must never go missing: iOS can take the touch away, or the
+   * page can be sent to the background, mid-hold.
    */
   function press(el, onDown, onUp) {
     el.addEventListener('pointerdown', (e) => {
@@ -562,8 +567,8 @@
       el.classList.remove('down');
       if (onUp) onUp();
     };
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointercancel', up);
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(type, up);
+    if (onUp) document.addEventListener('visibilitychange', () => { if (document.hidden) up(); });
   }
 
   /** Colours from the setup page, live: each one overrides its CSS variable. */
