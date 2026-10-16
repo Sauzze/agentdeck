@@ -323,7 +323,7 @@
   /** POST and say anything that is not a plain yes on the status line. */
   async function send(pathname, params) {
     const res = await post(pathname, params);
-    if (!res) return flash("Can't reach your Mac");
+    if (!res) return flash("Can't reach your computer");
     if (res.status === 401) return unpaired();
     if (res.status === 202) return flash('queued — goes in when Claude is done');
     if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
@@ -398,7 +398,7 @@
    *            options, a notch per step; tap to confirm the highlighted one.
    *   scroll   Everything else. A mouse's scroll wheel for the session's
    *            Terminal window: roll it to scroll, tap to jump back to the
-   *            bottom. Off until it's turned on in setup on the Mac.
+   *            bottom. Off until it's turned on in setup on the computer.
    *
    * Tapping the SCROLL/CHOICES legend flips it by hand.
    */
@@ -410,7 +410,7 @@
   let stickMode = 'scroll';
   let stickAuto = 'scroll';
   let stickOverride = null;
-  let scrollEnabled = false; // as set on the Mac
+  let scrollEnabled = false; // as set on the computer
 
   const stick = $('stick');
   let gesture = null; // { id, start, x0, y0, x, y, moved, acc, roll } while a finger is down
@@ -448,7 +448,7 @@
 
     if (!scrollEnabled) return;
     // Counted the way natural scrolling does, drawing down for earlier lines.
-    // The Mac turns it round if natural scrolling is off there.
+    // The Mac app turns it round if natural scrolling is off there.
     g.roll += dy;
     $('wheel').style.setProperty('--roll', `${g.roll}px`);
     g.acc += dy;
@@ -491,7 +491,7 @@
   }
 
   /**
-   * The wheel turns faster than the Mac can scroll a window, so notches
+   * The wheel turns faster than the computer can scroll a window, so notches
    * turned while a request is out are added up and go together in the next.
    */
   let unscrolled = 0;
@@ -618,14 +618,14 @@
     render();
   };
   stream.onerror = () => {
-    // Closed for good means the Mac answered, but not with the deck: it no
+    // Closed for good means the computer answered, but not with the deck: it no
     // longer knows this phone. Unreachable, the stream keeps retrying.
     if (stream.readyState === EventSource.CLOSED) return unpaired();
     $('status').classList.add('off');
-    $('status').textContent = "Can't reach your Mac. Is SauzzeDeck Pro running?";
+    $('status').textContent = "Can't reach your computer. Is SauzzeDeck Pro running?";
   };
 
-  /** Unpaired on the Mac: the pairing page takes over, without the old key. */
+  /** Unpaired on the computer: the pairing page takes over, without the old key. */
   function unpaired() {
     location.replace('/');
   }

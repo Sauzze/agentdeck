@@ -155,7 +155,9 @@ enum Hooks {
 
     private static func writePlugin() throws {
         let template = try String(contentsOf: Paths.bundledOpenCodePlugin, encoding: .utf8)
-        let plugin = template.replacingOccurrences(of: "{{SCRIPT}}", with: Paths.hookScript.path)
+        let command = try JSONSerialization.data(withJSONObject: [Paths.hookScript.path, Agent.opencode.rawValue],
+                                                 options: .withoutEscapingSlashes)
+        let plugin = template.replacingOccurrences(of: #"["{{COMMAND}}"]"#, with: String(decoding: command, as: UTF8.self))
         try FileManager.default.createDirectory(at: Paths.openCodePlugin.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try plugin.write(to: Paths.openCodePlugin, atomically: true, encoding: .utf8)
