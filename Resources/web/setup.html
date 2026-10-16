@@ -287,7 +287,6 @@
           <div class="field"><span>Width</span><div class="choices" id="width"></div></div>
           <label class="check" id="field-free"><input type="checkbox" id="when-free">Only when the agent isn't busy</label>
           <label class="check" id="field-confirm"><input type="checkbox" id="confirm">Tap twice to confirm</label>
-          <label class="check" id="field-cover"><input type="checkbox" id="cover">Glass safety cover: the first tap flips it open</label>
           <div class="field" id="field-agents"><span>Works with</span><div class="agents" id="agents"></div></div>
           <div class="tools"><button class="btn" id="move-back" aria-label="Move left">←</button><button class="btn" id="move-on" aria-label="Move right">→</button><button class="btn" id="remove">Remove</button></div>
         </div>
@@ -765,8 +764,6 @@
     $('field-text').hidden = kind !== 'text';
     $('field-key').hidden = kind !== 'key';
     for (const id of ['field-label', 'field-free', 'field-confirm', 'field-agents']) $(id).hidden = own;
-    $('field-cover').hidden = b.id !== 'max';
-    $('cover').checked = !!b.cover;
     fill($('text'), b.text || '');
     $('key').value = b.key || 'enter';
     fill($('label'), b.label || '');
@@ -798,7 +795,6 @@
   $('label').oninput = () => change(() => { chosenButton().label = $('label').value; });
   $('when-free').onchange = () => change(() => { chosenButton().whenFree = $('when-free').checked; });
   $('confirm').onchange = () => change(() => { chosenButton().confirm = $('confirm').checked; });
-  $('cover').onchange = () => change(() => { chosenButton().cover = $('cover').checked; });
   $('agents').onchange = () => change(() => {
     const ticked = [...$('agents').querySelectorAll('input:checked')].map((box) => box.value);
     chosenButton().agents = ticked.length === Object.keys(AGENTS).length ? [] : ticked;
