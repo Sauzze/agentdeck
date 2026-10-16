@@ -154,6 +154,31 @@
     box-shadow: 0 1px 0 var(--shadow), 0 0 18px color-mix(in srgb, var(--error) 45%, transparent); }
 
   .btn.armed { color: var(--error); border-color: var(--error); }
+
+  /* ☢ Max: a red dome on a plate of hazard stripes, under a glass cover if
+     the button has one. The cover is hinged at the top: the first tap flips
+     it up, the second presses the dome. */
+  .btn.max { background: repeating-linear-gradient(-45deg, #f2c200 0 7px, #1a1a1a 7px 14px); border-color: #f2c200; }
+  .btn.max .dome { height: 80%; aspect-ratio: 1; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 1px;
+    color: #fff; font: 800 9px/1 -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: .1em;
+    background: radial-gradient(circle at 35% 30%, #ff7a6b, #d4140b 55%, #7d0602);
+    box-shadow: 0 0 0 4px #141414, 0 4px 0 4px #0a0a0a, inset 0 -4px 8px rgba(0, 0, 0, .45), inset 0 3px 6px rgba(255, 255, 255, .35);
+    transition: transform .06s; }
+  .btn.max .dome svg { width: 18px; height: 18px; fill: #fff; stroke: none; }
+  .btn.max.down .dome { transform: translateY(3px); }
+  .btn.max .glass { position: absolute; inset: 4px; border-radius: 12px; transform-origin: 50% 0; pointer-events: none;
+    background: linear-gradient(135deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, .08) 38%, rgba(255, 255, 255, .03) 62%, rgba(255, 255, 255, .22));
+    border: 1px solid rgba(255, 255, 255, .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 3px 10px rgba(0, 0, 0, .35);
+    backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px);
+    transition: transform .3s cubic-bezier(.3, 1.3, .6, 1), opacity .3s; }
+  .btn.max.armed .glass { transform: perspective(260px) rotateX(-80deg); opacity: .55; }
+
+  /* Effort steps: the dial's five levels as a row to tap, the current one lit. */
+  .btn.efforts { display: flex; gap: 4px; padding: 4px; }
+  .btn.efforts .step { flex: 1; align-self: stretch; display: grid; place-items: center; border-radius: 11px;
+    font: 600 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); }
+  .btn.efforts .step.on { color: var(--ink); background: var(--cap-top); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .btn.efforts .step.down { background: color-mix(in srgb, var(--ink) 14%, var(--cap)); }
   /* Off screen, not display:none — a hidden switch gives no haptic. */
   #haptic { position: fixed; left: -100px; top: 0; opacity: 0; pointer-events: none; }
 
@@ -244,7 +269,11 @@
     esc: { name: 'Interrupt', word: 'esc' },
     send: { name: 'Send', word: '⏎ send' },
     clear: { name: 'Fresh conversation', word: '/clear' },
+    max: { name: 'Max effort' },
+    efforts: { name: 'Thinking effort' },
   };
+  /** The radiation trefoil on the Max button's dome. */
+  const TREFOIL = 'M17.25 21.09A10.5 10.5 0 0 1 6.75 21.09L10.35 14.86A3.3 3.3 0 0 0 13.65 14.86ZM1.50 12.00A10.5 10.5 0 0 1 6.75 2.91L10.35 9.14A3.3 3.3 0 0 0 8.70 12.00ZM17.25 2.91A10.5 10.5 0 0 1 22.50 12.00L15.30 12.00A3.3 3.3 0 0 0 13.65 9.14ZM14.2 12a2.2 2.2 0 1 1-4.4 0a2.2 2.2 0 1 1 4.4 0Z';
   /** The keys a button made in setup can press. */
   const KEY_NAMES = { enter: 'Return', escape: 'Esc', tab: 'Tab', 'shift-tab': 'Shift+Tab', up: '↑', down: '↓', 'ctrl-c': 'Ctrl+C' };
   const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -357,14 +386,29 @@
       el.dataset.button = b.id;
       if (b.agents && b.agents.length) el.dataset.agents = b.agents.join(' ');
     }
-    if (face && face.icon) {
+    if (b.id === 'efforts') {
+      // Its five steps are its controls; the button around them does nothing.
+      el.append(...LEVELS.map((level, i) => {
+        const step = document.createElement('span');
+        step.className = 'step';
+        step.dataset.level = level;
+        step.textContent = LEVEL_LABELS[i];
+        press(step, () => setEffort(level));
+        return step;
+      }));
+      return el;
+    }
+    if (b.id === 'max') {
+      el.innerHTML = `<span class="dome"><svg viewBox="0 0 24 24"><path d="${TREFOIL}"/></svg>MAX</span>`;
+      if (b.cover) el.insertAdjacentHTML('beforeend', '<span class="glass"></span>');
+    } else if (face && face.icon) {
       el.innerHTML = `<svg viewBox="0 0 24 24">${face.icon}</svg>`;
     } else {
       el.classList.add('text');
       el.innerHTML = '<span></span>';
       el.firstChild.textContent = face ? face.word : b.label || b.text || KEY_NAMES[b.key];
     }
-    if (b.id === 'clear' || b.confirm) el.dataset.confirm = '';
+    if (b.id === 'clear' || b.confirm || b.cover) el.dataset.confirm = '';
     const holds = b.id === 'mic';
     press(el, () => act(el, 'down'), holds ? () => act(el, 'up') : null);
     return el;
@@ -379,25 +423,40 @@
     if (!selected) return;
     if (action === 'mic') return send('/act', { session: selected, action, phase });
 
-    // /clear throws the conversation away, and a made button can ask twice
-    // too: the first tap arms it, the second sends.
+    // /clear throws the conversation away, a made button can ask twice too,
+    // and Max can sit under glass: the first tap arms it, the second sends.
     if ('confirm' in el.dataset) {
       if (armed !== el) return arm(el);
       disarm();
     }
 
-    if (action === 'button') send('/act', { session: selected, action, button: el.dataset.button });
-    else send('/act', { session: selected, action });
+    if (action === 'max') {
+      el.querySelector('.dome').animate({ filter: ['brightness(1.7) drop-shadow(0 0 14px #ff2a1a)', 'none'] }, { duration: 700, easing: 'ease-out' });
+      setEffort('max');
+    } else if (action === 'button') {
+      send('/act', { session: selected, action, button: el.dataset.button });
+    } else {
+      send('/act', { session: selected, action });
+    }
+  }
+
+  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it. */
+  function setEffort(level) {
+    if (!selected) return;
+    send('/act', { session: selected, action: 'effort', level });
   }
 
   let armed = null; // the button waiting for its second tap
   let armedTimer = null;
 
+  /** A glass cover flips open; any other button asks "sure?". */
   function arm(el) {
     disarm();
     armed = el;
-    el.dataset.word = el.firstChild.textContent;
-    el.firstChild.textContent = 'sure?';
+    if (!el.querySelector('.glass')) {
+      el.dataset.word = el.firstChild.textContent;
+      el.firstChild.textContent = 'sure?';
+    }
     el.classList.add('armed');
     armedTimer = setTimeout(disarm, 2500);
   }
@@ -405,7 +464,7 @@
   function disarm() {
     clearTimeout(armedTimer);
     if (!armed) return;
-    armed.firstChild.textContent = armed.dataset.word;
+    if (!armed.querySelector('.glass')) armed.firstChild.textContent = armed.dataset.word;
     armed.classList.remove('armed');
     armed = null;
   }
@@ -644,9 +703,11 @@
     $('dial').classList.toggle('off', !sel || !sel.dial);
     document.querySelectorAll('#buttons .btn').forEach((el) => {
       const fits = el.classList.contains('mic') ? sel && sel.mic
+        : el.classList.contains('max') || el.classList.contains('efforts') ? sel && sel.dial
         : !el.dataset.agents || (sel && el.dataset.agents.split(' ').includes(sel.agent));
       el.classList.toggle('off', !sel || !fits);
     });
+    document.querySelectorAll('.efforts .step').forEach((step) => step.classList.toggle('on', !!sel && step.dataset.level === sel.effort));
     // An override lasts until the session's own situation changes.
     const auto = asking ? 'choices' : 'scroll';
     if (auto !== stickAuto) { stickAuto = auto; stickOverride = null; }
