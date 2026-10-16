@@ -494,6 +494,12 @@ func (rt *router) profiles(w http.ResponseWriter, r *request) {
 	if query.Get("action") == "check" {
 		data, _ := io.ReadAll(r.Body)
 		profile, err := checkedProfile(data)
+		// No room is said up front, not after the warning.
+		d.mu.Lock()
+		if len(d.config.Profiles) >= mostProfiles {
+			err = errTooMany
+		}
+		d.mu.Unlock()
 		if err != nil {
 			writeStatus(w)(http.StatusBadRequest, err.Error())
 			return
@@ -561,14 +567,11 @@ func (rt *router) setupState() map[string]any {
 			"connected": d.isConnected(phone.ID),
 		}
 	}
-	// Every key a project can be pinned to: all nine with Auto, which grows to
-	// show a pinned key, or the fixed number of keys.
-	slots := mostKeys
-	if d.config.Layout.Keys != Auto {
-		slots = int(d.config.Layout.Keys)
-	}
-	pins := make([]any, slots)
-	for i, pin := range d.config.Pins[:slots] {
+	// Every key a project can be pinned to, even those the phone doesn't
+	// show: with Auto, a pin there adds keys up to it; with a fixed number,
+	// a pin left beyond them can still be undone.
+	pins := make([]any, mostKeys)
+	for i, pin := range d.config.Pins[:mostKeys] {
 		if pin != nil {
 			pins[i] = map[string]any{"folder": *pin, "name": lastPathComponent(*pin)}
 		}
@@ -594,9 +597,11 @@ func (rt *router) setupState() map[string]any {
 		"phones":   phones,
 		"logo":     d.config.Logo,
 		"pins":     pins,
-		"sessions": sessions,
-		"theme":    themeEditor(d.config),
-		"layout":   d.config.Layout,
+		// How many keys the phone shows now.
+		"phoneKeys": len(keys),
+		"sessions":  sessions,
+		"theme":     themeEditor(d.config),
+		"layout":    d.config.Layout,
 		// Saved looks, besides Default, the one the deck was last switched
 		// to, and whether it has changed since.
 		// A copy: the reply is written after the lock is let go.

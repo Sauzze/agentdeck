@@ -155,7 +155,8 @@ struct Button: Codable, Equatable {
         width = try c.decodeIfPresent(Int.self, forKey: .width) ?? 1
         label = try c.decodeIfPresent(String.self, forKey: .label)
         text = try c.decodeIfPresent(String.self, forKey: .text)
-        key = try c.decodeIfPresent(String.self, forKey: .key)
+        // An empty key is none at all: the button types its text.
+        key = try c.decodeIfPresent(String.self, forKey: .key).flatMap { $0.isEmpty ? nil : $0 }
         whenFree = try c.decodeIfPresent(Bool.self, forKey: .whenFree)
         confirm = try c.decodeIfPresent(Bool.self, forKey: .confirm)
         agents = try c.decodeIfPresent([String].self, forKey: .agents)

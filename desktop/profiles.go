@@ -27,6 +27,7 @@ var (
 	errProfileName = errors.New("Give the profile a name of its own, up to 24 characters.")
 	errNoProfile   = errors.New("There's no profile by that name.")
 	errTooMany     = errors.New("That's the most profiles there can be. Delete one first.")
+	errNotAProfile = errors.New("That isn't a profile this deck can add.")
 )
 
 // profileName is a name a profile may have: one line, not empty, and not
@@ -128,22 +129,26 @@ func (c *Config) DeleteProfile(name string) {
 // kept.
 func checkedProfile(data []byte) (Profile, error) {
 	var file struct {
-		Name    string          `json:"name"`
+		Name    any             `json:"name"`
 		Layout  json.RawMessage `json:"layout"`
-		Colours map[string]any  `json:"colours"`
+		Colours any             `json:"colours"`
 	}
-	if json.Unmarshal(data, &file) != nil || len(file.Layout) == 0 {
-		return Profile{}, errors.New("That isn't a profile this deck can add.")
+	// Only the layout has to be right, as on the Mac: a name or colours that
+	// aren't are left out.
+	if json.Unmarshal(data, &file) != nil || len(file.Layout) == 0 || file.Layout[0] != '{' {
+		return Profile{}, errNotAProfile
 	}
 	layout, err := parseLayout(file.Layout)
 	if err != nil {
-		return Profile{}, err
+		return Profile{}, errNotAProfile
 	}
-	name, err := profileName(file.Name)
+	text, _ := file.Name.(string)
+	name, err := profileName(text)
 	if err != nil {
 		name = "Imported"
 	}
-	return Profile{Name: name, Layout: layout, Colours: customisations(file.Colours)}, nil
+	colours, _ := file.Colours.(map[string]any)
+	return Profile{Name: name, Layout: layout, Colours: customisations(colours)}, nil
 }
 
 // ImportProfile adds a profile from a file, under a name of its own.

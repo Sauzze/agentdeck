@@ -118,6 +118,8 @@ final class DeckRouter: Router {
         // What a file's profile would be, without adding it.
         case ("POST", "/setup/profiles") where request.query["action"] == "check":
             do {
+                // No room is said up front, not after the warning.
+                guard config.profiles.count < Profile.most else { throw ProfileError.tooMany }
                 respond(.json(try Config.checkedProfile(request.body).jsonObject))
             } catch let error as ProfileError {
                 respond(.status(400, error.message))
@@ -229,11 +231,6 @@ final class DeckRouter: Router {
         }
     }
 
-    private var pinSlots: Int {
-        if case .fixed(let count) = Config.shared.layout.keys { return count }
-        return KeyCount.most
-    }
-
     private func keyIndex(_ request: Request) -> Int? {
         guard let index = Int(request.query["key"] ?? ""), Config.shared.pins.indices.contains(index) else { return nil }
         return index
@@ -271,12 +268,15 @@ final class DeckRouter: Router {
                 ]
             },
             "logo": Config.shared.logo.rawValue,
-            // Every key a project can be pinned to: all nine with Auto, which
-            // grows to show a pinned key, or the fixed number of keys.
-            "pins": Config.shared.pins.prefix(pinSlots).map { pin -> Any in
+            // Every key a project can be pinned to, even those the phone
+            // doesn't show: with Auto, a pin there adds keys up to it; with a
+            // fixed number, a pin left beyond them can still be undone.
+            "pins": Config.shared.pins.prefix(KeyCount.most).map { pin -> Any in
                 guard let pin else { return NSNull() }
                 return ["folder": pin, "name": (pin as NSString).lastPathComponent]
             },
+            // How many keys the phone shows now.
+            "phoneKeys": keys.count,
             "sessions": deck.sessions.all.map { session -> [String: Any] in
                 [
                     "id": session.id, "folder": session.folder, "name": session.name, "agentName": session.agent.name,

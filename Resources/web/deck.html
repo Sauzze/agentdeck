@@ -433,14 +433,20 @@
     return el;
   }
 
+  let listening = Promise.resolve(); // the mic's press and release, in order
   function act(el, phase) {
     const action = el.dataset.action;
 
     // The Mac stops recording in the tab where it started, so a release has
-    // to arrive even if the selection has gone in the meantime.
-    if (action === 'mic' && phase === 'up') return send('/act', { session: selected || '', action, phase });
+    // to arrive even if the selection has gone in the meantime. It goes after
+    // its press: one that overtook it would stop nothing, and the press would
+    // then start a recording nothing stops.
+    if (action === 'mic' && (phase === 'up' || selected)) {
+      const params = { session: selected || '', action, phase };
+      listening = listening.then(() => send('/act', params));
+      return listening;
+    }
     if (!selected) return;
-    if (action === 'mic') return send('/act', { session: selected, action, phase });
 
     // /clear throws the conversation away, and a made button can ask twice
     // too: the first tap arms it, the second sends.

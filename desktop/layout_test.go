@@ -140,15 +140,19 @@ func TestAutoDoesntSwapKeysWhenSessionsOutnumberThem(t *testing.T) {
 	}
 }
 
-func TestTheSetupPageOffersEveryKeyToPinTo(t *testing.T) {
+func TestTheSetupPageKnowsWhichKeysAreOnThePhone(t *testing.T) {
 	d := newTestDeck(t)
 	running(d, 1)
-	if pins := (&router{deck: d}).setupState()["pins"].([]any); len(pins) != mostKeys {
-		t.Fatalf("with Auto and one session, %d keys to pin to, want all %d", len(pins), mostKeys)
-	}
+	d.config.Pin("/work/pinned", 7)
 	d.config.Layout.Keys = 6
-	if pins := (&router{deck: d}).setupState()["pins"].([]any); len(pins) != 6 {
-		t.Fatalf("with six keys, %d to pin to, want 6", len(pins))
+	state := (&router{deck: d}).setupState()
+	// Every key, so a pin beyond the six can still be undone.
+	if pins := state["pins"].([]any); len(pins) != mostKeys || pins[7] == nil || state["phoneKeys"] != 6 {
+		t.Fatalf("with six keys, %d to pin to and %v on the phone, want all %d and 6", len(pins), state["phoneKeys"], mostKeys)
+	}
+	d.config.Layout.Keys = Auto
+	if keys := (&router{deck: d}).setupState()["phoneKeys"]; keys != 8 {
+		t.Fatalf("with Auto and a pin on key 8, %v keys on the phone, want 8", keys)
 	}
 }
 
@@ -194,6 +198,32 @@ func TestAProfileFileIsShownAsItWouldBeKept(t *testing.T) {
 	}
 	if len(d.config.Profiles) != 0 {
 		t.Fatal("checking a file added it")
+	}
+}
+
+// A profile file reads as the Mac app reads it: only its layout has to be right.
+func TestAProfileFileReadsAsOnTheMac(t *testing.T) {
+	profile, err := checkedProfile([]byte(`{"name": 5, "colours": "red", "layout": {"rows": [{"buttons": [{"id": "custom-a", "key": "", "text": "/compact"}]}]}}`))
+	if err != nil || profile.Name != "Imported" || len(profile.Colours) != 0 {
+		t.Fatalf("a name and colours of the wrong kind gave %+v, %v; want them left out", profile, err)
+	}
+	if rows := profile.Layout.Rows; len(rows) != 1 || rows[0].Buttons[0].Key != "" || rows[0].Buttons[0].Text != "/compact" {
+		t.Fatalf("an empty key gave %+v, want a button typing /compact", rows)
+	}
+	for _, file := range []string{`{"layout": null}`, `{"layout": []}`, `{"layout": {"rows": 5}}`} {
+		if _, err := checkedProfile([]byte(file)); err == nil {
+			t.Errorf("%s was taken for a profile", file)
+		}
+	}
+}
+
+func TestAProfileIsntOfferedWithNoRoomForIt(t *testing.T) {
+	d := newTestDeck(t)
+	d.config.Profiles = make([]Profile, mostProfiles)
+	checked := serve(t, d, call{method: "POST", target: "/setup/profiles?action=check", host: "localhost:7710", from: thisComputer,
+		headers: map[string]string{setupHeader: "1"}, body: `{"name": "Shared", "layout": {}}`})
+	if checked.Code != http.StatusBadRequest || !strings.Contains(checked.Body.String(), "most profiles") {
+		t.Fatalf("checking with %d profiles saved gave %d %s, want no room", mostProfiles, checked.Code, checked.Body)
 	}
 }
 
