@@ -9,9 +9,10 @@
 A control pad on your phone for the AI coding agents in your terminal: Claude
 Code, Codex, Gemini CLI, OpenCode and Grok.
 
-Six keys light up to show what each of your agent sessions is doing. You can
-approve a permission request from across the room, interrupt an agent, turn a
-dial to change how hard Claude thinks, or hold a button and talk to it. SauzzeDeck Pro runs in
+A key lights up for each of your agent sessions to show what it's doing. You
+can approve a permission request from across the room, interrupt an agent, turn
+a dial to change how hard Claude thinks, or hold a button and talk to it. Lay
+the deck out your way, with buttons of your own. SauzzeDeck Pro runs in
 your Mac's menu bar, or in the tray on [Windows and Linux](#windows-and-linux-preview).
 Your phone connects to it over your Wi-Fi, so there's nothing to install from
 an app store.
@@ -28,12 +29,13 @@ SauzzeDeck Pro was called AgentDeck up to version 1.0.1.
 
 | Control | What it does |
 |---|---|
-| **6 session keys** | One per agent session. The colour shows its state, and the line underneath its agent, or Claude Code's thinking effort. Tap a key to select that session and bring its Terminal window to the front. |
+| **Session keys** | One per agent session, up to nine, sharing the same space: one fills it, four make a 2×2. The colour shows its state, and the line underneath its agent, or Claude Code's thinking effort. Tap a key to select that session and bring its Terminal window to the front. |
 | **Dial** | Claude Code's thinking effort: low, medium, high, extra high, max. If Claude is mid-task, the change waits until it finishes. |
 | **Stick** | When the agent asks you something, slide up or down to choose an answer and tap to confirm. The rest of the time it's a scroll wheel for that session's Terminal window: roll it to scroll, tap to jump back to the bottom. Scrolling is off until you turn on **Let the stick scroll Terminal** on the setup page. Tap the stick's SCROLL / CHOICES label to switch by hand. |
 | **✓ and ✕** | Accept or reject a permission request. |
 | **🎙 (hold)** | Talk to Claude Code. Release, and Claude sends what you said once it's three words or more. |
 | **esc · send · /clear** | Interrupt the agent, press Return, or start a fresh conversation. `/clear` asks you to tap twice, and waits until the agent isn't busy. |
+| **☢ Max** and **effort steps** | Optional, from [Layout](#make-it-yours): one press sends Claude straight to max effort, or tap a level from low to max. |
 
 What the key colours mean:
 
@@ -45,7 +47,8 @@ What the key colours mean:
 | 🟢 Green | Done, and you haven't looked yet |
 | 🔴 Red | Stopped on an error |
 
-Each session keeps its key until it ends. You can pin projects to specific keys and change every colour:
+Each session keeps its key until it ends. You can pin projects to specific
+keys, lay the deck out your way and change every colour:
 
 <p align="center">
   <img src="docs/themes.png" alt="The deck in five colour schemes: Default, Midnight, Moonlight, Light and High contrast" width="100%">
@@ -178,9 +181,26 @@ The setup page also has:
 - **Logo.** The Sauzze logo or the original six keys, in the menu bar, on the
   setup page and on your phone's Home Screen. A phone picks up a new logo the
   next time you add the deck to its Home Screen.
+- **Layout.** How many keys (Auto, one per running session, or always 3, 6
+  or 9), whether the dial and stick show, and up to four rows of buttons, tall
+  or short, each button one to three widths wide. Use the deck's own buttons,
+  the ☢ Max button or the effort steps, or make your own: a button that types
+  a command, such as `/compact`, or presses a key, such as Shift+Tab to switch
+  Claude Code's mode. It can wait until the agent isn't busy, ask for a second
+  tap, or be for some agents only. A live preview of your phone sits beside
+  the editor.
 - **Colours.** Pick any colour for the background, keys, text and each state,
   or start from a preset (Default, Midnight, High contrast, Light). Your
   phone updates as you pick.
+- **Profiles.** Save a layout and its colours under a name, and switch between
+  them in a click: one for the couch, one for the desk. Default is always the
+  standard deck. Export a profile to back it up or share it; before an
+  imported profile is added, the setup page lists everything its buttons
+  would type or press.
+
+<p align="center">
+  <img src="docs/layout.png" alt="Profiles and Layout on the setup page: the Couch profile, Auto keys, buttons ✓, ✕ and ☢ Max over esc, send and a /compact button, beside a live preview of the phone" width="720">
+</p>
 
 Open the setup page any time from the menu bar (**Open Setup…**), or by opening
 SauzzeDeck Pro again from Applications.
@@ -208,6 +228,9 @@ hears it.
   only that phone has. The key is never typed: pairing hands it over. Your
   computer keeps only a fingerprint of each key (a SHA-256 hash), so you can revoke one
   phone without touching the others.
+- **Buttons you make type only what you set up.** A phone names a button by
+  its id; the command it types, or the key it presses, comes from your
+  computer. A paired phone can't send text of its own.
 - **Pairing codes are short-lived.** A code exists only after you ask for one.
   It works once and expires after five minutes. Five wrong tries from one
   device lock that device out until you get a new code, and twenty wrong tries
