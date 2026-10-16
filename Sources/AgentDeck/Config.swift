@@ -1,7 +1,8 @@
 import Foundation
 
-/// What you set on the setup page: which project is pinned to which key, and
-/// the deck's colours. Saved as JSON in Application Support.
+/// What you set on the setup page: which project is pinned to which key, the
+/// deck's colours, its logo and whether the stick scrolls. Saved as JSON in
+/// Application Support.
 final class Config: Codable {
     static let keyCount = 6
     static let shared = Config.load()
@@ -10,9 +11,13 @@ final class Config: Codable {
     var pins: [String?] = Array(repeating: nil, count: Config.keyCount)
     /// Only the colours that differ from the default theme.
     var colours: [String: String] = [:]
+    var logo = Logo.sauzze
+    /// Whether the stick scrolls Terminal. Off until you turn it on, so a
+    /// newly paired phone can do no more than the deck's buttons do.
+    var scrollEnabled = false
     var hasCompletedSetup = false
 
-    private enum CodingKeys: String, CodingKey { case pins, colours, hasCompletedSetup }
+    private enum CodingKeys: String, CodingKey { case pins, colours, logo, scrollEnabled, hasCompletedSetup }
 
     init() {}
 
@@ -21,6 +26,8 @@ final class Config: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         pins = try c.decodeIfPresent([String?].self, forKey: .pins) ?? pins
         colours = try c.decodeIfPresent([String: String].self, forKey: .colours) ?? colours
+        logo = (try? c.decodeIfPresent(Logo.self, forKey: .logo)) ?? logo
+        scrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .scrollEnabled) ?? false
         hasCompletedSetup = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
     }
 
@@ -51,4 +58,12 @@ final class Config: Codable {
         pins[index] = nil
         save()
     }
+}
+
+/// The deck's logo: the Sauzze mark, or the six keys it started out with.
+/// It shows on the phone's Home Screen, on the setup page and in the menu bar.
+enum Logo: String, Codable, CaseIterable {
+    case sauzze, keys
+
+    var icon: URL { Paths.web.appendingPathComponent("icon-\(rawValue).png") }
 }

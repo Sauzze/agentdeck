@@ -2,7 +2,7 @@ import Foundation
 
 /// Where AgentDeck reads and writes. Its own state lives in
 /// ~/Library/Application Support/AgentDeck, so the app can be moved or
-/// replaced without losing the phone's pairing or the deck's layout.
+/// replaced without losing the paired phones or the deck's layout.
 enum Paths {
     static let support: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -11,9 +11,13 @@ enum Paths {
         return dir
     }()
 
-    static let token = support.appendingPathComponent("token")
+    static let phones = support.appendingPathComponent("phones.json")
     static let config = support.appendingPathComponent("config.json")
     static let hookScript = support.appendingPathComponent("report.sh")
+    /// The hook's key, as the header curl sends: see `Access`.
+    static let hookHeader = support.appendingPathComponent("hook-header")
+    /// 1.0's single key, shared by the phone and the hook. Deleted at launch.
+    static let legacyToken = support.appendingPathComponent("token")
 
     static let home = FileManager.default.homeDirectoryForCurrentUser
     static let claudeSettings = home.appendingPathComponent(".claude/settings.json")

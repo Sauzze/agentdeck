@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="/icon.png">
-<title>AgentDeck Setup</title>
+<title>SauzzeDeck Pro Setup</title>
 <style>
   :root {
     --body: #0e0e0e; --cap: #1f1f1f; --cap-top: #262626; --edge: #2c2c2c;
@@ -15,11 +15,17 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--body); color: var(--ink);
     font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+  /* minmax(0, …) lets a column narrow past its longest line, such as a deep
+     project path, so the page follows the window down to phone width. */
   main { max-width: 1000px; margin: 0 auto; padding: 36px 24px 64px; display: grid; gap: 32px 28px;
-    grid-template-columns: 1fr 320px;
-    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "colours colours"; }
+    grid-template-columns: minmax(0, 1fr) 320px;
+    /* The phone panel runs beside two rows; the keys' row takes up whatever
+       height it has to spare, rather than a gap opening above the keys. */
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "logo logo" "colours colours"; }
   @media (max-width: 840px) {
-    main { grid-template-columns: 1fr; grid-template-areas: "head" "start" "phone" "keys" "sessions" "colours"; }
+    main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
+      grid-template-areas: "head" "start" "phone" "keys" "sessions" "logo" "colours"; }
   }
   header { grid-area: head; display: flex; gap: 16px; align-items: center; }
   header img { width: 52px; height: 52px; border-radius: 12px; }
@@ -65,11 +71,18 @@
   .or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--edge); }
   .qr { display: block; width: 180px; height: 180px; margin: 0 auto; background: #fff; padding: 10px; border-radius: 10px; image-rendering: pixelated; }
   .qr-note { text-align: center; color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .paired { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--edge); }
+  .device { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+  .device .what { flex: 1; min-width: 0; }
+  .device .name { font-weight: 600; }
+  .device .when { font-size: 12px; color: var(--dim); }
+  .phone .device .btn { width: auto; padding: 4px 10px; font-size: 13px; }
+  .none { color: var(--dim); font-size: 13px; margin-bottom: 12px; }
 
   /* Keys */
   .keys { grid-area: keys; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .slot { background: var(--cap); border: 1px solid var(--edge); border-radius: 14px; min-height: 108px;
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .slot { background: var(--cap); border: 1px solid var(--edge); border-radius: 14px; min-height: 108px; min-width: 0;
     padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
   .slot.over { border-color: var(--ink); background: var(--cap-top); }
   .slot.armed { cursor: copy; border-style: dashed; border-color: var(--dim); }
@@ -93,6 +106,14 @@
   .row .where { font-size: 12px; color: var(--dim); white-space: nowrap; }
   .empty { color: var(--dim); padding: 16px; border: 1px dashed var(--edge); border-radius: 10px; }
 
+  /* Logo */
+  .logo { grid-area: logo; }
+  .logos { display: flex; flex-wrap: wrap; gap: 12px; }
+  .logos button { display: flex; align-items: center; gap: 12px; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--edge); border-radius: 12px; padding: 10px 16px 10px 10px; }
+  .logos button.on { border-color: var(--ink); }
+  .logos img { width: 44px; height: 44px; border-radius: 10px; }
+
   /* Colours */
   .colours { grid-area: colours; }
   .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -107,14 +128,20 @@
   .swatch input[type=text] { width: 84px; background: var(--cap); color: var(--ink); border: 1px solid var(--edge);
     border-radius: 6px; padding: 4px 8px; font: 12px ui-monospace, "SF Mono", Menlo, monospace; }
   .swatch input[type=text].bad { border-color: var(--error); }
+
+  /* Phone width: last, so it overrides the rules above. */
+  @media (max-width: 480px) {
+    main { padding: 24px 16px 48px; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <img src="/icon.png" alt="">
+    <img id="header-logo" alt="">
     <div>
-      <h1>AgentDeck</h1>
+      <h1>SauzzeDeck Pro</h1>
       <p>A control pad for Claude Code, on your phone.</p>
     </div>
   </header>
@@ -126,7 +153,7 @@
         <div class="mark">✓</div>
         <div class="text">
           <div class="title">Connect Claude Code</div>
-          <div class="detail" data-pending="Lets your Claude sessions tell AgentDeck what they're doing." data-done="Connected. Sessions that were already open need a restart."></div>
+          <div class="detail" data-pending="Lets your Claude sessions tell SauzzeDeck Pro what they're doing." data-done="Connected. Sessions that were already open need a restart."></div>
         </div>
         <button class="btn primary" data-pending-only id="hooks">Connect</button>
         <button class="btn" data-done-only id="unhook">Disconnect</button>
@@ -134,16 +161,24 @@
       <div class="step" id="step-accessibility">
         <div class="mark">✓</div>
         <div class="text">
-          <div class="title">Allow AgentDeck to use your keyboard and mouse</div>
-          <div class="detail" data-pending="Needed for the buttons, the mic and the cursor. Turn AgentDeck on in the list that opens. After an update, turn it on again." data-done="Allowed."></div>
+          <div class="title">Allow SauzzeDeck Pro to use your keyboard</div>
+          <div class="detail" data-pending="Needed for the buttons, the mic and scrolling. Turn SauzzeDeck Pro on in the list that opens. After an update, turn it on again." data-done="Allowed."></div>
         </div>
         <button class="btn primary" data-pending-only id="accessibility">Open Settings</button>
+      </div>
+      <div class="step" id="step-scroll">
+        <div class="mark">✓</div>
+        <div class="text">
+          <div class="title">Let the stick scroll Terminal</div>
+          <div class="detail" data-pending="Optional. Turns your phone's stick into a scroll wheel for the selected session's Terminal window." data-done="The stick scrolls the selected session's Terminal window."></div>
+        </div>
+        <button class="switch" id="scroll" aria-label="Let the stick scroll Terminal"></button>
       </div>
       <div class="step" id="step-login">
         <div class="mark">✓</div>
         <div class="text">
           <div class="title">Open at login</div>
-          <div class="detail" data-pending="Keep the deck ready whenever your Mac is on." data-done="AgentDeck starts when you log in."></div>
+          <div class="detail" data-pending="Keep the deck ready whenever your Mac is on." data-done="SauzzeDeck Pro starts when you log in."></div>
         </div>
         <button class="switch" id="login" aria-label="Open at login"></button>
       </div>
@@ -160,9 +195,16 @@
     <div class="code" id="code">— — —</div>
     <div class="expires" id="expires">Get a code when your phone is ready.</div>
     <button class="btn" id="new-code">Get a Code</button>
-    <div class="or">or scan</div>
-    <img class="qr" id="qr" alt="QR code linking your phone to AgentDeck">
-    <div class="qr-note">Opens the deck straight away. Treat it like a password.</div>
+    <div id="scan" hidden>
+      <div class="or">or scan</div>
+      <img class="qr" id="qr" alt="QR code that pairs your phone with this code">
+      <div class="qr-note">Pairs with the code above, so it works once.</div>
+    </div>
+    <div class="paired">
+      <h2>Paired phones</h2>
+      <div id="phones"></div>
+      <button class="btn" id="unpair-all">Unpair All Phones</button>
+    </div>
   </aside>
 
   <section class="keys">
@@ -174,6 +216,15 @@
   <section class="sessions">
     <h2>Running sessions</h2>
     <div class="list" id="list"></div>
+  </section>
+
+  <section class="logo">
+    <h2>Logo</h2>
+    <div class="logos" id="logos">
+      <button data-logo="sauzze"><img src="/setup/logo/sauzze" alt="">Sauzze</button>
+      <button data-logo="keys"><img src="/setup/logo/keys" alt="">Six keys</button>
+    </div>
+    <p class="hint">Shown in the menu bar, on this page, and on your phone's Home Screen the next time you add the deck to it.</p>
   </section>
 
   <section class="colours">
@@ -221,6 +272,7 @@
   function render() {
     renderChecklist();
     renderPhone();
+    renderLogo();
     renderKeys();
     renderSessions();
     renderTheme();
@@ -232,7 +284,9 @@
     const c = state.checklist;
     mark('step-hooks', c.hooks);
     mark('step-accessibility', c.accessibility);
+    mark('step-scroll', c.scroll);
     mark('step-login', c.openAtLogin);
+    $('scroll').classList.toggle('on', c.scroll);
     $('login').classList.toggle('on', c.openAtLogin);
   }
 
@@ -251,6 +305,7 @@
   };
   $('unhook').onclick = () => post('/setup/hooks?remove=1');
   $('accessibility').onclick = () => post('/setup/accessibility');
+  $('scroll').onclick = () => post(`/setup/scroll?enabled=${state.checklist.scroll ? 0 : 1}`);
   $('login').onclick = () => post(`/setup/login?enabled=${state.checklist.openAtLogin ? 0 : 1}`);
 
   /* ----------------------------------------------------------------- phone */
@@ -258,9 +313,16 @@
   let countdown = null;
 
   function renderPhone() {
-    const p = state.phone;
+    const p = state.pairing;
     $('address').textContent = p.address.replace(/^http:\/\//, '');
-    if (!$('qr').src) $('qr').src = '/setup/qr.png';
+    renderPhones();
+
+    // The QR code holds the pairing code, so it exists only while the code
+    // does. The code in the image's address makes a new code load afresh.
+    $('scan').hidden = !p.code;
+    if (p.code && $('qr').getAttribute('src') !== `/setup/qr.png?code=${p.code}`) {
+      $('qr').src = `/setup/qr.png?code=${p.code}`;
+    }
 
     clearInterval(countdown);
     if (!p.code) {
@@ -282,6 +344,53 @@
   }
 
   $('new-code').onclick = () => post('/setup/pair');
+
+  function renderPhones() {
+    $('unpair-all').hidden = !state.phones.length;
+    if (!state.phones.length) {
+      $('phones').innerHTML = '<div class="none">No phones paired yet.</div>';
+      return;
+    }
+    $('phones').replaceChildren(...state.phones.map((phone) => {
+      const el = document.createElement('div');
+      el.className = 'device';
+      el.innerHTML = '<div class="what"><div class="name"></div><div class="when"></div></div><button class="btn">Revoke</button>';
+      el.querySelector('.name').textContent = phone.name;
+      el.querySelector('.when').textContent = `Paired ${day(phone.pairedAt)} · `
+        + (phone.connected ? 'connected now' : `last used ${ago(phone.lastSeen)}`);
+      el.querySelector('button').onclick = () => post(`/setup/unpair?phone=${encodeURIComponent(phone.id)}`);
+      return el;
+    }));
+  }
+
+  $('unpair-all').onclick = () => {
+    if (confirm('Unpair all phones? They stop working straight away, and each needs a new code to pair again.')) {
+      post('/setup/unpair?all=1');
+    }
+  };
+
+  function day(ms) {
+    return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  function ago(ms) {
+    const minutes = Math.round((Date.now() - ms) / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    return hours < 24 ? `${hours} h ago` : `on ${day(ms)}`;
+  }
+
+  /* ------------------------------------------------------------------ logo */
+
+  function renderLogo() {
+    $('header-logo').src = `/setup/logo/${state.logo}`;
+    document.querySelectorAll('[data-logo]').forEach((b) => b.classList.toggle('on', b.dataset.logo === state.logo));
+  }
+
+  document.querySelectorAll('[data-logo]').forEach((b) => {
+    b.onclick = () => post(`/setup/logo?logo=${b.dataset.logo}`);
+  });
 
   /* ------------------------------------------------------------------ keys */
 
@@ -429,7 +538,7 @@
 
   load().then(() => {
     // Arriving from "Pair a Phone…" in the menu: have a code ready.
-    if (location.hash === '#pair' && !state.phone.code) post('/setup/pair');
+    if (location.hash === '#pair' && !state.pairing.code) post('/setup/pair');
   });
   setInterval(() => { if (!document.querySelector('.over')) load(); }, 1500);
 </script>

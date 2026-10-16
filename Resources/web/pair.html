@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="apple-mobile-web-app-title" content="AgentDeck">
+<meta name="apple-mobile-web-app-title" content="SauzzeDeck Pro">
 <meta name="theme-color" content="#0e0e0e">
 <link rel="apple-touch-icon" href="/icon.png">
 <link rel="icon" href="/icon.png">
-<title>Pair AgentDeck</title>
+<title>Pair SauzzeDeck Pro</title>
 <style>
   :root { --body: #0e0e0e; --cap: #1f1f1f; --edge: #2c2c2c; --ink: #ececec; --dim: #8a8a8a; --accent: #3b82f6; --error: #ef4444; }
   * { box-sizing: border-box; }
@@ -31,7 +31,7 @@
 <main>
   <img src="/icon.png" alt="">
   <h1>Pair with your Mac</h1>
-  <p>On your Mac, click the AgentDeck icon in the menu bar, choose <b>Pair a Phone…</b>, and enter the code it shows.</p>
+  <p>On your Mac, click the SauzzeDeck Pro icon in the menu bar, choose <b>Pair a Phone…</b>, and enter the code it shows, or scan its QR code with your camera.</p>
   <form id="form">
     <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Pairing code">
     <button id="go" disabled>Pair</button>
@@ -50,23 +50,36 @@
     error.textContent = '';
   });
 
-  document.getElementById('form').addEventListener('submit', async (e) => {
+  document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
+    pair();
+  });
+
+  async function pair() {
     go.disabled = true;
     try {
       const res = await fetch('/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code.value }) });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error);
-      // The token goes in the deck's URL, so Add to Home Screen keeps it.
-      location.replace(`/?t=${encodeURIComponent(body.token)}`);
+      // The key goes in the deck's URL, so Add to Home Screen keeps it.
+      location.replace(`/?t=${encodeURIComponent(body.key)}`);
     } catch (err) {
       error.textContent = err.message || 'Could not reach your Mac. Are you on the same Wi-Fi?';
       code.value = '';
       code.focus();
     }
-  });
+  }
 
-  code.focus();
+  // Opened from the QR code: the code is in the address, so pair straight
+  // away. It comes out of the address first, since it only works once.
+  const scanned = new URLSearchParams(location.search).get('pair');
+  if (scanned) {
+    history.replaceState(null, '', '/');
+    code.value = scanned.replace(/\D/g, '').slice(0, 6);
+    pair();
+  } else {
+    code.focus();
+  }
 </script>
 </body>
 </html>
