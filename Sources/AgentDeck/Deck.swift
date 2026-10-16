@@ -14,6 +14,9 @@ final class Deck {
     private static let pingInterval: TimeInterval = 20
     /// Claude stops listening by itself after two minutes.
     private static let voiceLimit: TimeInterval = 120
+    /// Without Accessibility, posted keys vanish without a trace. The phone
+    /// says so instead, since every update turns the permission off.
+    private static let noKeyboard = "Keyboard access is off. Turn it on in setup, on your Mac."
 
     let access = Access()
     let sessions = Sessions()
@@ -179,6 +182,7 @@ final class Deck {
             guard Config.shared.scrollEnabled else {
                 return done(.status(403, "Scrolling is off. Turn it on in setup, on your Mac."))
             }
+            guard Permissions.hasAccessibility else { return done(.status(403, Deck.noKeyboard)) }
             if query["to"] == "bottom" { return inTab(tty, done: done) { Terminal.scrollToBottom(tty: tty) } }
             guard let lines = Int(query["lines"] ?? "") else { return done(.status(400, "Unknown amount")) }
             // The phone counts the way natural scrolling does. With it turned
@@ -230,6 +234,7 @@ final class Deck {
     }
 
     private func press(_ key: Terminal.Key, tty: String, done: @escaping (Response) -> Void) {
+        guard Permissions.hasAccessibility else { return done(.status(403, Deck.noKeyboard)) }
         inTab(tty, done: done) { Terminal.press(key, tty: tty) }
     }
 
