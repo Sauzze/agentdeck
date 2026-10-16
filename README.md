@@ -10,7 +10,8 @@
 >
 > Check the address after pasting it: transfers can't be reversed.
 
-A control pad for [Claude Code](https://claude.com/claude-code), on your phone.
+A control pad on your phone for the AI coding agents in your terminal. It works
+with [Claude Code](https://claude.com/claude-code).
 
 Six keys light up to show what each of your Claude sessions is doing. You can
 approve a permission request from across the room, turn a dial to change how
