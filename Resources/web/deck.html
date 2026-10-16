@@ -434,6 +434,9 @@
   }
 
   let listening = Promise.resolve(); // the mic's press and release, in order
+  // Long enough for a busy computer, short enough that a request lost on the
+  // way doesn't hold up the presses after it.
+  const MIC_WAIT = 5000;
   function act(el, phase) {
     const action = el.dataset.action;
 
@@ -443,7 +446,9 @@
     // then start a recording nothing stops.
     if (action === 'mic' && (phase === 'up' || selected)) {
       const params = { session: selected || '', action, phase };
-      listening = listening.then(() => send('/act', params));
+      listening = listening
+        .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
+        .catch(() => {}); // one that fails mustn't stop those after it
       return listening;
     }
     if (!selected) return;
@@ -492,9 +497,9 @@
   }
 
   /** POST and say anything that is not a plain yes on the status line. */
-  async function send(pathname, params) {
+  async function send(pathname, params, signal) {
     if (preview) return flash(rehearse(params));
-    const res = await post(pathname, params);
+    const res = await post(pathname, params, signal);
     if (!res) return flash("Can't reach your computer");
     if (res.status === 401) return unpaired();
     if (res.status === 202) return flash('queued — goes in when Claude is done');
@@ -786,10 +791,10 @@
     if (colours && colours.body) document.querySelector('meta[name="theme-color"]').content = colours.body;
   }
 
-  function post(pathname, params = {}) {
+  function post(pathname, params = {}, signal) {
     if (preview) return Promise.resolve();
     const q = new URLSearchParams({ t: token, ...params });
-    return fetch(`${pathname}?${q}`, { method: 'POST' }).catch(() => {});
+    return fetch(`${pathname}?${q}`, { method: 'POST', signal }).catch(() => {});
   }
 
   /** What the computer streams: the keys and who is on them, the theme and the layout. */
