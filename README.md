@@ -152,17 +152,20 @@ control Terminal. Click **Allow**.
 
 ## Pair your phone
 
-1. On your Mac, click the SauzzeDeck Pro icon in the menu bar and choose
-   **Pair a Phone…**. The setup page opens with a six-digit code and a QR code.
-2. Scan the QR code with your phone's camera. Or open Safari, go to the address
-   shown with the code (for example `192.168.1.20:7710`) and type the code.
-3. Tap **Share → Add to Home Screen**. SauzzeDeck Pro now opens full screen and
-   stays paired.
+1. On your computer, click the SauzzeDeck Pro icon in the menu bar or tray and
+   choose **Pair a Phone…**. The setup page opens with a six-digit code and a
+   QR code.
+2. Scan the QR code with your phone's camera. Or open your phone's browser, go
+   to the address shown with the code (for example `192.168.1.20:7710`) and
+   type the code.
+3. Add the deck to your Home Screen: on an iPhone, tap **Share → Add to Home
+   Screen**; on Android, open the browser's menu and tap **Add to Home
+   screen**. SauzzeDeck Pro now opens full screen and stays paired.
 
 Each phone you pair appears under **Paired phones** on the setup page, with
 when it was last used. **Revoke** cuts one phone off straight away;
-**Unpair All Phones** does it for every phone, and is also in the menu bar
-menu. A phone you've cut off shows the pairing page again. To use it once
+**Unpair All Phones** does it for every phone, and is also in SauzzeDeck
+Pro's menu. A phone you've cut off shows the pairing page again. To use it once
 more, pair it with a new code, then remove the old Home Screen icon and add
 the deck again: the icon keeps the old pairing.
 
@@ -206,15 +209,15 @@ hears it.
   phone and to the coding agents on your computer. It has no accounts, no analytics and
   no cloud service.
 - **Each phone has its own key.** Every request carries a long random key that
-  only that phone has. The key is never typed: pairing hands it over. Your Mac
-  keeps only a fingerprint of each key (a SHA-256 hash), so you can revoke one
+  only that phone has. The key is never typed: pairing hands it over. Your
+  computer keeps only a fingerprint of each key (a SHA-256 hash), so you can revoke one
   phone without touching the others.
 - **Pairing codes are short-lived.** A code exists only after you ask for one.
   It works once and expires after five minutes. Five wrong tries from one
   device lock that device out until you get a new code, and twenty wrong tries
   in all withdraw the code. The QR code holds the same one-time code, never a
   key, and disappears once the code is used.
-- **The agents have a key of their own.** Their hook script uses a separate
+- **The agents have a key of their own.** Their hook uses a separate
   key, read from a file only you can read, so it never shows up in the list of
   running processes. It works only from your computer, and only for reporting what
   an agent is doing. A phone's key can't pose as an agent, and the agents' key
@@ -233,7 +236,8 @@ hears it.
 ## Troubleshooting
 
 **The keys stay empty.** Click **Connect** on the setup page, then restart your
-agent sessions. They need to run in the Terminal app.
+agent sessions. On a Mac, they need to run in the Terminal app. On Windows and
+Linux, start them with `sauzzedeck run`, or in tmux, WezTerm or kitty.
 
 **Codex sessions don't appear.** Run `/hooks` in Codex and trust SauzzeDeck
 Pro's hook. Codex skips new hooks until you do.
@@ -256,8 +260,8 @@ Screen again: see [Pair your phone](#pair-your-phone).
 empty, and voice has to be in tap mode: see [Voice](#voice).
 
 **The phone can't connect.** Check that both devices are on the same Wi-Fi.
-If macOS asked whether SauzzeDeck Pro may accept incoming connections, allow
-it.
+If macOS or Windows Firewall asked whether SauzzeDeck Pro may accept incoming
+connections, allow it.
 
 **"Port 7710 is in use."** Another copy of SauzzeDeck Pro, or another app, is
 using that port. Quit it and open SauzzeDeck Pro again.
@@ -269,6 +273,14 @@ using that port. Quit it and open SauzzeDeck Pro again.
 2. Quit SauzzeDeck Pro from the menu bar.
 3. Delete **SauzzeDeck Pro** from Applications, and the folder
    `~/Library/Application Support/AgentDeck`. It kept the app's original name.
+
+On Windows and Linux, disconnect and turn off **Open at login** the same way,
+quit SauzzeDeck Pro from its tray menu, then delete:
+
+- **Linux:** `~/.local/bin/sauzzedeck`,
+  `~/.local/share/applications/sauzzedeck-pro.desktop`, and the folders
+  `~/.local/share/sauzzedeck-pro` and `~/.config/sauzzedeck-pro`.
+- **Windows:** the folder you extracted, and `%APPDATA%\SauzzeDeck Pro`.
 
 Connecting left a backup of each settings file it changed next to it, ending
 in `.agentdeck.bak`: Claude Code's `~/.claude/settings.json`, Codex's
@@ -286,9 +298,11 @@ Codex, Gemini CLI and Grok. OpenCode has no command hooks, so a small plugin
 ([`Resources/opencode-plugin.js`](Resources/opencode-plugin.js)) runs the same
 script. The script tells SauzzeDeck Pro what happened and which Terminal tab it
 happened in. SauzzeDeck Pro reads each agent's events in that agent's terms,
-works out each session's state and streams it to your phone.
+works out each session's state and streams it to your phone. On Windows and
+Linux, `sauzzedeck hook` does the script's job, and names the launcher, tmux
+pane or terminal window instead of a Terminal tab.
 
-Controls work in one of two ways:
+On the Mac, controls work in one of two ways:
 
 - **Typed commands** such as `/effort` and `/clear` are typed into the tab
   through Terminal's scripting.
