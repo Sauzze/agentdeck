@@ -151,14 +151,29 @@ type deckKey struct {
 	session *Session
 }
 
+// keyCount is how many keys the phone shows. Auto shows one for each running
+// session or pinned project, at least one and at most nine.
+func (d *Deck) keyCount() int {
+	if d.config.Layout.Keys != Auto {
+		return int(d.config.Layout.Keys)
+	}
+	count := len(d.sessions.All())
+	for i, pin := range d.config.Pins {
+		if pin != nil {
+			count = max(count, i+1)
+		}
+	}
+	return min(max(count, 1), mostKeys)
+}
+
 // layout: a pinned key shows its project's session when one is running and
 // stays reserved when none is. Every other session gets the first free key
 // and keeps it until it ends, so keys don't shuffle as sessions come and go.
-// Sessions beyond six have no key until one frees up.
+// Sessions beyond the last key have none until one frees up.
 func (d *Deck) layout() ([]deckKey, []*Session) {
-	keys := make([]deckKey, keyCount)
-	for i, pin := range d.config.Pins {
-		keys[i].pin = pin
+	keys := make([]deckKey, d.keyCount())
+	for i := range keys {
+		keys[i].pin = d.config.Pins[i]
 	}
 	remaining := d.sessions.All()
 	live := map[string]bool{}
@@ -196,7 +211,7 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 		}
 	}
 	for _, s := range slices.Clone(remaining) {
-		if i, ok := d.keyOf[s.ID]; ok && keys[i].pin == nil && keys[i].session == nil {
+		if i, ok := d.keyOf[s.ID]; ok && i < len(keys) && keys[i].pin == nil && keys[i].session == nil {
 			place(s, i)
 		}
 	}
@@ -210,7 +225,8 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 	return keys, remaining
 }
 
-// snapshot is what the phone draws: the keys, and the theme. No tabs or paths.
+// snapshot is what the phone draws: the keys, the theme and the layout. No
+// tabs or paths.
 func (d *Deck) snapshot() []byte {
 	keys, overflow := d.layout()
 	entries := make([]map[string]any, len(keys))
@@ -233,6 +249,7 @@ func (d *Deck) snapshot() []byte {
 	}
 	state, _ := json.Marshal(map[string]any{
 		"keys": entries, "overflow": len(overflow), "theme": currentTheme(d.config), "scroll": d.config.ScrollEnabled,
+		"layout": d.config.Layout,
 	})
 	return state
 }
@@ -424,6 +441,23 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 			return http.StatusConflict, "Busy — clear it when " + agent.Name() + " is done"
 		}
 		return d.inTab(tab, func(t Tab) error { return t.Type(agent.NewConversation()) })
+	case "button":
+		d.mu.Lock()
+		button, found := d.config.Layout.madeButton(query.Get("button"))
+		d.mu.Unlock()
+		switch {
+		case !found:
+			return http.StatusNotFound, "That button has gone. Your phone will catch up in a moment."
+		case len(button.Agents) > 0 && !slices.Contains(button.Agents, string(agent)):
+			return http.StatusBadRequest, "This button isn't for " + agent.Name()
+		case button.WhenFree && busy:
+			return http.StatusConflict, "Busy — try again when " + agent.Name() + " is done"
+		case button.Key != "":
+			return d.press(tab, buttonKeys[button.Key])
+		case button.Text == "":
+			return http.StatusBadRequest, "This button types nothing yet. Set it up in setup, on your computer."
+		}
+		return d.inTab(tab, func(t Tab) error { return t.Type(button.Text) })
 	case "effort":
 		if !agent.HasEffortDial() {
 			return http.StatusBadRequest, agent.Name() + " has no effort setting"

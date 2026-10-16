@@ -239,7 +239,7 @@
   <div class="status" id="status">connecting…</div>
 </main>
 <div class="install" id="install" hidden>
-  <div><b>Add SauzzeDeck Pro to your Home Screen.</b><br>Tap Share, then “Add to Home Screen”. It opens full screen and stays paired.</div>
+  <div><b>Add SauzzeDeck Pro to your Home Screen.</b><br><span id="install-how">Tap Share, then “Add to Home Screen”.</span> It opens full screen and stays paired.</div>
   <button id="install-close" aria-label="Dismiss">✕</button>
 </div>
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
@@ -365,8 +365,8 @@
 
   /**
    * One of the deck's own buttons, or one made in setup, which types a
-   * command or presses a key. The phone only knows a made button by its id:
-   * what it types stays on the computer.
+   * command or presses a key. The phone names a made button only by its id,
+   * so it can't have anything typed that wasn't set up on the computer.
    */
   function button(b) {
     const face = FACES[b.id];
@@ -791,12 +791,14 @@
     location.replace('/');
   }
 
-  // Installed, it runs standalone; in Safari it is a tab worth upgrading.
+  // Installed, it runs standalone; in a browser it is a tab worth upgrading.
   function installHint() {
     const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
     let dismissed = false;
     try { dismissed = localStorage.getItem('install-hint') === 'dismissed'; } catch {}
     if (standalone || dismissed) return;
+    // Android browsers keep it in their menu; Safari, under Share.
+    if (/Android/i.test(navigator.userAgent)) $('install-how').textContent = 'Open the browser’s menu, then “Add to Home screen”.';
     $('install').hidden = false;
     $('install-close').onclick = () => {
       $('install').hidden = true;

@@ -45,8 +45,8 @@ func TestSettingsFromAnotherVersionStillLoad(t *testing.T) {
 	isolate(t)
 	writeFile(t, configFile, `{"pins": ["/work/a"], "logo": "a logo that went away", "colours": null, "somethingNew": true}`)
 	config := loadConfig()
-	if len(config.Pins) != keyCount || config.Pins[0] == nil || *config.Pins[0] != "/work/a" {
-		t.Errorf("pins are %v, want the saved one and %d keys", config.Pins, keyCount)
+	if len(config.Pins) != mostKeys || config.Pins[0] == nil || *config.Pins[0] != "/work/a" {
+		t.Errorf("pins are %v, want the saved one and %d pin slots", config.Pins, mostKeys)
 	}
 	if config.Logo != "sauzze" || config.Colours == nil {
 		t.Errorf("logo %q and colours %v, want the defaults", config.Logo, config.Colours)

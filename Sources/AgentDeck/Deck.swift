@@ -92,12 +92,21 @@ final class Deck {
         var session: Session?
     }
 
+    /// How many keys the phone shows. Auto shows one for each running
+    /// session or pinned project, at least one and at most nine.
+    private var keyCount: Int {
+        let config = Config.shared
+        if case .fixed(let count) = config.layout.keys { return count }
+        let pinned = (config.pins.lastIndex { $0 != nil } ?? -1) + 1
+        return min(max(sessions.all.count, pinned, 1), KeyCount.most)
+    }
+
     /// A pinned key shows its project's session when one is running and stays
     /// reserved when none is. Every other session gets the first free key and
     /// keeps it until it ends, so keys don't shuffle as sessions come and go.
-    /// Sessions beyond six have no key until one frees up.
+    /// Sessions beyond the last key have none until one frees up.
     func layout() -> (keys: [Key], overflow: [Session]) {
-        var keys = Config.shared.pins.map { Key(pin: $0, session: nil) }
+        var keys = Config.shared.pins.prefix(keyCount).map { Key(pin: $0, session: nil) }
         var remaining = sessions.all
         let live = Set(remaining.map(\.id))
         keyOf = keyOf.filter { live.contains($0.key) }
@@ -114,7 +123,7 @@ final class Deck {
             if let match = candidates.first(where: { keyOf[$0.id] == i }) ?? candidates.first { place(match, at: i) }
         }
         for session in remaining {
-            if let i = keyOf[session.id], keys[i].pin == nil, keys[i].session == nil { place(session, at: i) }
+            if let i = keyOf[session.id], i < keys.count, keys[i].pin == nil, keys[i].session == nil { place(session, at: i) }
         }
         for session in remaining {
             guard let free = keys.indices.first(where: { keys[$0].pin == nil && keys[$0].session == nil }) else { break }
@@ -123,7 +132,7 @@ final class Deck {
         return (keys, remaining)
     }
 
-    /// What the phone draws: the keys, and the theme. No ttys or paths.
+    /// What the phone draws: the keys, the theme and the layout. No ttys or paths.
     func snapshotJSON() -> Data {
         let (keys, overflow) = layout()
         let state: [String: Any] = [
@@ -143,6 +152,7 @@ final class Deck {
             "overflow": overflow.count,
             "theme": Theme.current(),
             "scroll": Config.shared.scrollEnabled,
+            "layout": Config.shared.layout.jsonObject,
         ]
         return (try? JSONSerialization.data(withJSONObject: state)) ?? Data()
     }
@@ -214,6 +224,21 @@ final class Deck {
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when \(agent.name) is done")) }
             onTerminal(done) { Terminal.type(agent.newConversation, tty: tty) }
+        case "button":
+            guard let button = Config.shared.layout.madeButton(query["button"] ?? "") else {
+                return done(.status(404, "That button has gone. Your phone will catch up in a moment."))
+            }
+            if let agents = button.agents, !agents.contains(agent.rawValue) {
+                return done(.status(400, "This button isn't for \(agent.name)"))
+            }
+            if button.whenFree == true && session.isBusy {
+                return done(.status(409, "Busy — try again when \(agent.name) is done"))
+            }
+            if let key = button.key, let keystroke = Button.keys[key] { return press(keystroke, tty: tty, done: done) }
+            guard let text = button.text, !text.isEmpty else {
+                return done(.status(400, "This button types nothing yet. Set it up in setup, on your Mac."))
+            }
+            onTerminal(done) { Terminal.type(text, tty: tty) }
         case "effort":
             guard agent.hasEffortDial else { return done(.status(400, "\(agent.name) has no effort setting")) }
             guard let level = query["level"], Deck.effortLevels.contains(level) else { return done(.status(400, "Unknown level")) }

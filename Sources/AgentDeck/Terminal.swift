@@ -24,6 +24,7 @@ enum Terminal {
         case pageDown = 121
         case end = 119
         case c = 8
+        case tab = 48
     }
 
     /// A key, with its modifiers, pressed `times` times in a row.

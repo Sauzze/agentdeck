@@ -99,6 +99,33 @@ final class DeckRouter: Router {
         case ("GET", "/setup/state"):
             respond(.json(setupState()))
 
+        // The deck, for the preview beside the layout editor: the one page a
+        // frame may show, and only one of this deck's own.
+        case ("GET", "/setup/preview"):
+            var preview = Response.file(Paths.web.appendingPathComponent("deck.html"))
+            preview.framedBy = .thisDeck
+            respond(preview)
+
+        case ("POST", "/setup/layout"):
+            guard let layout = Layout.parse(request.body) else {
+                return respond(.status(400, "That isn't a layout this deck can use."))
+            }
+            config.setLayout(layout)
+            config.save()
+            deck.refresh()
+            respond(.status(204))
+
+        case ("POST", "/setup/profiles"):
+            do {
+                try profiles(request)
+                deck.refresh()
+                respond(.json(setupState()))
+            } catch let error as ProfileError {
+                respond(.status(400, error.message))
+            } catch {
+                respond(.status(400, "Unknown action."))
+            }
+
         case ("GET", "/setup/qr.png"):
             guard let code = deck.access.activeCode else { return respond(.status(404)) }
             respond(Response(contentType: "image/png", body: QRCode.png(for: deck.pairingLink(for: code)) ?? Data()))
@@ -178,6 +205,20 @@ final class DeckRouter: Router {
         }
     }
 
+    /// Switches to, saves, renames, deletes or imports a profile.
+    private func profiles(_ request: Request) throws {
+        let config = Config.shared
+        let name = request.query["name"] ?? ""
+        switch request.query["action"] {
+        case "switch": try config.switchProfile(to: name)
+        case "save": try config.saveProfile(as: name)
+        case "rename": try config.renameProfile(name, to: request.query["to"] ?? "")
+        case "delete": config.deleteProfile(name)
+        case "import": try config.importProfile(request.body)
+        default: throw ProfileError(message: "Unknown action.")
+        }
+    }
+
     private func keyIndex(_ request: Request) -> Int? {
         guard let index = Int(request.query["key"] ?? ""), Config.shared.pins.indices.contains(index) else { return nil }
         return index
@@ -215,8 +256,8 @@ final class DeckRouter: Router {
                 ]
             },
             "logo": Config.shared.logo.rawValue,
-            "pins": Config.shared.pins.map { pin -> Any in
-                guard let pin else { return NSNull() }
+            "pins": keys.map { key -> Any in
+                guard let pin = key.pin else { return NSNull() }
                 return ["folder": pin, "name": (pin as NSString).lastPathComponent]
             },
             "sessions": deck.sessions.all.map { session -> [String: Any] in
@@ -226,6 +267,12 @@ final class DeckRouter: Router {
                 ]
             },
             "theme": Theme.editorJSON(),
+            "layout": Config.shared.layout.jsonObject,
+            // Saved looks, besides Default, the one the deck was last switched
+            // to, and whether it has changed since.
+            "profiles": Config.shared.profiles.map(\.jsonObject),
+            "activeProfile": Config.shared.activeProfile,
+            "profileEdited": Config.shared.profileEdited,
         ]
     }
 }

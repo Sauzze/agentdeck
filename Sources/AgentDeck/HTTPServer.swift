@@ -68,6 +68,14 @@ struct Response {
     var status = 200
     var contentType = "text/plain; charset=utf-8"
     var body = Data()
+    /// Who may show a page in a frame. No other site may, where it could lay
+    /// something over the page and trick you into pressing a button; the
+    /// setup page's preview of the deck is the one page this deck frames.
+    var framedBy = Framing.noOne
+
+    enum Framing {
+        case noOne, thisDeck
+    }
 
     static func status(_ code: Int, _ message: String = "") -> Response {
         Response(status: code, body: Data(message.utf8))
@@ -217,10 +225,12 @@ private final class HTTPConnection {
             + "Content-Length: \(response.body.count)\r\n"
             + "Cache-Control: no-store\r\n"
         if response.contentType.hasPrefix("text/html") {
-            // No other site may show these pages in a frame, where it could
-            // lay something over them and trick you into pressing a button.
-            head += "X-Frame-Options: DENY\r\n"
-                + "Content-Security-Policy: frame-ancestors 'none'\r\n"
+            switch response.framedBy {
+            case .noOne:
+                head += "X-Frame-Options: DENY\r\nContent-Security-Policy: frame-ancestors 'none'\r\n"
+            case .thisDeck:
+                head += "X-Frame-Options: SAMEORIGIN\r\nContent-Security-Policy: frame-ancestors 'self'\r\n"
+            }
         }
         head += "Connection: close\r\n\r\n"
         connection.send(content: Data(head.utf8) + response.body, completion: .contentProcessed { [connection] _ in

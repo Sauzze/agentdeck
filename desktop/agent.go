@@ -33,6 +33,9 @@ const (
 	Up     Key = "up"
 	Down   Key = "down"
 	CtrlC  Key = "ctrl-c"
+	// For buttons made in setup: Shift+Tab switches Claude Code's mode.
+	TabKey   Key = "tab"
+	ShiftTab Key = "shift-tab"
 )
 
 // Keystroke is a key pressed Times times in a row.
