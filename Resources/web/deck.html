@@ -52,13 +52,14 @@
   .cap.off { opacity: .35; pointer-events: none; }
 
   /* --------------------------------------------------------- session keys */
-  /* Square keys, as many to a row as suits how many there are: one fills the
-     width, two sit side by side, four make a 2×2, up to a 3×3 of nine. Their
-     rows never take more than --room, so the controls keep theirs; past it a
-     key gets wider than it is tall. What's written on a key grows with it. */
-  .keys { --room: 46dvh; display: grid; grid-template-columns: repeat(var(--columns, 3), 1fr); gap: var(--gap); flex: none; }
-  .key { aspect-ratio: 1; max-height: calc((var(--room) - (var(--rows, 2) - 1) * var(--gap)) / var(--rows, 2)); min-width: 0;
-    display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px; container-type: inline-size; }
+  /* The keys always take the same part of the screen, however many there
+     are, so the controls under them never change size: one key fills it, two
+     share it side by side, four make a 2×2, up to a 3×3 of nine. What's
+     written on a key grows with it. */
+  .keys { display: grid; grid-template-columns: repeat(var(--columns, 3), 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
+    gap: var(--gap); height: 44dvh; flex: none; }
+  .key { min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px;
+    container-type: inline-size; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
   .key .slot { font-size: clamp(11px, 7cqi, 18px); color: var(--dim); font-variant-numeric: tabular-nums; }
   .key .light { width: clamp(12px, 8cqi, 22px); height: clamp(12px, 8cqi, 22px); border-radius: 50%; background: var(--faint); }
@@ -170,8 +171,7 @@
   @media (orientation: landscape) {
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
-    .keys { grid-auto-rows: 1fr; height: 100%; align-content: center; }
-    .key { aspect-ratio: auto; height: 100%; max-height: none; min-height: 0; }
+    .keys { height: 100%; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
