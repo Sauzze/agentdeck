@@ -37,7 +37,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             menu.addItem(withTitle: error, action: nil, keyEquivalent: "")
         } else {
             let count = deck.sessions.all.count
-            menu.addItem(withTitle: count == 1 ? "1 Claude session" : "\(count) Claude sessions", action: nil, keyEquivalent: "")
+            menu.addItem(withTitle: count == 1 ? "1 agent session" : "\(count) agent sessions", action: nil, keyEquivalent: "")
         }
         menu.addItem(.separator())
         add(to: menu, "Open Setup…", #selector(openSetup))

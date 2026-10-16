@@ -21,10 +21,14 @@ enum Paths {
 
     static let home = FileManager.default.homeDirectoryForCurrentUser
     static let claudeSettings = home.appendingPathComponent(".claude/settings.json")
-    static let claudeSettingsBackup = home.appendingPathComponent(".claude/settings.json.agentdeck.bak")
+    static let codexHooks = home.appendingPathComponent(".codex/hooks.json")
+    static let geminiSettings = home.appendingPathComponent(".gemini/settings.json")
+    static let grokHooks = home.appendingPathComponent(".grok/hooks/sauzzedeck-pro.json")
+    static let openCodePlugin = home.appendingPathComponent(".config/opencode/plugins/sauzzedeck-pro.js")
     static let launchAgent = home.appendingPathComponent("Library/LaunchAgents/\(LoginItem.label).plist")
 
     /// The phone and setup pages, bundled inside the app.
     static let web = Bundle.main.resourceURL!.appendingPathComponent("web", isDirectory: true)
     static let bundledHookScript = Bundle.main.resourceURL!.appendingPathComponent("report.sh")
+    static let bundledOpenCodePlugin = Bundle.main.resourceURL!.appendingPathComponent("opencode-plugin.js")
 }

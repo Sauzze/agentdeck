@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Who may use the deck: the phones you paired, and the Claude Code hook.
+/// Who may use the deck: the phones you paired, and the agents' hook.
 ///
 /// Each phone has a key of its own, handed over once when it pairs: see
 /// `Phones`. Nobody types it. To pair, you ask for a code on the Mac; the

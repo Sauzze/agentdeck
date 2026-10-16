@@ -3,7 +3,7 @@ import AppKit
 /// Terminal.app: finding a session's tab, bringing it forward, typing into it.
 ///
 /// A tab is identified by its tty. Terminal reports one for every tab and the
-/// hook reports the one claude runs on, so they meet on an exact string —
+/// hook reports the one the agent runs on, so they meet on an exact string —
 /// window and tab indexes shift as tabs move, a tty does not.
 ///
 /// AppleScript runs through osascript, one call at a time on `queue`, so a slow
@@ -23,6 +23,14 @@ enum Terminal {
         case pageUp = 116
         case pageDown = 121
         case end = 119
+        case c = 8
+    }
+
+    /// A key, with its modifiers, pressed `times` times in a row.
+    struct Keystroke {
+        let key: Key
+        var modifiers: CGEventFlags = []
+        var times = 1
     }
 
     /// The most lines one request may scroll. A notch of the phone's wheel
@@ -96,7 +104,7 @@ enum Terminal {
 
     /// Scrolls the tab's window by `lines`, up when negative, with the View
     /// menu's Line Up and Line Down (⌥⌘Page Up, ⌥⌘Page Down). They move
-    /// Terminal's view of the scrollback, so claude itself receives nothing.
+    /// Terminal's view of the scrollback, so the agent itself receives nothing.
     ///
     /// Only a turn's first notch brings the tab forward. Doing it for every
     /// notch would make the wheel lag; a tab you switch to in the meantime
@@ -115,7 +123,7 @@ enum Terminal {
         return true
     }
 
-    /// The View menu's Scroll to Bottom (⌘End): back to where claude is.
+    /// The View menu's Scroll to Bottom (⌘End): back to where the agent is.
     static func scrollToBottom(tty: String) -> Bool {
         press(.end, modifiers: .maskCommand, tty: tty)
     }

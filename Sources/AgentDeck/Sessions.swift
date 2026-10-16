@@ -1,6 +1,6 @@
 import Foundation
 
-/// What a Claude session is doing, as the keys show it.
+/// What a session is doing, as the keys show it.
 enum SessionState: String {
     case idle      // white: nothing running, or finished and already seen
     case thinking  // blue: a turn is running
@@ -11,6 +11,7 @@ enum SessionState: String {
 
 final class Session {
     let id: String
+    let agent: Agent
     var folder: String
     var tty = ""
     var state = SessionState.idle
@@ -20,8 +21,9 @@ final class Session {
     var startedAt: Double
     var lastEventAt: Double = 0
 
-    init(id: String, folder: String, startedAt: Double) {
+    init(id: String, agent: Agent, folder: String, startedAt: Double) {
         self.id = id
+        self.agent = agent
         self.folder = folder
         self.startedAt = startedAt
     }
@@ -35,7 +37,8 @@ final class Session {
     var isBusy: Bool { state == .thinking || state == .asking }
 }
 
-/// Every Claude session reporting in, kept current from its hook events.
+/// Every agent session reporting in, kept current from its hook events, in
+/// Claude Code's words: see `Agent.canonical(_:)`.
 ///
 /// Hooks only say what just happened, so a session's state is whatever the
 /// last meaningful event implied. Hooks also run in the background, so two
@@ -57,7 +60,7 @@ final class Sessions {
 
     func contains(_ state: SessionState) -> Bool { byID.values.contains { $0.state == state } }
 
-    func apply(_ event: [String: Any], tty: String, at time: Double) {
+    func apply(_ event: [String: Any], agent: Agent, tty: String, at time: Double) {
         guard let id = event["session_id"] as? String, let name = event["hook_event_name"] as? String else { return }
         let folder = event["cwd"] as? String ?? ""
 
@@ -68,7 +71,10 @@ final class Sessions {
             return
         }
 
-        let session = byID[id] ?? adopt(id: id, folder: folder, tty: tty, at: time)
+        // A session the deck can't find a Terminal tab for would be a key
+        // that lights up but can't be controlled.
+        guard byID[id] != nil || !tty.isEmpty else { return }
+        let session = byID[id] ?? adopt(id: id, agent: agent, folder: folder, tty: tty, at: time)
         guard time >= session.lastEventAt else { return }
         session.lastEventAt = time
         if !folder.isEmpty { session.folder = folder }
@@ -80,11 +86,11 @@ final class Sessions {
         onChange()
     }
 
-    /// A new session. One tab runs one claude, so a new session on a tty that
-    /// already has one is that claude after /clear, or a fresh one in the same
+    /// A new session. One tab runs one agent, so a new session on a tty that
+    /// already has one is that agent after /clear, or a fresh one in the same
     /// tab: it replaces the old session and inherits its place on the deck.
-    private func adopt(id: String, folder: String, tty: String, at time: Double) -> Session {
-        let session = Session(id: id, folder: folder, startedAt: time)
+    private func adopt(id: String, agent: Agent, folder: String, tty: String, at time: Double) -> Session {
+        let session = Session(id: id, agent: agent, folder: folder, startedAt: time)
         if !tty.isEmpty, let previous = byID.values.first(where: { $0.tty == tty }) {
             session.startedAt = previous.startedAt
             session.effort = previous.effort
@@ -122,6 +128,8 @@ final class Sessions {
             return .unread
         case "StopFailure":
             return .error
+        case "Interrupt":
+            return .idle
         default:
             return nil
         }
@@ -146,8 +154,8 @@ final class Sessions {
         if changed { onChange() }
     }
 
-    /// Drops sessions on ttys whose tab has closed. A claude killed along with
-    /// its tab never sends SessionEnd.
+    /// Drops sessions on ttys whose tab has closed. An agent killed along
+    /// with its tab never sends SessionEnd.
     func prune(closedTTYs: Set<String>) {
         let gone = byID.values.filter { closedTTYs.contains($0.tty) }
         guard !gone.isEmpty else { return }

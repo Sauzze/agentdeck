@@ -394,7 +394,7 @@
   /**
    * Two jobs, picked by what the selected session is doing:
    *
-   *   choices  Claude is asking. Slide up or down to move through the
+   *   choices  The agent is asking. Slide up or down to move through the
    *            options, a notch per step; tap to confirm the highlighted one.
    *   scroll   Everything else. A mouse's scroll wheel for the session's
    *            Terminal window: roll it to scroll, tap to jump back to the
@@ -535,8 +535,9 @@
       if (s) { el.dataset.state = s.state; el.dataset.session = s.id; }
       else { delete el.dataset.state; delete el.dataset.session; }
       // A pinned project with nothing running keeps its name on its key.
+      // Claude Code's keys show its effort; every other agent's, its name.
       el.querySelector('.name').textContent = s ? s.name : k.pin || '—';
-      el.querySelector('.effort').textContent = s ? s.effort : k.pin ? 'not running' : '';
+      el.querySelector('.effort').textContent = s ? (s.dial ? s.effort : s.agentName) : k.pin ? 'not running' : '';
     });
 
     $('target').innerHTML = sel ? `→ <b></b>` : 'no session selected';
@@ -547,6 +548,9 @@
 
     const asking = !!sel && sel.state === 'asking';
     document.querySelectorAll('.controls .cap').forEach((el) => el.classList.toggle('off', !sel));
+    // The dial and the mic drive Claude Code's own /effort and /voice.
+    $('dial').classList.toggle('off', !sel || !sel.dial);
+    document.querySelector('[data-action="mic"]').classList.toggle('off', !sel || !sel.mic);
     // An override lasts until the session's own situation changes.
     const auto = asking ? 'choices' : 'scroll';
     if (auto !== stickAuto) { stickAuto = auto; stickOverride = null; }

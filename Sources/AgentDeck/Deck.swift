@@ -60,8 +60,22 @@ final class Deck {
 
     // MARK: Hook events
 
-    func ingest(_ event: [String: Any], tty: String, at time: Double) {
-        sessions.apply(event, tty: tty, at: time)
+    /// `reported` is the agent the hook script was set up for; see
+    /// `Agent.of(_:reportedAs:)` for why that isn't always the sender.
+    func ingest(_ event: [String: Any], reportedAs reported: String, tty: String, at time: Double) {
+        let agent = Agent.of(event, reportedAs: reported)
+        guard let event = agent.canonical(event) else { return }
+        sessions.apply(event, agent: agent, tty: tty.isEmpty ? tab(for: event, of: agent) : tty, at: time)
+    }
+
+    /// Codex runs its hooks in a shared background service, so its events
+    /// arrive with no tty. Its tab is the one running Codex in the session's
+    /// folder, when exactly one does and no other session holds it already.
+    /// A session the deck knows keeps the tab it was found in.
+    private func tab(for event: [String: Any], of agent: Agent) -> String {
+        guard let id = event["session_id"] as? String, sessions[id] == nil,
+              let name = agent.processName, let folder = event["cwd"] as? String else { return "" }
+        return Processes.tty(of: name, in: folder, excluding: Set(sessions.all.map(\.tty))) ?? ""
     }
 
     private func changed() {
@@ -120,6 +134,8 @@ final class Deck {
                         "id": s.id, "name": s.name, "state": s.state.rawValue,
                         "effort": s.pendingEffort.isEmpty ? s.effort : s.pendingEffort,
                         "pending": !s.pendingEffort.isEmpty,
+                        "agent": s.agent.rawValue, "agentName": s.agent.name,
+                        "dial": s.agent.hasEffortDial, "mic": s.agent.hasVoice,
                     ]
                 }
                 return entry
@@ -171,13 +187,16 @@ final class Deck {
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
 
-        // Accept and send are both Return, reject and esc both Escape. They are
-        // separate controls on the phone because they mean different things.
+        // Accept and send are both Return. They are separate controls on the
+        // phone because they mean different things, as do reject and esc,
+        // which are often both Escape but not in every agent.
+        let agent = session.agent
         switch action {
-        case "accept", "send": press(.returnKey, tty: tty, done: done)
-        case "reject", "esc": press(.escape, tty: tty, done: done)
-        case "up": press(.up, tty: tty, done: done)
-        case "down": press(.down, tty: tty, done: done)
+        case "accept", "send": press(.init(key: .returnKey), tty: tty, done: done)
+        case "reject": press(agent.reject, tty: tty, done: done)
+        case "esc": press(agent.interrupt, tty: tty, done: done)
+        case "up": press(.init(key: .up), tty: tty, done: done)
+        case "down": press(.init(key: .down), tty: tty, done: done)
         case "scroll":
             guard Config.shared.scrollEnabled else {
                 return done(.status(403, "Scrolling is off. Turn it on in setup, on your Mac."))
@@ -189,11 +208,14 @@ final class Deck {
             // off on the Mac, the wheel turns the other way, as everything else does.
             let direction = Scrolling.isNatural ? 1 : -1
             inTab(tty, done: done) { Terminal.scroll(lines: lines * direction, tty: tty) }
-        case "mic": pressMic(session, done: done)
+        case "mic":
+            guard agent.hasVoice else { return done(.status(400, "\(agent.name) has no voice input")) }
+            pressMic(session, done: done)
         case "clear":
-            guard !session.isBusy else { return done(.status(409, "Busy — clear it when Claude is done")) }
-            onTerminal(done) { Terminal.type("/clear", tty: tty) }
+            guard !session.isBusy else { return done(.status(409, "Busy — clear it when \(agent.name) is done")) }
+            onTerminal(done) { Terminal.type(agent.newConversation, tty: tty) }
         case "effort":
+            guard agent.hasEffortDial else { return done(.status(400, "\(agent.name) has no effort setting")) }
             guard let level = query["level"], Deck.effortLevels.contains(level) else { return done(.status(400, "Unknown level")) }
             session.pendingEffort = level == session.effort ? "" : level
             let queued = !session.pendingEffort.isEmpty && session.isBusy
@@ -216,7 +238,7 @@ final class Deck {
             return done(.status(204))
         }
         micPress = (session.tty, Date())
-        press(.space, tty: session.tty) { [weak self] response in
+        press(.init(key: .space), tty: session.tty) { [weak self] response in
             // Nothing started, so the release must not send a Space either.
             if response.status >= 400 { self?.micPress = nil }
             done(response)
@@ -230,12 +252,14 @@ final class Deck {
         guard let started = micPress, Date().timeIntervalSince(started.at) < Deck.voiceLimit else {
             return done(.status(204))
         }
-        press(.space, tty: started.tty, done: done)
+        press(.init(key: .space), tty: started.tty, done: done)
     }
 
-    private func press(_ key: Terminal.Key, tty: String, done: @escaping (Response) -> Void) {
+    private func press(_ keystroke: Terminal.Keystroke, tty: String, done: @escaping (Response) -> Void) {
         guard Permissions.hasAccessibility else { return done(.status(403, Deck.noKeyboard)) }
-        inTab(tty, done: done) { Terminal.press(key, tty: tty) }
+        inTab(tty, done: done) {
+            Terminal.press(keystroke.key, modifiers: keystroke.modifiers, times: keystroke.times, tty: tty)
+        }
     }
 
     /// Runs `work`, which brings the tab on `tty` forward. A tab you have
