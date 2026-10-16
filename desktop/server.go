@@ -2,6 +2,7 @@ package desktop
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -346,6 +347,28 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 	case r.Method == http.MethodGet && path == "/setup/state":
 		writeJSON(w, http.StatusOK, rt.setupState())
 
+	// The deck, for the preview beside the layout editor: the one page a
+	// frame may show, and only one of this deck's own.
+	case r.Method == http.MethodGet && path == "/setup/preview":
+		serveFramedBy(w, "Resources/web/deck.html", "SAMEORIGIN", "'self'")
+
+	case r.Method == http.MethodPost && path == "/setup/layout":
+		data, _ := io.ReadAll(r.Body)
+		layout, err := parseLayout(data)
+		if err != nil {
+			writeStatus(w)(http.StatusBadRequest, err.Error())
+			return
+		}
+		d.mu.Lock()
+		config.SetLayout(layout)
+		config.save()
+		d.changed()
+		d.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+
+	case r.Method == http.MethodPost && path == "/setup/profiles":
+		rt.profiles(w, r)
+
 	case r.Method == http.MethodGet && path == "/setup/qr.png":
 		d.mu.Lock()
 		code := d.access.ActiveCode()
@@ -390,7 +413,7 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 
 	case r.Method == http.MethodPost && (path == "/setup/pin" || path == "/setup/unpin"):
 		index, err := strconv.Atoi(query.Get("key"))
-		if err != nil || index < 0 || index >= keyCount {
+		if err != nil || index < 0 || index >= mostKeys {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -460,6 +483,40 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 	}
 }
 
+// profiles switches to, saves, renames, deletes or imports a profile, and
+// answers with the setup state.
+func (rt *router) profiles(w http.ResponseWriter, r *request) {
+	d := rt.deck
+	query := r.URL.Query()
+	name := query.Get("name")
+	d.mu.Lock()
+	var err error
+	switch query.Get("action") {
+	case "switch":
+		err = d.config.SwitchProfile(name)
+	case "save":
+		err = d.config.SaveProfile(name)
+	case "rename":
+		err = d.config.RenameProfile(name, query.Get("to"))
+	case "delete":
+		d.config.DeleteProfile(name)
+	case "import":
+		data, _ := io.ReadAll(r.Body)
+		err = d.config.ImportProfile(data)
+	default:
+		err = errors.New("Unknown action.")
+	}
+	if err == nil {
+		d.changed()
+	}
+	d.mu.Unlock()
+	if err != nil {
+		writeStatus(w)(http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, rt.setupState())
+}
+
 func (rt *router) setupState() map[string]any {
 	d := rt.deck
 	found := foundAgents()
@@ -492,10 +549,10 @@ func (rt *router) setupState() map[string]any {
 			"connected": d.isConnected(phone.ID),
 		}
 	}
-	pins := make([]any, keyCount)
-	for i, pin := range d.config.Pins {
-		if pin != nil {
-			pins[i] = map[string]any{"folder": *pin, "name": lastPathComponent(*pin)}
+	pins := make([]any, len(keys))
+	for i, key := range keys {
+		if key.pin != nil {
+			pins[i] = map[string]any{"folder": *key.pin, "name": lastPathComponent(*key.pin)}
 		}
 	}
 	sessions := []map[string]any{}
@@ -521,12 +578,26 @@ func (rt *router) setupState() map[string]any {
 		"pins":     pins,
 		"sessions": sessions,
 		"theme":    themeEditor(d.config),
+		"layout":   d.config.Layout,
+		// Saved looks, besides Default, the one the deck was last switched
+		// to, and whether it has changed since.
+		"profiles":      d.config.Profiles,
+		"activeProfile": d.config.ActiveProfile,
+		"profileEdited": d.config.profileEdited(),
 	}
 }
 
 // MARK: Helpers
 
+// serveFile serves a page no other page may show in a frame, where it could
+// lay something over it and trick you into pressing a button.
 func serveFile(w http.ResponseWriter, name string) {
+	serveFramedBy(w, name, "DENY", "'none'")
+}
+
+// serveFramedBy serves a page with who may frame it, as X-Frame-Options and
+// as the Content-Security-Policy's frame-ancestors.
+func serveFramedBy(w http.ResponseWriter, name, frameOptions, frameAncestors string) {
 	data, err := fs.ReadFile(agentdeck.Files, name)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -536,10 +607,8 @@ func serveFile(w http.ResponseWriter, name string) {
 		w.Header().Set("Content-Type", "image/png")
 	} else {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// No other site may show these pages in a frame, where it could lay
-		// something over them and trick you into pressing a button.
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("X-Frame-Options", frameOptions)
+		w.Header().Set("Content-Security-Policy", "frame-ancestors "+frameAncestors)
 	}
 	_, _ = w.Write(data)
 }

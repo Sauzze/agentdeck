@@ -52,13 +52,21 @@
   .cap.off { opacity: .35; pointer-events: none; }
 
   /* --------------------------------------------------------- session keys */
-  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); flex: none; }
-  .key { aspect-ratio: 1.08; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px; }
+  /* The keys always take the same part of the screen, however many there
+     are, so the controls under them never change size: one key fills it, two
+     share it side by side, three make a row of squares along its top, four
+     make a 2×2, up to a 3×3 of nine. What's written on a key grows with it. */
+  .keys { display: grid; grid-template-columns: repeat(var(--columns, 3), 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
+    gap: var(--gap); height: 44dvh; flex: none; }
+  .key { min-width: 0; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 12px;
+    container-type: inline-size; }
+  .keys.row { grid-template-rows: auto; align-content: start; }
+  .keys.row .key { aspect-ratio: 1; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
-  .key .slot { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .key .light { width: 12px; height: 12px; border-radius: 50%; background: var(--faint); }
-  .key .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .key .effort { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; min-height: 12px; }
+  .key .slot { font-size: clamp(11px, 7cqi, 18px); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .key .light { width: clamp(12px, 8cqi, 22px); height: clamp(12px, 8cqi, 22px); border-radius: 50%; background: var(--faint); }
+  .key .name { font-size: clamp(13px, 11cqi, 30px); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .key .effort { font-size: clamp(10px, 6.5cqi, 16px); color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin-top: 3px; min-height: 12px; }
   .key.empty .name { color: var(--faint); font-weight: 500; }
   .key.pinned .name { color: var(--dim); font-weight: 600; }
   .key.pinned { border-style: dashed; }
@@ -81,10 +89,13 @@
   .target { font-size: 12px; color: var(--dim); display: flex; justify-content: space-between; padding: 0 2px; }
   .target b { color: var(--ink); font-weight: 600; }
 
-  .analog { flex: 1; min-height: 140px; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  .analog { flex: 1; min-height: 140px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: var(--gap); }
+  .analog.single { grid-template-columns: 1fr; }
+  .analog[hidden], .dial[hidden], .stick[hidden] { display: none; }
 
   /* The dial: a knob in a well, five detents round a 270° sweep. */
-  .dial { display: grid; place-items: center; touch-action: none; padding: 6px; }
+  /* One cell the knob fits inside, however wide or short the dial gets. */
+  .dial { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; min-height: 0; touch-action: none; padding: 6px; }
   .dial svg { width: 100%; height: 100%; max-height: 220px; overflow: visible; }
   .dial .tick { stroke: var(--faint); stroke-width: 3; stroke-linecap: round; }
   .dial .tick.on { stroke: var(--ink); }
@@ -125,10 +136,17 @@
   .stick .arrows .d { bottom: 12px; left: 50%; transform: translateX(-50%); }
   .stick.choices .arrows { color: var(--asking); }
 
-  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); flex: none; }
-  .btn { height: 64px; display: grid; place-items: center; font-size: 15px; font-weight: 600; color: var(--ink); }
-  .btn.small { height: 48px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace;
+  /* Rows of buttons as set up on the computer: each row tall or short, its
+     buttons sharing its width by their weight. Without the dial and stick,
+     they sit at the bottom, under your thumb. */
+  .buttons { display: flex; flex-direction: column; gap: var(--gap); flex: none; margin-top: auto; }
+  .buttons .line { display: flex; gap: var(--gap); }
+  .btn { flex: var(--weight, 1) 1 0; min-width: 0; height: 64px; display: grid; place-items: center;
+    font-size: 15px; font-weight: 600; color: var(--ink); }
+  .line.short .btn { height: 48px; }
+  .btn.text { padding: 0 8px; font: 500 13px ui-monospace, "SF Mono", Menlo, monospace;
     color: color-mix(in srgb, var(--ink) 75%, var(--body)); }
+  .btn.text span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .btn svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2.4;
     stroke-linecap: round; stroke-linejoin: round; }
   .btn.accept.live { color: var(--unread); border-color: color-mix(in srgb, var(--unread) 50%, var(--edge)); }
@@ -138,6 +156,23 @@
     box-shadow: 0 1px 0 var(--shadow), 0 0 18px color-mix(in srgb, var(--error) 45%, transparent); }
 
   .btn.armed { color: var(--error); border-color: var(--error); }
+
+  /* ☢ Max: a red dome on a plate of hazard stripes. */
+  .btn.max { background: repeating-linear-gradient(-45deg, #f2c200 0 7px, #1a1a1a 7px 14px); border-color: #f2c200; }
+  .btn.max .dome { height: 80%; aspect-ratio: 1; border-radius: 50%; display: grid; place-content: center; justify-items: center; gap: 1px;
+    color: #fff; font: 800 9px/1 -apple-system, BlinkMacSystemFont, sans-serif; letter-spacing: .1em;
+    background: radial-gradient(circle at 35% 30%, #ff7a6b, #d4140b 55%, #7d0602);
+    box-shadow: 0 0 0 4px #141414, 0 4px 0 4px #0a0a0a, inset 0 -4px 8px rgba(0, 0, 0, .45), inset 0 3px 6px rgba(255, 255, 255, .35);
+    transition: transform .06s; }
+  .btn.max .dome svg { width: 18px; height: 18px; fill: #fff; stroke: none; }
+  .btn.max.down .dome { transform: translateY(3px); }
+
+  /* Effort steps: the dial's five levels as a row to tap, the current one lit. */
+  .btn.efforts { display: flex; gap: 4px; padding: 4px; }
+  .btn.efforts .step { flex: 1; align-self: stretch; display: grid; place-items: center; border-radius: 11px;
+    font: 600 12px ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); }
+  .btn.efforts .step.on { color: var(--ink); background: var(--cap-top); box-shadow: inset 0 0 0 1.5px var(--ink); }
+  .btn.efforts .step.down { background: color-mix(in srgb, var(--ink) 14%, var(--cap)); }
   /* Off screen, not display:none — a hidden switch gives no haptic. */
   #haptic { position: fixed; left: -100px; top: 0; opacity: 0; pointer-events: none; }
 
@@ -155,13 +190,13 @@
   @media (orientation: landscape) {
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
-    .keys { grid-template-rows: 1fr 1fr; height: 100%; align-content: center; }
-    .key { aspect-ratio: auto; height: 100%; min-height: 0; }
+    .keys { height: 100%; }
+    .keys.row { align-content: center; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
     .btn { height: 48px; }
-    .btn.small { height: 40px; }
+    .line.short .btn { height: 40px; }
   }
 </style>
 </head>
@@ -172,7 +207,7 @@
   <section class="controls">
     <div class="target"><span id="target">no session selected</span><span id="target-state"></span></div>
 
-    <div class="analog">
+    <div class="analog" id="analog">
       <div class="cap dial" id="dial" data-control="dial">
         <svg viewBox="0 0 200 200" aria-label="Thinking effort">
           <g id="dial-ticks"></g>
@@ -198,63 +233,98 @@
       </div>
     </div>
 
-    <div class="buttons">
-      <div class="cap btn accept" data-action="accept" aria-label="Accept">
-        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
-      </div>
-      <div class="cap btn reject" data-action="reject" aria-label="Reject">
-        <svg viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg>
-      </div>
-      <div class="cap btn mic" data-action="mic" data-hold aria-label="Hold to dictate">
-        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
-      </div>
-    </div>
-
-    <div class="buttons">
-      <div class="cap btn small" data-action="esc">esc</div>
-      <div class="cap btn small" data-action="send">⏎ send</div>
-      <div class="cap btn small" data-action="clear">/clear</div>
-    </div>
+    <div class="buttons" id="buttons"></div>
   </section>
 
   <div class="status" id="status">connecting…</div>
 </main>
 <div class="install" id="install" hidden>
-  <div><b>Add SauzzeDeck Pro to your Home Screen.</b><br>Tap Share, then “Add to Home Screen”. It opens full screen and stays paired.</div>
+  <div><b>Add SauzzeDeck Pro to your Home Screen.</b><br><span id="install-how">Tap Share, then “Add to Home Screen”.</span> It opens full screen and stays paired.</div>
   <button id="install-close" aria-label="Dismiss">✕</button>
 </div>
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
 
 <script>
-  const SLOTS = 6;
+  /** Today's controls, for a computer that sends no layout of its own. The
+      keys are whatever it sends: one per session, or a fixed number. */
+  const STANDARD_LAYOUT = {
+    dial: true, stick: true,
+    rows: [
+      { tall: true, buttons: [{ id: 'accept' }, { id: 'reject' }, { id: 'mic' }] },
+      { tall: false, buttons: [{ id: 'esc' }, { id: 'send' }, { id: 'clear' }] },
+    ],
+  };
+  /** The deck's own buttons: an icon, or a word in the deck's typewriter face. */
+  const FACES = {
+    accept: { name: 'Accept', icon: '<path d="M5 12.5l4.5 4.5L19 7.5"/>' },
+    reject: { name: 'Reject', icon: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>' },
+    mic: { name: 'Hold to dictate', icon: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>' },
+    up: { name: 'Up', icon: '<path d="M6 14.5l6-6 6 6"/>' },
+    down: { name: 'Down', icon: '<path d="M6 9.5l6 6 6-6"/>' },
+    esc: { name: 'Interrupt', word: 'esc' },
+    send: { name: 'Send', word: '⏎ send' },
+    clear: { name: 'Fresh conversation', word: '/clear' },
+    max: { name: 'Max effort' },
+    efforts: { name: 'Thinking effort' },
+  };
+  /** The radiation trefoil on the Max button's dome. */
+  const TREFOIL = 'M17.25 21.09A10.5 10.5 0 0 1 6.75 21.09L10.35 14.86A3.3 3.3 0 0 0 13.65 14.86ZM1.50 12.00A10.5 10.5 0 0 1 6.75 2.91L10.35 9.14A3.3 3.3 0 0 0 8.70 12.00ZM17.25 2.91A10.5 10.5 0 0 1 22.50 12.00L15.30 12.00A3.3 3.3 0 0 0 13.65 9.14ZM14.2 12a2.2 2.2 0 1 1-4.4 0a2.2 2.2 0 1 1 4.4 0Z';
+  /** The keys a button made in setup can press. */
+  const KEY_NAMES = { enter: 'Return', escape: 'Esc', tab: 'Tab', 'shift-tab': 'Shift+Tab', up: '↑', down: '↓', 'ctrl-c': 'Ctrl+C' };
   const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
   const LEVEL_LABELS = ['L', 'M', 'H', 'XH', 'MAX'];
   const SWEEP = 270; // degrees the dial covers, centred on straight up
   const STATE_WORDS = { idle: 'idle', thinking: 'working', asking: 'waiting on you', unread: 'done', error: 'error' };
 
   const token = new URLSearchParams(location.search).get('t') || '';
+  // On the setup page, the deck is a preview: that page sends it what to
+  // draw, and its controls say what they would do instead of doing it.
+  const preview = location.pathname === '/setup/preview';
   const $ = (id) => document.getElementById(id);
 
-  let keyData = [];    // the six keys as the server lays them out
+  let keyData = [];    // the keys as the server lays them out
   let sessions = [];   // the sessions on them
   let overflow = 0;    // sessions running with no key to show them
   let selected = null; // session id the controls act on
+  let layout = null;   // dial, stick and rows of buttons, as set up on the computer
+
+  /* -------------------------------------------------------------- layout */
+
+  let layoutShown = '';
+  function applyLayout(next) {
+    const key = JSON.stringify(next);
+    if (key === layoutShown) return;
+    layoutShown = key;
+    layout = next;
+    $('dial').hidden = !layout.dial;
+    $('stick').hidden = !layout.stick;
+    $('analog').hidden = !layout.dial && !layout.stick;
+    $('analog').classList.toggle('single', layout.dial !== layout.stick);
+    buildButtons(layout.rows);
+  }
 
   /* ---------------------------------------------------------------- keys */
 
-  for (let i = 0; i < SLOTS; i++) {
-    const el = document.createElement('div');
-    el.className = 'cap key empty';
-    el.innerHTML = `<div class="row"><span class="slot">${i + 1}</span><span class="light"></span></div>
-                    <div><div class="name">—</div><div class="effort"></div></div>`;
-    press(el, () => {
-      const id = el.dataset.session;
-      if (!id) return;
-      selected = id;
-      render();
-      post('/focus', { session: id });
-    });
-    $('keys').appendChild(el);
+  /** One, two or three keys share a row, four make two pairs, and more go three to a row. */
+  function buildKeys(count) {
+    const columns = count <= 3 ? count : count === 4 ? 2 : 3;
+    $('keys').style.setProperty('--columns', columns);
+    $('keys').style.setProperty('--rows', Math.ceil(count / columns));
+    $('keys').classList.toggle('row', count === 3);
+    $('keys').replaceChildren(...Array.from({ length: count }, (_, i) => {
+      const el = document.createElement('div');
+      el.className = 'cap key empty';
+      el.innerHTML = `<div class="row"><span class="slot">${i + 1}</span><span class="light"></span></div>
+                      <div><div class="name">—</div><div class="effort"></div></div>`;
+      press(el, () => {
+        const id = el.dataset.session;
+        if (!id) return;
+        selected = id;
+        render();
+        post('/focus', { session: id });
+      });
+      return el;
+    }));
   }
 
   /* --------------------------------------------------------------- dial */
@@ -283,11 +353,61 @@
 
   /* ----------------------------------------------------------- buttons */
 
-  document.querySelectorAll('[data-action]').forEach((el) => {
-    press(el, () => act(el, 'down'), el.hasAttribute('data-hold') ? () => act(el, 'up') : null);
-  });
+  function buildButtons(rows) {
+    disarm();
+    $('buttons').replaceChildren(...rows.map((row) => {
+      const line = document.createElement('div');
+      line.className = row.tall ? 'line' : 'line short';
+      line.append(...row.buttons.map(button));
+      return line;
+    }));
+  }
 
-  let clearArmed = null;
+  /**
+   * One of the deck's own buttons, or one made in setup, which types a
+   * command or presses a key. The phone names a made button only by its id,
+   * so it can't have anything typed that wasn't set up on the computer.
+   */
+  function button(b) {
+    const face = FACES[b.id];
+    const el = document.createElement('div');
+    el.className = 'cap btn';
+    el.style.setProperty('--weight', b.width || 1);
+    el.setAttribute('aria-label', face ? face.name : b.label || b.text || KEY_NAMES[b.key]);
+    if (face) {
+      el.classList.add(b.id);
+      el.dataset.action = b.id;
+    } else {
+      el.dataset.action = 'button';
+      el.dataset.button = b.id;
+      if (b.agents && b.agents.length) el.dataset.agents = b.agents.join(' ');
+    }
+    if (b.id === 'efforts') {
+      // Its five steps are its controls; the button around them does nothing.
+      el.append(...LEVELS.map((level, i) => {
+        const step = document.createElement('span');
+        step.className = 'step';
+        step.dataset.level = level;
+        step.textContent = LEVEL_LABELS[i];
+        press(step, () => setEffort(level));
+        return step;
+      }));
+      return el;
+    }
+    if (b.id === 'max') {
+      el.innerHTML = `<span class="dome"><svg viewBox="0 0 24 24"><path d="${TREFOIL}"/></svg>MAX</span>`;
+    } else if (face && face.icon) {
+      el.innerHTML = `<svg viewBox="0 0 24 24">${face.icon}</svg>`;
+    } else {
+      el.classList.add('text');
+      el.innerHTML = '<span></span>';
+      el.firstChild.textContent = face ? face.word : b.label || b.text || KEY_NAMES[b.key];
+    }
+    if (b.id === 'clear' || b.confirm) el.dataset.confirm = '';
+    const holds = b.id === 'mic';
+    press(el, () => act(el, 'down'), holds ? () => act(el, 'up') : null);
+    return el;
+  }
 
   function act(el, phase) {
     const action = el.dataset.action;
@@ -298,30 +418,52 @@
     if (!selected) return;
     if (action === 'mic') return send('/act', { session: selected, action, phase });
 
-    // /clear throws the conversation away: first tap arms it, second sends.
-    if (action === 'clear') {
-      if (!clearArmed) {
-        el.textContent = 'sure?';
-        el.classList.add('armed');
-        clearArmed = setTimeout(disarm, 2500);
-        return;
-      }
+    // /clear throws the conversation away, and a made button can ask twice
+    // too: the first tap arms it, the second sends.
+    if ('confirm' in el.dataset) {
+      if (armed !== el) return arm(el);
       disarm();
     }
 
-    send('/act', { session: selected, action });
+    if (action === 'max') {
+      el.querySelector('.dome').animate({ filter: ['brightness(1.7) drop-shadow(0 0 14px #ff2a1a)', 'none'] }, { duration: 700, easing: 'ease-out' });
+      setEffort('max');
+    } else if (action === 'button') {
+      send('/act', { session: selected, action, button: el.dataset.button });
+    } else {
+      send('/act', { session: selected, action });
+    }
+  }
+
+  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it. */
+  function setEffort(level) {
+    if (!selected) return;
+    send('/act', { session: selected, action: 'effort', level });
+  }
+
+  let armed = null; // the button waiting for its second tap
+  let armedTimer = null;
+
+  function arm(el) {
+    disarm();
+    armed = el;
+    el.dataset.word = el.firstChild.textContent;
+    el.firstChild.textContent = 'sure?';
+    el.classList.add('armed');
+    armedTimer = setTimeout(disarm, 2500);
   }
 
   function disarm() {
-    const el = document.querySelector('[data-action="clear"]');
-    clearTimeout(clearArmed);
-    clearArmed = null;
-    el.textContent = '/clear';
-    el.classList.remove('armed');
+    clearTimeout(armedTimer);
+    if (!armed) return;
+    armed.firstChild.textContent = armed.dataset.word;
+    armed.classList.remove('armed');
+    armed = null;
   }
 
   /** POST and say anything that is not a plain yes on the status line. */
   async function send(pathname, params) {
+    if (preview) return flash(rehearse(params));
     const res = await post(pathname, params);
     if (!res) return flash("Can't reach your computer");
     if (res.status === 401) return unpaired();
@@ -548,9 +690,16 @@
 
     const asking = !!sel && sel.state === 'asking';
     document.querySelectorAll('.controls .cap').forEach((el) => el.classList.toggle('off', !sel));
-    // The dial and the mic drive Claude Code's own /effort and /voice.
+    // The dial and the mic drive Claude Code's own /effort and /voice, and a
+    // made button can be for some agents only.
     $('dial').classList.toggle('off', !sel || !sel.dial);
-    document.querySelector('[data-action="mic"]').classList.toggle('off', !sel || !sel.mic);
+    document.querySelectorAll('#buttons .btn').forEach((el) => {
+      const fits = el.classList.contains('mic') ? sel && sel.mic
+        : el.classList.contains('max') || el.classList.contains('efforts') ? sel && sel.dial
+        : !el.dataset.agents || (sel && el.dataset.agents.split(' ').includes(sel.agent));
+      el.classList.toggle('off', !sel || !fits);
+    });
+    document.querySelectorAll('.efforts .step').forEach((step) => step.classList.toggle('on', !!sel && step.dataset.level === sel.effort));
     // An override lasts until the session's own situation changes.
     const auto = asking ? 'choices' : 'scroll';
     if (auto !== stickAuto) { stickAuto = auto; stickOverride = null; }
@@ -601,48 +750,81 @@
   }
 
   function post(pathname, params = {}) {
+    if (preview) return Promise.resolve();
     const q = new URLSearchParams({ t: token, ...params });
     return fetch(`${pathname}?${q}`, { method: 'POST' }).catch(() => {});
   }
 
-  // EventSource reconnects by itself; this only says whether it is up.
-  const stream = new EventSource(`/events?t=${encodeURIComponent(token)}`);
-  stream.onmessage = (e) => {
-    const data = JSON.parse(e.data);
+  /** What the computer streams: the keys and who is on them, the theme and the layout. */
+  function receive(data) {
     keyData = data.keys;
+    // There is always a key, even an empty one, to show where sessions will go.
+    const count = Math.max(1, keyData.length);
+    if (count !== $('keys').children.length) buildKeys(count);
     sessions = keyData.filter((k) => k.session).map((k) => k.session);
     overflow = data.overflow;
     scrollEnabled = data.scroll;
     applyTheme(data.theme);
+    applyLayout(data.layout || STANDARD_LAYOUT);
     $('status').classList.remove('off');
     render();
-  };
-  stream.onerror = () => {
-    // Closed for good means the computer answered, but not with the deck: it no
-    // longer knows this phone. Unreachable, the stream keeps retrying.
-    if (stream.readyState === EventSource.CLOSED) return unpaired();
-    $('status').classList.add('off');
-    $('status').textContent = "Can't reach your computer. Is SauzzeDeck Pro running?";
-  };
+  }
+
+  /** In the preview, what a control would have done to the selected session. */
+  function rehearse(params) {
+    const name = current() ? ` · ${current().name}` : '';
+    if (params.action === 'button') {
+      const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
+      return `${b.text ? `types ${b.text}` : `presses ${KEY_NAMES[b.key]}`}${name}`;
+    }
+    const words = {
+      accept: 'accepts', reject: 'rejects', esc: 'interrupts', send: 'presses Return',
+      clear: 'starts a fresh conversation', up: 'moves up', down: 'moves down',
+      mic: params.phase === 'down' ? 'starts listening' : 'stops listening',
+      effort: `sets effort to ${params.level}`, scroll: 'scrolls',
+    };
+    return `${words[params.action] || params.action}${name}`;
+  }
 
   /** Unpaired on the computer: the pairing page takes over, without the old key. */
   function unpaired() {
     location.replace('/');
   }
 
-  // Installed, it runs standalone; in Safari it is a tab worth upgrading.
-  (function installHint() {
+  // Installed, it runs standalone; in a browser it is a tab worth upgrading.
+  function installHint() {
     const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
     let dismissed = false;
     try { dismissed = localStorage.getItem('install-hint') === 'dismissed'; } catch {}
     if (standalone || dismissed) return;
+    // Android browsers keep it in their menu; Safari, under Share.
+    if (/Android/i.test(navigator.userAgent)) $('install-how').textContent = 'Open the browser’s menu, then “Add to Home screen”.';
     $('install').hidden = false;
     $('install-close').onclick = () => {
       $('install').hidden = true;
       try { localStorage.setItem('install-hint', 'dismissed'); } catch {}
     };
-  })();
+  }
 
+  buildKeys(6);
+  applyLayout(STANDARD_LAYOUT);
+  if (preview) {
+    addEventListener('message', (e) => {
+      if (e.source === parent && e.origin === location.origin) receive(e.data);
+    });
+  } else {
+    // EventSource reconnects by itself; this only says whether it is up.
+    const stream = new EventSource(`/events?t=${encodeURIComponent(token)}`);
+    stream.onmessage = (e) => receive(JSON.parse(e.data));
+    stream.onerror = () => {
+      // Closed for good means the computer answered, but not with the deck: it no
+      // longer knows this phone. Unreachable, the stream keeps retrying.
+      if (stream.readyState === EventSource.CLOSED) return unpaired();
+      $('status').classList.add('off');
+      $('status').textContent = "Can't reach your computer. Is SauzzeDeck Pro running?";
+    };
+    installHint();
+  }
   render();
 </script>
 </body>

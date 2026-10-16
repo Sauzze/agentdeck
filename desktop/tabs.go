@@ -71,8 +71,8 @@ func (t commandTab) run(args ...string) error {
 
 // tmux names keys; WezTerm and kitty take the bytes the key sends.
 var (
-	tmuxKeys = map[Key]string{Enter: "Enter", Escape: "Escape", Space: "Space", Up: "Up", Down: "Down", CtrlC: "C-c"}
-	keyBytes = map[Key]string{Enter: "\r", Escape: "\x1b", Space: " ", Up: "\x1b[A", Down: "\x1b[B", CtrlC: "\x03"}
+	tmuxKeys = map[Key]string{Enter: "Enter", Escape: "Escape", Space: "Space", Up: "Up", Down: "Down", CtrlC: "C-c", TabKey: "Tab", ShiftTab: "BTab"}
+	keyBytes = map[Key]string{Enter: "\r", Escape: "\x1b", Space: " ", Up: "\x1b[A", Down: "\x1b[B", CtrlC: "\x03", TabKey: "\t", ShiftTab: "\x1b[Z"}
 )
 
 func (t commandTab) Press(k Keystroke) error {

@@ -22,10 +22,10 @@
     /* The phone panel runs beside two rows; the keys' row takes up whatever
        height it has to spare, rather than a gap opening above the keys. */
     grid-template-rows: auto auto 1fr;
-    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "logo logo" "colours colours"; }
+    grid-template-areas: "head head" "start phone" "keys phone" "sessions sessions" "profiles profiles" "layout layout" "logo logo" "colours colours"; }
   @media (max-width: 840px) {
     main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none;
-      grid-template-areas: "head" "start" "phone" "keys" "sessions" "logo" "colours"; }
+      grid-template-areas: "head" "start" "phone" "keys" "sessions" "profiles" "layout" "logo" "colours"; }
   }
   header { grid-area: head; display: flex; gap: 16px; align-items: center; }
   header img { width: 52px; height: 52px; border-radius: 12px; }
@@ -35,6 +35,7 @@
   button { font: inherit; cursor: pointer; }
   .btn { background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 8px; padding: 7px 14px; white-space: nowrap; }
   .btn:hover { background: var(--cap-top); }
+  .btn:disabled { opacity: .35; cursor: default; background: var(--cap); }
   .btn.primary { background: var(--thinking); border-color: var(--thinking); color: #fff; }
 
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); flex: none; }
@@ -107,6 +108,50 @@
   .row .path { font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .where { font-size: 12px; color: var(--dim); white-space: nowrap; }
   .empty { color: var(--dim); padding: 16px; border: 1px dashed var(--edge); border-radius: 10px; }
+
+  /* Profiles: a layout and its colours, saved under a name to switch back to. */
+  .profiles { grid-area: profiles; display: grid; gap: 12px; }
+  .profiles[hidden] { display: none; }
+  .profiles .choices { flex-wrap: wrap; }
+
+  /* Layout: the editor, and beside it the phone's own page as a preview. */
+  .layout { grid-area: layout; }
+  .layout[hidden] { display: none; }
+  .layout-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: start; }
+  @media (max-width: 840px) { .layout-body { grid-template-columns: minmax(0, 1fr); } }
+  .editor { display: grid; gap: 14px; min-width: 0; }
+  .editor h3 { font-size: 13px; margin: 6px 0 0; }
+  .field { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+  .field > span:first-child { color: var(--dim); }
+  .field input[type=text], .field select { flex: 1; max-width: 260px; background: var(--cap); color: var(--ink); border: 1px solid var(--edge);
+    border-radius: 6px; padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
+  .choices { display: flex; gap: 6px; }
+  .choices .btn { padding: 4px 12px; }
+  .choices .btn.on, .chip.on { border-color: var(--ink); background: var(--cap-top); }
+  .rows { display: grid; gap: 8px; }
+  .line { display: flex; gap: 10px; align-items: center; }
+  .chips { flex: 1; min-width: 0; display: flex; gap: 6px; }
+  .chip { flex: 1 1 0; min-width: 0; height: 44px; background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 9px;
+    font: 13px ui-monospace, "SF Mono", Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px; }
+  .chips.short .chip { height: 32px; }
+  .chip.add { flex: 0 0 36px; color: var(--dim); border-style: dashed; }
+  .tools { display: flex; gap: 4px; flex: none; }
+  .tools .btn { padding: 4px 9px; font-size: 13px; }
+  .inspector { display: grid; gap: 10px; background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; }
+  .inspector[hidden], .field[hidden], .check[hidden] { display: none; }
+  .check { display: flex; gap: 8px; align-items: center; }
+  .agents { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: end; }
+  .note { color: var(--asking); font-size: 13px; margin: 0; }
+  .note[hidden] { display: none; }
+  /* The phone page at an everyday phone's size, scaled down to fit. */
+  .preview { margin: 0; display: grid; gap: 10px; justify-items: center; --w: 390px; --h: 844px; --scale: .6; }
+  .preview .samples { min-width: 110px; text-align: center; align-self: center; color: var(--dim); font-size: 13px; }
+  /* Sideways, the phone is too wide to sit beside the editor, so it goes under it. */
+  .layout.sideways .layout-body { grid-template-columns: minmax(0, 1fr); }
+  .layout.sideways .preview { --w: 844px; --h: 390px; justify-items: start; }
+  .frame { width: calc(var(--w) * var(--scale) + 16px); height: calc(var(--h) * var(--scale) + 16px); padding: 8px;
+    border: 1px solid var(--edge); border-radius: 30px; background: #000; }
+  .frame iframe { width: var(--w); height: var(--h); border: 0; border-radius: 22px; transform: scale(var(--scale)); transform-origin: 0 0; }
 
   /* Logo */
   .logo { grid-area: logo; }
@@ -227,6 +272,54 @@
     <div class="list" id="list"></div>
   </section>
 
+  <section class="profiles" id="profiles-section" hidden>
+    <h2>Profiles</h2>
+    <div class="choices" id="profiles"></div>
+    <div class="tools">
+      <button class="btn" id="profile-save">Save</button>
+      <button class="btn" id="profile-save-as">Save as…</button>
+      <button class="btn" id="profile-rename">Rename</button>
+      <button class="btn" id="profile-delete">Delete</button>
+      <button class="btn" id="profile-export">Export</button>
+      <button class="btn" id="profile-import">Import…</button>
+      <input type="file" id="profile-file" accept=".json,application/json" hidden>
+    </div>
+    <p class="hint">A profile keeps a layout and its colours. Switch, and your phone follows. Export one to back it up or share it.</p>
+  </section>
+
+  <section class="layout" id="layout" hidden>
+    <h2>Layout</h2>
+    <div class="layout-body">
+      <div class="editor">
+        <div class="field"><span>Session keys</span><div class="choices" id="key-count"></div></div>
+        <p class="hint" id="key-hint"></p>
+        <div class="field"><span>Effort dial</span><button class="switch" id="show-dial" aria-label="Show the effort dial"></button></div>
+        <div class="field"><span>Stick</span><button class="switch" id="show-stick" aria-label="Show the stick"></button></div>
+        <h3>Buttons</h3>
+        <div class="rows" id="rows"></div>
+        <p class="note" id="stick-note" hidden>Without the stick, add ▲ and ▼ to answer your agents' questions.</p>
+        <div><button class="btn" id="add-row">Add a Row</button></div>
+        <div class="inspector" id="inspector" hidden>
+          <label class="field"><span>Does</span><select id="does"></select></label>
+          <label class="field" id="field-text"><span>Types</span><input type="text" id="text" maxlength="200" spellcheck="false" placeholder="/compact"></label>
+          <label class="field" id="field-key"><span>Presses</span><select id="key"></select></label>
+          <label class="field" id="field-label"><span>Label</span><input type="text" id="label" maxlength="16" spellcheck="false"></label>
+          <div class="field"><span>Width</span><div class="choices" id="width"></div></div>
+          <label class="check" id="field-free"><input type="checkbox" id="when-free">Only when the agent isn't busy</label>
+          <label class="check" id="field-confirm"><input type="checkbox" id="confirm">Tap twice to confirm</label>
+          <div class="field" id="field-agents"><span>Works with</span><div class="agents" id="agents"></div></div>
+          <div class="tools"><button class="btn" id="move-back" aria-label="Move left">←</button><button class="btn" id="move-on" aria-label="Move right">→</button><button class="btn" id="remove">Remove</button></div>
+        </div>
+      </div>
+      <figure class="preview" id="preview">
+        <div class="frame"><iframe id="preview-page" src="/setup/preview" title="Your phone's deck"></iframe></div>
+        <div class="choices"><button class="btn" id="fewer" aria-label="One session fewer">−</button><span class="samples" id="samples"></span><button class="btn" id="more" aria-label="One session more">+</button></div>
+        <button class="btn" id="turn">Turn Sideways</button>
+      </figure>
+    </div>
+    <p class="hint">Your phone updates as you change it. A button you make types a command, such as /compact, or presses a key. Your phone only says which button you tapped, so a paired phone can't type anything you didn't set up here.</p>
+  </section>
+
   <section class="logo">
     <h2>Logo</h2>
     <div class="logos" id="logos">
@@ -284,6 +377,8 @@
     renderLogo();
     renderKeys();
     renderSessions();
+    renderProfiles();
+    renderLayout();
     renderTheme();
   }
 
@@ -491,6 +586,308 @@
     }));
   }
 
+  /* ---------------------------------------------------------------- layout */
+
+  /** Auto: a key per running session, up to nine. Or always the same number. */
+  const KEY_COUNTS = ['auto', 3, 6, 9];
+  const MOST_KEYS = 9;
+  const MAX_ROWS = 4, MAX_PER_ROW = 4, WIDTHS = [1, 2, 3];
+  /** The deck's own buttons, as the phone draws them, and what each does. */
+  const BUILT_IN = {
+    accept: ['✓', 'Accept'], reject: ['✕', 'Reject'], mic: ['🎙', 'Talk to Claude Code'],
+    esc: ['esc', 'Interrupt'], send: ['⏎ send', 'Send'], clear: ['/clear', 'Fresh conversation'],
+    up: ['▲', 'Up a choice'], down: ['▼', 'Down a choice'],
+    max: ['☢ MAX', 'Max effort, in one press'], efforts: ['L M H XH MAX', 'Effort steps'],
+  };
+  const KEY_NAMES = { enter: 'Return', escape: 'Esc', tab: 'Tab', 'shift-tab': 'Shift+Tab', up: '↑', down: '↓', 'ctrl-c': 'Ctrl+C' };
+  const AGENTS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode', grok: 'Grok' };
+  /** Who the preview shows on its keys, as many as you choose under it. */
+  const SAMPLES = [
+    { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true },
+    { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking' },
+    { name: 'docs', agent: 'gemini', agentName: 'Gemini CLI', state: 'unread' },
+    { name: 'infra', agent: 'opencode', agentName: 'OpenCode', state: 'idle' },
+    { name: 'mobile', agent: 'grok', agentName: 'Grok', state: 'thinking' },
+    { name: 'billing', agent: 'claude', agentName: 'Claude Code', state: 'idle', effort: 'medium', dial: true, mic: true },
+    { name: 'landing', agent: 'codex', agentName: 'Codex', state: 'unread' },
+    { name: 'search', agent: 'gemini', agentName: 'Gemini CLI', state: 'error' },
+    { name: 'data', agent: 'opencode', agentName: 'OpenCode', state: 'thinking' },
+  ];
+  let samples = 4;
+
+  let layout = null;  // the layout as edited here
+  let chosen = null;  // [row, place] of the button being edited
+  let unsaved = null; // the wait before a change is sent, so a burst goes as one
+  let sending = 0;    // layouts on their way to the computer
+
+  /**
+   * Like the colours: built from the computer's copy, then left alone while
+   * you edit, so a refresh never undoes a change on its way there.
+   */
+  function renderLayout() {
+    $('layout').hidden = !state.layout;
+    if (!state.layout) return;
+    const typing = document.activeElement && document.activeElement.matches('#layout input, #layout select');
+    if (layout && (unsaved || sending || typing)) return;
+    if (layout && JSON.stringify(state.layout) === JSON.stringify(layout)) return;
+    layout = structuredClone(state.layout);
+    drawLayout();
+  }
+
+  /** Makes a change, shows it here and on the preview, and sends it on. */
+  function change(edit) {
+    edit();
+    drawLayout();
+    clearTimeout(unsaved);
+    unsaved = setTimeout(() => { unsaved = null; sendLayout(); }, 250);
+  }
+
+  async function sendLayout() {
+    sending++;
+    try {
+      await fetch('/setup/layout', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(layout) });
+    } finally {
+      sending--;
+    }
+  }
+
+  function drawLayout() {
+    $('key-count').replaceChildren(...KEY_COUNTS.map((n) =>
+      choice(n === 'auto' ? 'Auto' : n, layout.keys === n, () => change(() => { layout.keys = n; }))));
+    $('key-hint').textContent = layout.keys === 'auto'
+      ? 'A key for each running session, up to nine. The fewer there are, the bigger they get.'
+      : `Always ${layout.keys} keys, each in the same place.`;
+    $('show-dial').classList.toggle('on', layout.dial);
+    $('show-stick').classList.toggle('on', layout.stick);
+    $('stick-note').hidden = layout.stick || (uses('up') && uses('down'));
+    $('add-row').disabled = layout.rows.length >= MAX_ROWS;
+    drawRows();
+    drawInspector();
+    showPreview();
+  }
+
+  function choice(label, on, onclick) {
+    const b = document.createElement('button');
+    b.className = 'btn' + (on ? ' on' : '');
+    b.textContent = label;
+    b.onclick = onclick;
+    return b;
+  }
+
+  /** Each row as the phone draws it, with its own tools. */
+  function drawRows() {
+    $('rows').replaceChildren(...layout.rows.map((row, r) => {
+      const el = document.createElement('div');
+      el.className = 'line';
+      const chips = document.createElement('div');
+      chips.className = 'chips' + (row.tall ? '' : ' short');
+      row.buttons.forEach((b, p) => {
+        const chip = document.createElement('button');
+        chip.className = 'chip' + (chosen && chosen[0] === r && chosen[1] === p ? ' on' : '');
+        chip.style.flexGrow = b.width;
+        chip.textContent = faceOf(b);
+        chip.title = whatItDoes(b);
+        chip.onclick = () => { chosen = [r, p]; drawLayout(); };
+        chips.append(chip);
+      });
+      if (row.buttons.length < MAX_PER_ROW) {
+        const add = document.createElement('button');
+        add.className = 'chip add';
+        add.textContent = '+';
+        add.title = 'Add a button';
+        add.onclick = () => change(() => {
+          row.buttons.push(newButton());
+          chosen = [r, row.buttons.length - 1];
+        });
+        chips.append(add);
+      }
+      const tools = document.createElement('div');
+      tools.className = 'tools';
+      tools.append(
+        tool(row.tall ? 'Tall' : 'Short', 'Make this row taller or shorter', () => change(() => { row.tall = !row.tall; })),
+        tool('↑', 'Move this row up', () => change(() => moveRow(r, -1)), r === 0),
+        tool('↓', 'Move this row down', () => change(() => moveRow(r, 1)), r === layout.rows.length - 1),
+        tool('✕', 'Remove this row', () => change(() => { layout.rows.splice(r, 1); chosen = null; })),
+      );
+      el.append(chips, tools);
+      return el;
+    }));
+  }
+
+  function tool(label, title, onclick, disabled) {
+    const b = choice(label, false, onclick);
+    b.title = title;
+    b.disabled = !!disabled;
+    return b;
+  }
+
+  function moveRow(r, by) {
+    const [row] = layout.rows.splice(r, 1);
+    layout.rows.splice(r + by, 0, row);
+    if (chosen && chosen[0] === r) chosen[0] = r + by;
+    else if (chosen && chosen[0] === r + by) chosen[0] = r;
+  }
+
+  /** A new button is the first of the deck's own not on it yet, else Shift+Tab. */
+  function newButton() {
+    const free = Object.keys(BUILT_IN).find((id) => !uses(id));
+    return free ? { id: free, width: 1 } : made({ key: 'shift-tab' });
+  }
+
+  /** A button made here, with an id the phone can name it by. */
+  function made(fields) {
+    return { id: `custom-${Math.random().toString(36).slice(2, 10)}`, label: '', width: 1, ...fields };
+  }
+
+  function uses(id) {
+    return layout.rows.some((row) => row.buttons.some((b) => b.id === id));
+  }
+
+  function faceOf(b) {
+    return BUILT_IN[b.id] ? BUILT_IN[b.id][0] : b.label || b.text || KEY_NAMES[b.key] || '…';
+  }
+
+  function whatItDoes(b) {
+    if (BUILT_IN[b.id]) return BUILT_IN[b.id][1];
+    return b.key ? `Presses ${KEY_NAMES[b.key]}` : `Types ${b.text || 'nothing yet'}`;
+  }
+
+  /* The inspector: the chosen button's settings. Its fields keep what you
+     are typing; a redraw only fills in the others. */
+
+  $('does').replaceChildren(
+    ...Object.entries(BUILT_IN).map(([id, [, name]]) => new Option(name, id)),
+    new Option('Type a command…', 'text'),
+    new Option('Press a key…', 'key'),
+  );
+  $('key').replaceChildren(...Object.entries(KEY_NAMES).map(([id, name]) => new Option(name, id)));
+  $('agents').replaceChildren(...Object.entries(AGENTS).map(([id, name]) => {
+    const label = document.createElement('label');
+    label.className = 'check';
+    label.innerHTML = `<input type="checkbox" value="${id}">`;
+    label.append(name);
+    return label;
+  }));
+
+  function chosenButton() {
+    return chosen && layout.rows[chosen[0]] ? layout.rows[chosen[0]].buttons[chosen[1]] : null;
+  }
+
+  function drawInspector() {
+    const b = chosenButton();
+    $('inspector').hidden = !b;
+    if (!b) return;
+    const own = !!BUILT_IN[b.id];
+    const kind = own ? b.id : b.key ? 'key' : 'text';
+    $('does').value = kind;
+    // One of each of the deck's own buttons.
+    [...$('does').options].forEach((o) => { o.disabled = !!BUILT_IN[o.value] && o.value !== b.id && uses(o.value); });
+    $('field-text').hidden = kind !== 'text';
+    $('field-key').hidden = kind !== 'key';
+    for (const id of ['field-label', 'field-free', 'field-confirm', 'field-agents']) $(id).hidden = own;
+    fill($('text'), b.text || '');
+    $('key').value = b.key || 'enter';
+    fill($('label'), b.label || '');
+    $('label').placeholder = b.key ? KEY_NAMES[b.key] : b.text || '';
+    $('width').replaceChildren(...WIDTHS.map((w) =>
+      choice(`${w}×`, b.width === w, () => change(() => { b.width = w; }))));
+    $('when-free').checked = !!b.whenFree;
+    $('confirm').checked = !!b.confirm;
+    // No agent ticked means every agent: the button never greys out.
+    $('agents').querySelectorAll('input').forEach((box) => {
+      box.checked = !b.agents || !b.agents.length || b.agents.includes(box.value);
+    });
+    const [r, p] = chosen;
+    $('move-back').disabled = r === 0 && p === 0;
+    $('move-on').disabled = r === layout.rows.length - 1 && p === layout.rows[r].buttons.length - 1;
+  }
+
+  function fill(input, value) {
+    if (document.activeElement !== input) input.value = value;
+  }
+
+  $('does').onchange = () => change(() => {
+    const kind = $('does').value;
+    const next = BUILT_IN[kind] ? { id: kind } : made(kind === 'text' ? { text: '/compact' } : { key: 'shift-tab' });
+    layout.rows[chosen[0]].buttons[chosen[1]] = { ...next, width: chosenButton().width };
+  });
+  $('text').oninput = () => change(() => { chosenButton().text = $('text').value; });
+  $('key').onchange = () => change(() => { chosenButton().key = $('key').value; });
+  $('label').oninput = () => change(() => { chosenButton().label = $('label').value; });
+  $('when-free').onchange = () => change(() => { chosenButton().whenFree = $('when-free').checked; });
+  $('confirm').onchange = () => change(() => { chosenButton().confirm = $('confirm').checked; });
+  $('agents').onchange = () => change(() => {
+    const ticked = [...$('agents').querySelectorAll('input:checked')].map((box) => box.value);
+    chosenButton().agents = ticked.length === Object.keys(AGENTS).length ? [] : ticked;
+  });
+
+  /** Along the rows: off the end of one, onto the next, if it has room. */
+  function move(by) {
+    const [r, p] = chosen;
+    const row = layout.rows[r].buttons;
+    const [b] = row.splice(p, 1);
+    if (p + by >= 0 && p + by <= row.length) {
+      row.splice(p + by, 0, b);
+      chosen = [r, p + by];
+    } else {
+      const next = layout.rows[r + by];
+      if (!next || next.buttons.length >= MAX_PER_ROW) { row.splice(p, 0, b); return; }
+      if (by < 0) next.buttons.push(b); else next.buttons.unshift(b);
+      chosen = [r + by, by < 0 ? next.buttons.length - 1 : 0];
+    }
+    dropEmptyRows();
+  }
+
+  function dropEmptyRows() {
+    const at = chosen && layout.rows[chosen[0]].buttons[chosen[1]];
+    layout.rows = layout.rows.filter((row) => row.buttons.length);
+    chosen = null;
+    layout.rows.forEach((row, r) => { const p = row.buttons.indexOf(at); if (p >= 0) chosen = [r, p]; });
+  }
+
+  $('move-back').onclick = () => change(() => move(-1));
+  $('move-on').onclick = () => change(() => move(1));
+  $('remove').onclick = () => change(() => {
+    layout.rows[chosen[0]].buttons.splice(chosen[1], 1);
+    chosen = null;
+    dropEmptyRows();
+  });
+
+  $('show-dial').onclick = () => change(() => { layout.dial = !layout.dial; });
+  $('show-stick').onclick = () => change(() => { layout.stick = !layout.stick; });
+  $('add-row').onclick = () => change(() => {
+    layout.rows.push({ tall: false, buttons: [newButton()] });
+    chosen = [layout.rows.length - 1, 0];
+  });
+
+  /* The preview: the phone's own page, sent what it would get from here,
+     with sample sessions on its keys. */
+
+  function showPreview() {
+    const page = $('preview-page').contentWindow;
+    if (!page || !layout || !colours) return;
+    const count = layout.keys === 'auto' ? Math.max(1, samples) : layout.keys;
+    const keys = Array.from({ length: count }, (_, i) => {
+      const s = i < samples && SAMPLES[i];
+      return { pin: null, session: s && { id: s.name, dial: false, mic: false, effort: '', ...s } };
+    });
+    page.postMessage({
+      keys, overflow: Math.max(0, samples - count), theme: colours, scroll: true, layout,
+    }, location.origin);
+    $('samples').textContent = `${samples} session${samples === 1 ? '' : 's'}`;
+    $('fewer').disabled = samples === 0;
+    $('more').disabled = samples === MOST_KEYS;
+  }
+
+  $('fewer').onclick = () => { samples--; showPreview(); };
+  $('more').onclick = () => { samples++; showPreview(); };
+
+  $('preview-page').onload = showPreview;
+  $('turn').onclick = () => {
+    const sideways = $('layout').classList.toggle('sideways');
+    $('turn').textContent = sideways ? 'Stand Upright' : 'Turn Sideways';
+  };
+
   /* --------------------------------------------------------------- colours */
 
   /**
@@ -564,19 +961,140 @@
     });
   }
 
-  /** The page wears the theme it edits. */
+  /** The page wears the theme it edits, and so does the preview of the deck. */
   function paint() {
     for (const [name, value] of Object.entries(colours)) document.documentElement.style.setProperty(`--${name}`, value);
+    showPreview();
   }
 
   // Dragging across the picker fires many changes; only the last is sent.
   let saving = null;
   function save() {
     clearTimeout(saving);
-    saving = setTimeout(() => fetch('/setup/theme', {
-      method: 'POST', headers: setupHeaders(true), body: JSON.stringify(colours),
-    }), 120);
+    saving = setTimeout(() => { saving = null; sendTheme(); }, 120);
   }
+
+  function sendTheme() {
+    return fetch('/setup/theme', { method: 'POST', headers: setupHeaders(true), body: JSON.stringify(colours) });
+  }
+
+  /* -------------------------------------------------------------- profiles */
+
+  const DEFAULT_PROFILE = 'Default';
+  const NAME_LIMIT = 24;
+
+  function renderProfiles() {
+    $('profiles-section').hidden = !state.profiles;
+    if (!state.profiles) return;
+    const active = state.activeProfile;
+    $('profiles').replaceChildren(...[DEFAULT_PROFILE, ...state.profiles.map((p) => p.name)].map((name) =>
+      choice(name === active && state.profileEdited ? `${name} · edited` : name, name === active, () => switchTo(name))));
+    const isDefault = active === DEFAULT_PROFILE;
+    $('profile-save').disabled = isDefault || !state.profileEdited;
+    $('profile-rename').disabled = isDefault;
+    $('profile-delete').disabled = isDefault;
+  }
+
+  /** Sends any change still waiting, so a profile is saved from, or replaces, what you see. */
+  async function settle() {
+    if (unsaved) {
+      clearTimeout(unsaved);
+      unsaved = null;
+      await sendLayout();
+    }
+    if (saving) {
+      clearTimeout(saving);
+      saving = null;
+      await sendTheme();
+    }
+  }
+
+  async function profileAction(action, name, extra = '', body) {
+    await settle();
+    const res = await post(`/setup/profiles?action=${action}&name=${encodeURIComponent(name)}${extra}`, body);
+    if (!res.ok) alert(await res.text());
+  }
+
+  function switchTo(name) {
+    const active = state.activeProfile;
+    if (name === active && !state.profileEdited) return;
+    if (state.profileEdited && !confirm(name === active
+      ? `Go back to ${name} as it was saved? Your changes will be lost.`
+      : `Switch to ${name}? Your changes to ${active} haven't been saved.`)) return;
+    profileAction('switch', name);
+  }
+
+  /** A name for a profile, asked for; null if cancelled. */
+  function askName(question, suggestion) {
+    const name = (prompt(question, suggestion) || '').trim().slice(0, NAME_LIMIT);
+    if (!name) return null;
+    if (name.toLowerCase() === DEFAULT_PROFILE.toLowerCase()) {
+      alert('Default is taken: it\'s always the standard deck.');
+      return null;
+    }
+    return name;
+  }
+
+  $('profile-save').onclick = () => profileAction('save', state.activeProfile);
+  $('profile-save-as').onclick = () => {
+    const name = askName('Save this layout and its colours as:', '');
+    if (!name) return;
+    if (state.profiles.some((p) => p.name === name) && !confirm(`Replace the saved ${name}?`)) return;
+    profileAction('save', name);
+  };
+  $('profile-rename').onclick = () => {
+    const name = askName(`Rename ${state.activeProfile} to:`, state.activeProfile);
+    if (name && name !== state.activeProfile) profileAction('rename', state.activeProfile, `&to=${encodeURIComponent(name)}`);
+  };
+  $('profile-delete').onclick = () => {
+    if (confirm(`Delete the profile ${state.activeProfile}? Your deck stays as it is.`)) profileAction('delete', state.activeProfile);
+  };
+
+  /** What you see, as a file: the layout, and only the colours that differ from the default. */
+  $('profile-export').onclick = async () => {
+    await settle();
+    const standard = state.theme.presets[0].colours;
+    const file = {
+      sauzzedeckProfile: 1,
+      name: state.activeProfile,
+      layout,
+      colours: Object.fromEntries(Object.entries(colours).filter(([name, value]) => value !== standard[name])),
+    };
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }));
+    link.download = `${state.activeProfile}.sauzzedeck.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  /**
+   * A profile from a file. Its buttons can type into your agents, so before
+   * it's added you see everything they would type or press.
+   */
+  $('profile-import').onclick = () => $('profile-file').click();
+  $('profile-file').onchange = async () => {
+    const file = $('profile-file').files[0];
+    $('profile-file').value = '';
+    if (!file) return;
+    let profile;
+    try {
+      profile = JSON.parse(await file.text());
+    } catch {
+      return alert(`${file.name} isn't a profile: it isn't valid JSON.`);
+    }
+    if (!profile || typeof profile !== 'object' || !profile.layout || typeof profile.layout !== 'object') {
+      return alert(`${file.name} isn't a SauzzeDeck Pro profile.`);
+    }
+    const doings = (Array.isArray(profile.layout.rows) ? profile.layout.rows : [])
+      .flatMap((row) => (row && Array.isArray(row.buttons) ? row.buttons : []))
+      .filter((b) => b && typeof b.id === 'string' && b.id.startsWith('custom-'))
+      .map((b) => (KEY_NAMES[b.key] ? `• press ${KEY_NAMES[b.key]}` : `• type ${String(b.text || '').slice(0, 200)}`));
+    const name = typeof profile.name === 'string' && profile.name.trim() ? profile.name.trim() : 'Imported';
+    const asked = doings.length
+      ? `Add the profile ${name}? Its buttons would:\n\n${doings.join('\n')}\n\nOnly add profiles from people you trust.`
+      : `Add the profile ${name}? It has none of its own buttons, only the deck's.`;
+    if (confirm(asked)) profileAction('import', name, '', { name, layout: profile.layout, colours: profile.colours });
+  };
 
   /* ------------------------------------------------------------------ start */
 

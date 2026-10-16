@@ -1,23 +1,28 @@
 import Foundation
 
 /// What you set on the setup page: which project is pinned to which key, the
-/// deck's colours, its logo and whether the stick scrolls. Saved as JSON in
-/// Application Support.
+/// deck's layout and colours, the profiles they're saved in, its logo and
+/// whether the stick scrolls. Saved as JSON in Application Support.
 final class Config: Codable {
-    static let keyCount = 6
     static let shared = Config.load()
 
     /// A project folder per key, or nil for a key that takes any session.
-    var pins: [String?] = Array(repeating: nil, count: Config.keyCount)
+    var pins: [String?] = Array(repeating: nil, count: KeyCount.most)
     /// Only the colours that differ from the default theme.
     var colours: [String: String] = [:]
+    var layout = Layout.standard
+    /// Saved looks, besides Default, and the one the deck was last switched to.
+    var profiles: [Profile] = []
+    var activeProfile = Profile.defaultName
     var logo = Logo.sauzze
     /// Whether the stick scrolls Terminal. Off until you turn it on, so a
     /// newly paired phone can do no more than the deck's buttons do.
     var scrollEnabled = false
     var hasCompletedSetup = false
 
-    private enum CodingKeys: String, CodingKey { case pins, colours, logo, scrollEnabled, hasCompletedSetup }
+    private enum CodingKeys: String, CodingKey {
+        case pins, colours, layout, profiles, activeProfile, logo, scrollEnabled, hasCompletedSetup
+    }
 
     init() {}
 
@@ -26,6 +31,12 @@ final class Config: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         pins = try c.decodeIfPresent([String?].self, forKey: .pins) ?? pins
         colours = try c.decodeIfPresent([String: String].self, forKey: .colours) ?? colours
+        // Layouts are checked again as they load: their buttons type into sessions.
+        layout = ((try? c.decodeIfPresent(Layout.self, forKey: .layout)) ?? layout).checked
+        profiles = ((try? c.decodeIfPresent([Profile].self, forKey: .profiles)) ?? []).map {
+            Profile(name: $0.name, layout: $0.layout.checked, colours: $0.colours)
+        }
+        activeProfile = (try? c.decodeIfPresent(String.self, forKey: .activeProfile)) ?? activeProfile
         logo = (try? c.decodeIfPresent(Logo.self, forKey: .logo)) ?? logo
         scrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .scrollEnabled) ?? false
         hasCompletedSetup = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
@@ -34,8 +45,8 @@ final class Config: Codable {
     private static func load() -> Config {
         guard let data = try? Data(contentsOf: Paths.config),
               let config = try? JSONDecoder().decode(Config.self, from: data) else { return Config() }
-        if config.pins.count != keyCount {
-            config.pins = Array((config.pins + Array(repeating: nil, count: keyCount)).prefix(keyCount))
+        if config.pins.count != KeyCount.most {
+            config.pins = Array((config.pins + Array(repeating: nil, count: KeyCount.most)).prefix(KeyCount.most))
         }
         return config
     }
@@ -57,6 +68,107 @@ final class Config: Codable {
     func unpin(_ index: Int) {
         pins[index] = nil
         save()
+    }
+
+    /// Lays the deck out anew. A fixed number of keys has no room for
+    /// projects pinned beyond it.
+    func setLayout(_ layout: Layout) {
+        self.layout = layout
+        if case .fixed(let count) = layout.keys {
+            for i in count..<pins.count { pins[i] = nil }
+        }
+    }
+}
+
+// MARK: Profiles
+
+/// Why a profile couldn't be saved, renamed or added, in the setup page's words.
+struct ProfileError: Error {
+    let message: String
+
+    static let name = ProfileError(message: "Give the profile a name of its own, up to 24 characters.")
+    static let missing = ProfileError(message: "There's no profile by that name.")
+    static let tooMany = ProfileError(message: "That's the most profiles there can be. Delete one first.")
+}
+
+extension Config {
+    func profile(named name: String) -> Profile? {
+        name == Profile.defaultName ? .standard : profiles.first { $0.name == name }
+    }
+
+    /// The deck no longer matches the profile it was switched to.
+    var profileEdited: Bool {
+        guard let active = profile(named: activeProfile) else { return true }
+        return active.layout != layout || active.colours != colours
+    }
+
+    /// Puts a saved profile's layout and colours on the deck.
+    func switchProfile(to name: String) throws {
+        guard let chosen = profile(named: name) else { throw ProfileError.missing }
+        setLayout(chosen.layout)
+        colours = chosen.colours
+        activeProfile = name
+        save()
+    }
+
+    /// Keeps the deck as it is under `name`, replacing a profile of that name.
+    func saveProfile(as name: String) throws {
+        guard let name = Profile.checkedName(name) else { throw ProfileError.name }
+        let kept = Profile(name: name, layout: layout, colours: colours)
+        if let i = profiles.firstIndex(where: { $0.name == name }) {
+            profiles[i] = kept
+        } else {
+            guard profiles.count < Profile.most else { throw ProfileError.tooMany }
+            profiles.append(kept)
+        }
+        activeProfile = name
+        save()
+    }
+
+    func renameProfile(_ name: String, to newName: String) throws {
+        guard let i = profiles.firstIndex(where: { $0.name == name }) else { throw ProfileError.missing }
+        guard let newName = Profile.checkedName(newName) else { throw ProfileError.name }
+        if newName != name && profiles.contains(where: { $0.name == newName }) {
+            throw ProfileError(message: "Another profile already has that name.")
+        }
+        profiles[i].name = newName
+        if activeProfile == name { activeProfile = newName }
+        save()
+    }
+
+    /// The deck stays as it is; it just no longer matches a saved profile.
+    func deleteProfile(_ name: String) {
+        profiles.removeAll { $0.name == name }
+        if activeProfile == name { activeProfile = Profile.defaultName }
+        save()
+    }
+
+    /// Adds a profile from a file, checked as a layout and colours made here
+    /// are, under a name of its own.
+    func importProfile(_ data: Data) throws {
+        let file = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        guard let layoutObject = file["layout"] as? [String: Any],
+              let layoutData = try? JSONSerialization.data(withJSONObject: layoutObject),
+              let layout = Layout.parse(layoutData) else {
+            throw ProfileError(message: "That isn't a profile this deck can add.")
+        }
+        guard profiles.count < Profile.most else { throw ProfileError.tooMany }
+        let name = Profile.checkedName(file["name"] as? String ?? "") ?? "Imported"
+        let colours = Theme.customisations(from: file["colours"] as? [String: Any] ?? [:])
+        profiles.append(Profile(name: unusedName(name), layout: layout, colours: colours))
+        save()
+    }
+
+    /// `name`, or name (2), (3)… when a profile already has it.
+    private func unusedName(_ name: String) -> String {
+        var candidate = name
+        var n = 2
+        while candidate == Profile.defaultName || profiles.contains(where: { $0.name == candidate }) {
+            let suffix = " (\(n))"
+            candidate = name.oneLine(Profile.nameLimit - suffix.count) + suffix
+            n += 1
+        }
+        return candidate
     }
 }
 
