@@ -163,7 +163,9 @@ final class Deck {
             "scroll": Config.shared.scrollEnabled,
             "layout": Config.shared.layout.jsonObject,
         ]
-        return (try? JSONSerialization.data(withJSONObject: state)) ?? Data()
+        // Keys in order: unsorted, the same layout can come out differently
+        // each time, and the phone would take it for a new one.
+        return (try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])) ?? Data()
     }
 
     func attach(_ stream: EventStream, phone: String) {

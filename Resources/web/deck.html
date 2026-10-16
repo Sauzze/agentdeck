@@ -291,7 +291,7 @@
 
   let layoutShown = '';
   function applyLayout(next) {
-    const key = JSON.stringify(next);
+    const key = canonical(next);
     if (key === layoutShown) return;
     layoutShown = key;
     layout = next;
@@ -300,6 +300,16 @@
     $('analog').hidden = !layout.dial && !layout.stick;
     $('analog').classList.toggle('single', layout.dial !== layout.stick);
     buildButtons(layout.rows);
+  }
+
+  /**
+   * A value as JSON with every object's keys in order, so the same layout
+   * reads the same however the computer happened to write it.
+   */
+  function canonical(value) {
+    return JSON.stringify(value, (_, v) => (v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+      : v));
   }
 
   /* ---------------------------------------------------------------- keys */
@@ -364,6 +374,9 @@
   /* ----------------------------------------------------------- buttons */
 
   function buildButtons(rows) {
+    // A control held down as the buttons are drawn afresh is let go first:
+    // its release would be lost with it, and the mic would keep listening.
+    if (held) held();
     disarm();
     $('buttons').replaceChildren(...rows.map((row) => {
       const line = document.createElement('div');
