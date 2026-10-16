@@ -1,5 +1,15 @@
 # SauzzeDeck Pro
 
+> **Support the project.** SauzzeDeck Pro is free. If it earns a place on your
+> desk and you'd like to say thanks, you can send ETH, BNB or any token to this
+> address, on Ethereum, BNB Smart Chain or another EVM network:
+>
+> ```
+> 0x7a81788cf4cbb7357dfe3d98ab85a6422aab26c7
+> ```
+>
+> Check the address after pasting it: transfers can't be reversed.
+
 A control pad for [Claude Code](https://claude.com/claude-code), on your phone.
 
 Six keys light up to show what each of your Claude sessions is doing. You can
@@ -268,18 +278,6 @@ docs/                screenshots for this page
 ## Windows
 
 A Windows version is planned.
-
-## Support the project
-
-SauzzeDeck Pro is free. If it earns a place on your desk and you'd like to
-say thanks, you can send ETH, BNB or any token to this address, on Ethereum,
-BNB Smart Chain or another EVM network:
-
-```
-0x7a81788cf4cbb7357dfe3d98ab85a6422aab26c7
-```
-
-Check the address after pasting it: transfers can't be reversed.
 
 ## License
 
