@@ -47,8 +47,9 @@ What the key colours mean:
 | 🟢 Green | Done, and you haven't looked yet |
 | 🔴 Red | Stopped on an error |
 
-Each session keeps its key until it ends. You can pin projects to specific
-keys, lay the deck out your way and change every colour:
+Sessions keep their order on the keys; with a fixed number of keys, each
+keeps its own key until it ends. You can pin projects to specific keys, lay
+the deck out your way and change every colour:
 
 <p align="center">
   <img src="docs/themes.png" alt="The deck in five colour schemes: Default, Midnight, Moonlight, Light and High contrast" width="100%">
