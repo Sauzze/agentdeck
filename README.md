@@ -22,7 +22,7 @@ to install from an app store.
 | **Dial** | Thinking effort: low, medium, high, extra high, max. If Claude is mid-task, the change waits until it finishes. |
 | **Stick** | When Claude asks you something, slide up or down to choose an answer and tap to confirm. The rest of the time it's a trackpad for your Mac: drag to move, tap to click, two-finger tap to right-click, two-finger drag to scroll. Tap its CURSOR / CHOICES label to switch by hand. |
 | **✓ and ✕** | Accept or reject a permission request. |
-| **🎙 (hold)** | Talk to Claude. Release to send. |
+| **🎙 (hold)** | Talk to Claude. Release, and Claude sends what you said once it's three words or more. |
 | **esc · send · /clear** | Interrupt Claude, press Return, or start a fresh conversation. `/clear` asks you to tap twice, and waits until Claude isn't busy. |
 
 What the key colours mean:
@@ -51,6 +51,7 @@ colour editor in a minute.
   other terminal apps (iTerm, Ghostty, VS Code…) don't appear on the deck, because
   its buttons can only reach Terminal.
 - A phone on the same Wi-Fi as your Mac
+
 ## Install
 
 There are two ways. Both give you the same app.
@@ -88,7 +89,6 @@ The setup page walks you through three steps:
 <p align="center">
   <img src="docs/setup.png" alt="The setup page: a three-step checklist, the keys, and a pairing code for your phone" width="720">
 </p>
-
 
 1. **Connect Claude Code.** This lets your Claude sessions tell AgentDeck what
    they're doing. Restart any Claude sessions that were already open.
@@ -131,17 +131,22 @@ AgentDeck again from Applications.
 
 ## Voice
 
-The mic button uses Claude Code's own voice input (`/voice`). Connecting Claude
-Code turns it on in *tap* mode, unless you had already set voice up. If you
-had, run `/voice tap` once in Claude.
+The mic button uses Claude Code's own voice input (`/voice`), in *tap* mode.
+Connecting Claude Code sets that up, unless you had already set voice up
+yourself. In that case, make sure `~/.claude/settings.json` contains:
+
+```json
+"voice": { "enabled": true, "mode": "tap" }
+```
 
 Voice input needs Claude Code signed in with a Claude.ai account. Claude Code
 sends your audio to Anthropic to be transcribed. AgentDeck itself never hears it.
 
 ## Privacy and security
 
-- **Nothing leaves your network.** AgentDeck talks only to your phone and to
-  Claude Code on your Mac. It has no accounts, no analytics and no cloud service.
+- **AgentDeck sends nothing off your network.** It talks only to your phone and
+  to Claude Code on your Mac. It has no accounts, no analytics and no cloud
+  service.
 - **Your phone needs a key.** Every request carries a long random key that only
   your paired phone has. The key is never typed: the pairing code hands it
   over. A pairing code exists only after you ask for one. It works once, expires
@@ -166,7 +171,7 @@ permission, because macOS treats each version as a new app. Click
 **Open Settings** on the setup page again afterwards, and turn AgentDeck back on.
 
 **The mic types a space instead of listening.** Claude's input box has to be
-empty, and voice has to be in tap mode: run `/voice tap` in Claude.
+empty, and voice has to be in tap mode: see [Voice](#voice).
 
 **The phone can't connect.** Check that both devices are on the same Wi-Fi.
 If macOS asked whether AgentDeck may accept incoming connections, allow it.
@@ -184,8 +189,9 @@ that port. Quit it and open AgentDeck again.
 
 Connecting Claude Code also turned on its voice input, if it was off, and left a
 backup of your Claude settings at `~/.claude/settings.json.agentdeck.bak`.
-Disconnecting leaves voice as it is. Run `/voice off` in Claude if you don't want
-it, and delete the backup once you no longer need it.
+Disconnecting leaves voice as it is. Remove the `voice` entry from
+`~/.claude/settings.json` if you don't want it, and delete the backup once you
+no longer need it.
 
 ## How it works
 
