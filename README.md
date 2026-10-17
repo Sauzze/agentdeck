@@ -253,6 +253,10 @@ the room works like the keys:
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
 
+**Full screen:** tap **⛶** above the room, and the dial and buttons step aside
+for it. The desks, the red button and the microphone work as above, and the
+corner brings the controls back. Turn the phone sideways for the biggest room.
+
 **On a spare screen**, such as an old tablet, a TV or a second monitor, open the
 address your phone uses with `/office` at the end. It pairs like a phone, then
 shows the office alone, full screen, and can be tapped too.

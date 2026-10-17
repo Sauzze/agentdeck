@@ -101,6 +101,16 @@
   .away { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 16px; color: var(--dim); font-size: 15px; text-align: center; }
   .away button { padding: 12px 20px; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+  /* The phone's office alone, full screen: asked for above the room, at the
+     legend's height, and left from the screen's corner. */
+  .full-switch { position: absolute; bottom: 100%; right: -6px; padding: 4px 6px; background: none; border: 0;
+    line-height: 0; color: var(--faint); }
+  .full-switch svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .full-switch .shrink, .full .full-switch .grow { display: none; }
+  .full .full-switch .shrink { display: inline; }
+  .full .full-switch { position: fixed; bottom: auto; top: calc(env(safe-area-inset-top) + 4px);
+    right: calc(env(safe-area-inset-right) + 4px); padding: 12px; color: var(--dim); }
 
   @keyframes pulse { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 30%, var(--cap-top)), color-mix(in srgb, var(--c) 20%, var(--cap))); } }
   @keyframes blink { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 38%, var(--cap-top)), color-mix(in srgb, var(--c) 28%, var(--cap))); } }
@@ -207,14 +217,15 @@
   .status.off { color: var(--error); }
   .status.flash { color: var(--ink); }
 
-  /* /office: the office alone, filling a screen of its own. What the status
-     line has to say floats over it, and only while it says it. */
-  .whole .deck { display: flex;
+  /* /office, and the phone's office full screen: the office alone, filling
+     the screen. What the status line has to say floats over it, and only
+     while it says it. */
+  .whole .deck, .full .deck { display: flex;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  .whole .view { flex: 1; height: auto; }
-  .whole .controls, .whole .view-switch { display: none; }
-  .whole .status { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; }
-  .whole .status:not(.flash):not(.off) { visibility: hidden; }
+  .whole .view, .full .view { flex: 1; height: auto; }
+  .whole .controls, .whole .view-switch, .full .controls, .full .view-switch, .full .install { display: none; }
+  .whole .status, .full .status { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; }
+  .whole .status:not(.flash):not(.off), .full .status:not(.flash):not(.off) { visibility: hidden; }
 
   /* Sideways: keys on the left, everything else on the right. */
   @media (orientation: landscape) {
@@ -236,6 +247,7 @@
     <section class="keys" id="keys"></section>
     <section class="office" id="office" hidden>
       <canvas id="office-canvas"></canvas>
+      <button class="full-switch" id="full-switch" aria-label="Full screen" hidden><svg viewBox="0 0 24 24"><path class="grow" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="shrink" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
       <button class="pop-out" id="pop-out" title="Keep the office on top of your other windows" hidden>POP OUT</button>
       <div class="away" id="away" hidden>The office is in its own window.<button class="cap" id="bring-back">Bring it back</button></div>
     </section>
@@ -426,6 +438,9 @@
     $('keys').hidden = showOffice;
     $('office').hidden = !showOffice;
     office.setVisible(showOffice);
+    // Full screen is the phone's office alone: with the keys back, it ends.
+    $('full-switch').hidden = whole || preview || !showOffice;
+    if (full && !showOffice) setFull(false);
     const [keys, room] = $('view-switch').children;
     keys.classList.toggle('on', !showOffice);
     room.classList.toggle('on', showOffice);
@@ -436,6 +451,37 @@
     try { localStorage.setItem('view', JSON.stringify({ chosen, office: $('office').hidden })); } catch {}
     tick();
     showView();
+  });
+
+  /* --------------------------------------------------------- full screen */
+
+  /**
+   * The phone's office alone, filling the screen as /office does: the dial
+   * and buttons step aside, and the room's desks, red button and microphone
+   * do their work. Where the browser can, its own bars go too; iPhone
+   * Safari keeps them, having no full screen for a page. The room is wide,
+   * so it's biggest sideways. A reload brings the controls back.
+   */
+  let full = false;
+
+  function setFull(on) {
+    full = on;
+    document.body.classList.toggle('full', on);
+    $('full-switch').setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
+    const page = document.documentElement;
+    if (on && page.requestFullscreen && !document.fullscreenElement) page.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (on && matchMedia('(orientation: portrait)').matches) flash('Turn your phone sideways for a bigger office');
+  }
+
+  $('full-switch').addEventListener('click', () => {
+    tick();
+    setFull(!full);
+  });
+
+  // Leaving the browser's full screen, by its back gesture or a key, leaves the office's too.
+  document.addEventListener('fullscreenchange', () => {
+    if (full && !document.fullscreenElement) setFull(false);
   });
 
   /* ------------------------------------------------------------ pop out */
