@@ -262,7 +262,8 @@ func (d *Deck) snapshot() []byte {
 				"id": s.ID, "name": s.Name(), "project": s.ProjectName(), "state": s.State, "effort": effort,
 				"pending": s.PendingEffort != "", "agent": s.Agent, "agentName": s.Agent.Name(),
 				"dial": s.Agent.HasEffortDial(), "mic": s.Agent.HasVoice(),
-				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "subagents": append([]Subagent{}, s.Subagents...),
+				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "model": orNull(s.Model),
+				"subagents": append([]Subagent{}, s.Subagents...),
 				"maxPressedAt": millisOrNull(s.MaxPressedAt), "compacting": s.Compacting,
 				"turnStartedAt": millisOrNull(s.TurnStartedAt), "errorKind": orNull(s.ErrorKind),
 			}

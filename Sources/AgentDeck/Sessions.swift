@@ -47,10 +47,18 @@ final class Session {
     /// Why the last turn failed, as Claude Code names it: "rate_limit",
     /// "overloaded"… Kept while the session shows the error.
     var errorKind = ""
+    /// The model Claude Code is running, such as "claude-opus-5-5", which
+    /// the office dresses its agent for. Empty until it's known.
+    var model = ""
+    /// Claude Code's transcript of the conversation, which names the model
+    /// of each reply.
+    var transcript = ""
 
     struct Subagent {
         let id: String
         let type: String
+        /// Its own model, from its own transcript, once it has replied.
+        var model = ""
     }
 
     init(id: String, agent: Agent, folder: String, project: String, startedAt: Double) {
@@ -151,7 +159,9 @@ final class Sessions {
         let session = byID[id] ?? adopt(id: id, agent: agent, folder: folder, startedIn: startedIn, tty: tty, at: time)
         // Subagents come and go by id, so the order their events arrive in
         // doesn't matter.
-        let subagentsChanged = trackSubagents(name, event, of: session)
+        let tracked = trackSubagents(name, event, of: session)
+        let dressed = dressSubagent(event, of: session)
+        let subagentsChanged = tracked || dressed
         guard time >= session.lastEventAt else {
             if subagentsChanged { onChange() }
             return
@@ -162,6 +172,7 @@ final class Sessions {
         if let effort = event["effort"] as? [String: Any], let level = effort["level"] as? String {
             session.effort = level
         }
+        followModel(name, event, of: session)
         follow(name, event, in: session, at: time)
         if let next = transition(for: name, event: event) {
             session.state = next
@@ -182,6 +193,7 @@ final class Sessions {
         if let previous {
             session.startedAt = previous.startedAt
             session.effort = previous.effort
+            session.model = previous.model
             end(previous.id, at: time)
         }
         byID[id] = session
@@ -212,6 +224,32 @@ final class Sessions {
         }
         guard !session.stoppedSubagents.contains(id), !session.subagents.contains(where: { $0.id == id }) else { return false }
         session.subagents.append(.init(id: id, type: event["agent_type"] as? String ?? ""))
+        return true
+    }
+
+    /// The model the session runs. Claude Code names it when the session
+    /// starts, though not always, and a /model can change it, so each turn's
+    /// end also reads it from the latest reply in the transcript.
+    private func followModel(_ name: String, _ event: [String: Any], of session: Session) {
+        guard event["agent_id"] == nil else { return }
+        if let path = event["transcript_path"] as? String, !path.isEmpty { session.transcript = path }
+        if let model = event["model"] as? String, !model.isEmpty {
+            session.model = model
+        } else if name == "Stop" || (name == "SessionStart" && session.model.isEmpty),
+                  let model = Transcripts.lastModel(in: session.transcript) {
+            session.model = model
+        }
+    }
+
+    /// A subagent's model, which no hook names: it's in the first reply of the
+    /// subagent's own transcript, kept beside its agent's. Looked for with each
+    /// of its events until found.
+    private func dressSubagent(_ event: [String: Any], of session: Session) -> Bool {
+        guard let id = event["agent_id"] as? String, !session.transcript.isEmpty,
+              let i = session.subagents.firstIndex(where: { $0.id == id }), session.subagents[i].model.isEmpty else { return false }
+        let folder = (session.transcript as NSString).deletingPathExtension
+        guard let model = Transcripts.firstModel(in: "\(folder)/subagents/agent-\(id).jsonl") else { return false }
+        session.subagents[i].model = model
         return true
     }
 
@@ -328,5 +366,44 @@ final class Sessions {
         let now = Date().timeIntervalSince1970 * 1000
         for session in gone { end(session.id, at: now) }
         onChange()
+    }
+}
+
+/// Claude Code's transcripts: a line of JSON for each message, and each reply
+/// names the model that wrote it. Only that name is read, from the end of a
+/// conversation or the start of a subagent's.
+enum Transcripts {
+    /// How much of a transcript is read: replies are short lines, but a tool's
+    /// output between them can be long.
+    private static let reach: UInt64 = 256 * 1024
+
+    static func lastModel(in path: String) -> String? {
+        lines(of: path, fromEnd: true).reversed().lazy.compactMap(model(of:)).first
+    }
+
+    static func firstModel(in path: String) -> String? {
+        lines(of: path, fromEnd: false).lazy.compactMap(model(of:)).first
+    }
+
+    private static func lines(of path: String, fromEnd: Bool) -> [Data] {
+        guard !path.isEmpty, let file = FileHandle(forReadingAtPath: path) else { return [] }
+        defer { try? file.close() }
+        let size = (try? file.seekToEnd()) ?? 0
+        let start = fromEnd && size > reach ? size - reach : 0
+        guard (try? file.seek(toOffset: start)) != nil, let data = try? file.read(upToCount: Int(reach)) else { return [] }
+        var lines = data.split(separator: 0x0A)
+        // A line cut off by where the reading starts or stops is no use.
+        if start > 0, !lines.isEmpty { lines.removeFirst() }
+        if start + UInt64(data.count) < size, !lines.isEmpty { lines.removeLast() }
+        return lines.map { Data($0) }
+    }
+
+    private static func model(of line: Data) -> String? {
+        guard let entry = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+              let message = entry["message"] as? [String: Any],
+              let model = message["model"] as? String,
+              // Claude Code's own notices, such as an API error, aren't a model's.
+              !model.isEmpty, model != "<synthetic>" else { return nil }
+        return model
     }
 }

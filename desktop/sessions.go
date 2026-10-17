@@ -1,6 +1,8 @@
 package desktop
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -58,11 +60,19 @@ type Session struct {
 	// Why the last turn failed, as Claude Code names it: "rate_limit",
 	// "overloaded"… Kept while the session shows the error.
 	ErrorKind string
+	// The model Claude Code is running, such as "claude-opus-5-5", which the
+	// office dresses its agent for. Empty until it's known.
+	Model string
+	// Claude Code's transcript of the conversation, which names the model of
+	// each reply.
+	Transcript string
 }
 
 type Subagent struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
+	// Its own model, from its own transcript, once it has replied.
+	Model string `json:"model"`
 }
 
 func (s *Session) Name() string        { return lastPart(s.Folder) }
@@ -187,6 +197,9 @@ func (s *Sessions) Apply(event map[string]any, agent Agent, tab, startedIn strin
 	// Subagents come and go by id, so the order their events arrive in
 	// doesn't matter.
 	subagentsChanged := trackSubagents(name, event, session)
+	if dressSubagent(event, session) {
+		subagentsChanged = true
+	}
 	if at < session.LastEventAt {
 		return subagentsChanged
 	}
@@ -202,6 +215,7 @@ func (s *Sessions) Apply(event map[string]any, agent Agent, tab, startedIn strin
 			session.Effort = level
 		}
 	}
+	followModel(name, event, session)
 	followDetails(name, event, session, at)
 	if next, ok := transition(name, event); ok {
 		session.State = next
@@ -236,6 +250,7 @@ func (s *Sessions) adopt(id string, agent Agent, folder, startedIn, tab string, 
 	if previous != nil {
 		session.StartedAt = previous.StartedAt
 		session.Effort = previous.Effort
+		session.Model = previous.Model
 		s.end(previous.ID, at)
 	}
 	s.byID[id] = session
@@ -284,6 +299,112 @@ func trackSubagents(name string, event map[string]any, session *Session) bool {
 	kind, _ := event["agent_type"].(string)
 	session.Subagents = append(session.Subagents, Subagent{ID: id, Type: kind})
 	return true
+}
+
+// followModel keeps the model the session runs. Claude Code names it when the
+// session starts, though not always, and a /model can change it, so each
+// turn's end also reads it from the latest reply in the transcript.
+func followModel(name string, event map[string]any, session *Session) {
+	if _, fromSubagent := event["agent_id"]; fromSubagent {
+		return
+	}
+	if path, _ := event["transcript_path"].(string); path != "" {
+		session.Transcript = path
+	}
+	if model, _ := event["model"].(string); model != "" {
+		session.Model = model
+	} else if name == "Stop" || (name == "SessionStart" && session.Model == "") {
+		if model := lastModel(session.Transcript); model != "" {
+			session.Model = model
+		}
+	}
+}
+
+// dressSubagent finds a subagent's model, which no hook names: it's in the
+// first reply of the subagent's own transcript, kept beside its agent's.
+// Looked for with each of its events until found.
+func dressSubagent(event map[string]any, session *Session) bool {
+	id, _ := event["agent_id"].(string)
+	i := slices.IndexFunc(session.Subagents, func(s Subagent) bool { return s.ID == id })
+	if id == "" || session.Transcript == "" || i < 0 || session.Subagents[i].Model != "" {
+		return false
+	}
+	folder := strings.TrimSuffix(session.Transcript, filepath.Ext(session.Transcript))
+	model := firstModel(filepath.Join(folder, "subagents", "agent-"+id+".jsonl"))
+	if model == "" {
+		return false
+	}
+	session.Subagents[i].Model = model
+	return true
+}
+
+// transcriptReach is how much of a transcript is read: replies are short
+// lines, but a tool's output between them can be long.
+const transcriptReach = 256 * 1024
+
+// lastModel and firstModel read Claude Code's transcripts: a line of JSON for
+// each message, and each reply names the model that wrote it. Only that name
+// is read, from the end of a conversation or the start of a subagent's.
+func lastModel(path string) string {
+	lines := transcriptLines(path, true)
+	for i := len(lines) - 1; i >= 0; i-- {
+		if model := modelOf(lines[i]); model != "" {
+			return model
+		}
+	}
+	return ""
+}
+
+func firstModel(path string) string {
+	for _, line := range transcriptLines(path, false) {
+		if model := modelOf(line); model != "" {
+			return model
+		}
+	}
+	return ""
+}
+
+func transcriptLines(path string, fromEnd bool) [][]byte {
+	if path == "" {
+		return nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil
+	}
+	size, start := info.Size(), int64(0)
+	if fromEnd && size > transcriptReach {
+		start = size - transcriptReach
+	}
+	data := make([]byte, transcriptReach)
+	n, _ := file.ReadAt(data, start)
+	lines := bytes.Split(data[:n], []byte("\n"))
+	// A line cut off by where the reading starts or stops is no use.
+	if start > 0 && len(lines) > 0 {
+		lines = lines[1:]
+	}
+	if start+int64(n) < size && len(lines) > 0 {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func modelOf(line []byte) string {
+	var entry struct {
+		Message struct {
+			Model string `json:"model"`
+		} `json:"message"`
+	}
+	// Claude Code's own notices, such as an API error, aren't a model's.
+	if json.Unmarshal(line, &entry) != nil || entry.Message.Model == "<synthetic>" {
+		return ""
+	}
+	return entry.Message.Model
 }
 
 // followDetails keeps what the office shows besides the state: the tool running and

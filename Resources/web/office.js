@@ -272,6 +272,25 @@
   const EFFORT_PAINT = { low: 0xf2efe9, medium: 0xf3cdb8, high: 0xee9f82, xhigh: 0xe0603f, max: 0xd4140b };
   /** Each agent wears its own colour. */
   const SHIRTS = { claude: 0xd97757, codex: 0x10a37f, gemini: 0x4c8bf5, opencode: 0x9aa0a6, grok: 0xe8e8e8 };
+  /**
+   * Claude Code's agents and interns dress for the model they run, the
+   * bigger the model the smarter: Haiku in a T-shirt and jeans, Sonnet in a
+   * collared shirt, Opus in a jacket, Fable in a suit and tie. Other agents,
+   * and a model not known yet, wear their agent's colour.
+   */
+  const MODEL_OUTFITS = {
+    haiku: { style: 'tee', shirt: 0xf59a3e, pants: 0x46679a, shoes: 0xe9e6df },
+    sonnet: { style: 'collar', shirt: 0xd97757 },
+    opus: { style: 'jacket', shirt: 0xa94a2c },
+    fable: { style: 'suit', shirt: 0x2c2f3a, pants: 0x23252d, tie: 0xd97757 },
+  };
+
+  /** What an agent running `model` wears: a style, and its colours. */
+  function outfitOf(agent, model) {
+    const family = (/haiku|sonnet|opus|fable/.exec(model || '') || [''])[0];
+    const dressed = agent === 'claude' ? MODEL_OUTFITS[family] : null;
+    return { style: 'plain', shirt: SHIRTS[agent] ?? SHIRTS.claude, pants: PALETTE.pants, shoes: PALETTE.shoes, ...dressed };
+  }
   /** Staff wear plain colours, none of them an agent's. */
   const STAFF_SHIRTS = [0x8a8f9c, 0x3e4a66, 0xd8d4c8, 0xb08a3a, 0x6b7f5a];
   /** The deck's own colours for each state, for a theme that leaves one out. */
@@ -343,6 +362,7 @@
       this.id = subagent.id;
       this.agentId = session.id;
       this.agent = session.agent; // they wear their agent's colour
+      this.model = subagent.model || ''; // or dress for their own model, once it's known
       this.look = lookOf(`${subagent.type} ${subagent.id}`);
       this.position = { ...DOOR };
       this.path = [];
@@ -574,7 +594,10 @@
         if (s.session) for (const subagent of s.session.subagents || []) wanted.set(subagent.id, { subagent, session: s.session });
       }
       for (const intern of this.interns) {
-        if (intern.isLeaving || wanted.has(intern.id)) continue;
+        const still = wanted.get(intern.id);
+        // A subagent's model is known once it has replied.
+        if (still && still.subagent.model) intern.model = still.subagent.model;
+        if (intern.isLeaving || still) continue;
         intern.isLeaving = true;
         // One that never got in just goes.
         if (intern.slot === null) intern.path = [];
@@ -2069,8 +2092,10 @@
       const nod = isListener(person) && since < NOD_LENGTH && Math.floor((since / NOD_LENGTH) * 4) % 2 === 0 ? 1 : 0;
       const top = topOf(person, pose) + nod;
       const { look } = person, away = person.isFacingAway;
-      const shirtColour = person.isStaff ? STAFF_SHIRTS[Math.floor(look.phase * STAFF_SHIRTS.length) % STAFF_SHIRTS.length]
-        : SHIRTS[person.session.agent] ?? SHIRTS.claude;
+      const outfit = person.isStaff
+        ? { ...outfitOf(null), shirt: STAFF_SHIRTS[Math.floor(look.phase * STAFF_SHIRTS.length) % STAFF_SHIRTS.length] }
+        : outfitOf(person.session.agent, person.session.model);
+      const shirtColour = outfit.shirt;
       const sleeve = (px, py, w, h) => {
         ctx.fillStyle = css(shirtColour, 1, 0.78);
         ctx.fillRect(ox + px * scale, oy + py * scale, w * scale, h * scale);
@@ -2080,15 +2105,16 @@
       if (pose.kind !== 'sit' && pose.kind !== 'slump') {
         const lift = pose.kind === 'walk' ? (pose.step === 0 ? [1, 0] : [0, 1]) : pose.kind === 'tap' ? [0, pose.beat] : [0, 0];
         fill(x - 3, top + 17, 7, 1, SHADOW);
-        fill(x - 3, top + 13, 7, 1, PALETTE.pants);
-        fill(x - 2, top + 14 - lift[0], 2, 2, PALETTE.pants);
-        fill(x + 1, top + 14 - lift[1], 2, 2, PALETTE.pants);
-        fill(x - 2, top + 16 - lift[0], 2, 1, PALETTE.shoes);
-        fill(x + 1, top + 16 - lift[1], 2, 1, PALETTE.shoes);
+        fill(x - 3, top + 13, 7, 1, outfit.pants);
+        fill(x - 2, top + 14 - lift[0], 2, 2, outfit.pants);
+        fill(x + 1, top + 14 - lift[1], 2, 2, outfit.pants);
+        fill(x - 2, top + 16 - lift[0], 2, 1, outfit.shoes);
+        fill(x + 1, top + 16 - lift[1], 2, 1, outfit.shoes);
       }
 
       // Shirt and arms
       fill(x - 3, top + 7, 7, 6, shirtColour);
+      if (!away) drawOutfitFront(x, top + 7, 3, 6, outfit);
       if (pose.kind === 'wave') {
         sleeve(x - 4, top + 8, 1, 4);
         dot(x - 4, top + 12, look.skin);
@@ -2423,22 +2449,47 @@
     }
 
     /**
-     * A subagent, as an intern: 13 art pixels tall, in their agent's colour,
-     * with a badge.
+     * The front of an outfit, over a shirt `half` either side of `x` and
+     * `rows` tall from `y`: a T-shirt's stripe, a shirt's collar and buttons,
+     * the shirt under a jacket, or a suit's tie.
+     */
+    function drawOutfitFront(x, y, half, rows, outfit) {
+      const white = PALETTE.paper;
+      if (outfit.style === 'tee') {
+        fill(x - half, y + 2, half * 2 + 1, 1, white);
+      } else if (outfit.style === 'collar') {
+        dot(x - 2, y, white);
+        dot(x + 2, y, white);
+        for (let row = 2; row < rows; row += 2) dot(x, y + row, darker(outfit.shirt));
+      } else if (outfit.style === 'jacket') {
+        fill(x, y, 1, rows - 2, white);
+      } else if (outfit.style === 'suit') {
+        dot(x - 1, y, white);
+        dot(x + 1, y, white);
+        fill(x, y, 1, rows - 2, outfit.tie);
+      }
+    }
+
+    /**
+     * A subagent, as an intern: 13 art pixels tall, dressed as their agent's
+     * agents are or for their own model, with a badge.
      */
     function drawIntern(intern) {
       const x = Math.round(intern.position.x), feet = Math.round(intern.position.y), top = feet - 13;
-      const { look } = intern, shirt = SHIRTS[intern.agent] ?? SHIRTS.claude;
+      const { look } = intern, outfit = outfitOf(intern.agent, intern.model), shirt = outfit.shirt;
       const step = intern.isWalking ? Math.floor(now * 7) % 2 : null;
       const lift = step === null ? [0, 0] : step === 0 ? [1, 0] : [0, 1];
       fill(x - 2, feet, 5, 1, SHADOW);
-      fill(x - 2, top + 9, 5, 1, PALETTE.pants);
-      fill(x - 1, top + 10 - lift[0], 1, 2, PALETTE.pants);
-      fill(x + 1, top + 10 - lift[1], 1, 2, PALETTE.pants);
-      dot(x - 1, top + 12 - lift[0], PALETTE.shoes);
-      dot(x + 1, top + 12 - lift[1], PALETTE.shoes);
+      fill(x - 2, top + 9, 5, 1, outfit.pants);
+      fill(x - 1, top + 10 - lift[0], 1, 2, outfit.pants);
+      fill(x + 1, top + 10 - lift[1], 1, 2, outfit.pants);
+      dot(x - 1, top + 12 - lift[0], outfit.shoes);
+      dot(x + 1, top + 12 - lift[1], outfit.shoes);
       fill(x - 2, top + 5, 5, 4, shirt);
-      dot(x, top + 6, PALETTE.bubble);
+      drawOutfitFront(x, top + 5, 2, 4, outfit);
+      // The badge goes beside buttons, a jacket's opening or a tie.
+      if (outfit.style === 'plain' || outfit.style === 'tee') dot(x, top + 6, PALETTE.bubble);
+      else dot(x + 1, top + 7, PALETTE.bubble);
       ctx.fillStyle = css(shirt, 1, 0.78);
       for (const side of [-3, 3]) ctx.fillRect(ox + (x + side) * scale, oy + (top + 6) * scale, scale, 2 * scale);
       dot(x - 3, top + 8, look.skin);

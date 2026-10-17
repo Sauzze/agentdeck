@@ -160,7 +160,10 @@ final class Deck {
                         "dial": s.agent.hasEffortDial, "mic": s.agent.hasVoice,
                         "activity": s.activity ?? NSNull(),
                         "tool": s.tool.isEmpty ? NSNull() : s.tool,
-                        "subagents": s.subagents.map { ["id": $0.id, "type": $0.type] },
+                        "model": s.model.isEmpty ? NSNull() : s.model,
+                        "subagents": s.subagents.map { subagent -> [String: Any] in
+                            ["id": subagent.id, "type": subagent.type, "model": subagent.model.isEmpty ? NSNull() : subagent.model]
+                        },
                         "maxPressedAt": s.maxPressedAt.map { Int64($0) } ?? NSNull(),
                         "compacting": s.compacting,
                         "turnStartedAt": s.turnStartedAt.map { Int64($0) } ?? NSNull(),
