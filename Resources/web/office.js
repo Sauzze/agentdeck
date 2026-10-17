@@ -680,6 +680,17 @@
   const LABEL_SIZE = 3.4;
   /** …and never smaller than this on screen, in CSS pixels, so a phone can read it. */
   const LABEL_SMALLEST = 8;
+  /**
+   * How long a turn has run, short enough for its monitor: 9:41 for the
+   * first ten minutes, then 12m, then 2h.
+   */
+  function turnLength(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 10) return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.min(Math.floor(minutes / 60), 99)}h`;
+  }
+
   /** After this long, a turn's timer shows its agent sweating, in seconds. */
   const LONG_TURN = 600;
   /** Digits and a few marks, three art pixels wide and five tall, for timers and counts. */
@@ -688,6 +699,7 @@
     3: ['111', '001', '111', '001', '111'], 4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
     6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '001', '001', '001'], 8: ['111', '101', '111', '101', '111'],
     9: ['111', '101', '111', '001', '111'], ':': ['0', '1', '0', '1', '0'], '+': ['000', '010', '111', '010', '000'],
+    m: ['000', '000', '111', '111', '101'], h: ['100', '100', '111', '101', '101'],
   };
   /** How long everyone looks up when the mic goes on, as if the boss were shouting. */
   const LOOK_UP_LENGTH = 1;
@@ -1583,7 +1595,7 @@
       const session = sessionAt(desk);
       if (!session || !session.turnStartedAt || (session.state !== 'thinking' && session.state !== 'asking')) return;
       const seconds = Math.max(0, Math.floor((Date.now() - session.turnStartedAt) / 1000));
-      const text = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      const text = turnLength(seconds);
       pixelText(text, x + 13 - Math.floor(pixelWidth(text) / 2), y - 8, PALETTE.bubble, false);
 
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
