@@ -300,7 +300,8 @@ Mac app, for now.
 
 **Full screen:** tap **⛶** above the room, and the dial and buttons step aside
 for it. The desks, the red button and the microphone work as above, and the
-corner brings the controls back. Turn the phone sideways for the biggest room.
+corner brings the controls back. Held upright, the room stands upright too: the
+lounge moves below the desks, through a doorway at the end of the corridor.
 
 **On a spare screen**, such as an old tablet, a TV or a second monitor, open the
 address your phone uses with `/office` at the end. It pairs like a phone, then

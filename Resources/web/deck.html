@@ -484,8 +484,8 @@
    * The phone's office alone, filling the screen as /office does: the dial
    * and buttons step aside, and the room's desks, red button and microphone
    * do their work. Where the browser can, its own bars go too; iPhone
-   * Safari keeps them, having no full screen for a page. The room is wide,
-   * so it's biggest sideways. A reload brings the controls back.
+   * Safari keeps them, having no full screen for a page. Held upright, the
+   * room stands upright too. A reload brings the controls back.
    */
   let full = false;
   // Beside the controls, the room is seen through a window, rounded like the
@@ -502,7 +502,6 @@
     const page = document.documentElement;
     if (on && page.requestFullscreen && !document.fullscreenElement) page.requestFullscreen().catch(() => {});
     if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    if (on && matchMedia('(orientation: portrait)').matches) flash('Turn your phone sideways for a bigger office');
   }
 
   $('full-switch').addEventListener('click', () => {

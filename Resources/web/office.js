@@ -4,8 +4,8 @@
  *
  * Each key is a desk, in the same order, with a person at it who acts out
  * what their session is doing. Everything is drawn in code on a 320 × 180
- * grid of art pixels, scaled by a whole number of the screen's pixels so
- * every edge stays sharp.
+ * grid of art pixels, or 224 × 372 on a screen held upright, scaled by a
+ * whole number of the screen's pixels so every edge stays sharp.
  *
  *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown), setFramed(framed), moved() }
  *
@@ -47,16 +47,16 @@
   const lane = (desk) => DESKS[desk].y - 5;
   const laneNearest = (y) => DESK_ROWS.map((row) => row - 5).reduce((a, b) => (Math.abs(b - y) < Math.abs(a - y) ? b : a));
 
-  /** Where idle people spend their time in the lounge, whatever its corner holds. */
+  /** Where idle people spend their time in the lounge, whatever its corner holds, and the part of the lounge each is by. */
   const LOUNGE_SPOTS = [
-    { x: 243, y: 50, pose: 'away' },  // the coffee machine
-    { x: 274, y: 47, pose: 'away' },  // the window
-    { x: 297, y: 55, pose: 'stand' }, // the water cooler
-    { x: 258, y: 116, pose: 'sit' },  // the couch
-    { x: 276, y: 116, pose: 'sit' },
-    { x: 294, y: 116, pose: 'sit' },
-    { x: 238, y: 158, pose: 'stand' }, // ping-pong
-    { x: 298, y: 158, pose: 'stand' },
+    { x: 243, y: 50, pose: 'away', part: 'wall' },  // the coffee machine
+    { x: 274, y: 47, pose: 'away', part: 'wall' },  // the window
+    { x: 297, y: 55, pose: 'stand', part: 'wall' }, // the water cooler
+    { x: 258, y: 116, pose: 'sit', part: 'couch' },  // the couch
+    { x: 276, y: 116, pose: 'sit', part: 'couch' },
+    { x: 294, y: 116, pose: 'sit', part: 'couch' },
+    { x: 238, y: 158, pose: 'stand', part: 'pong' }, // ping-pong
+    { x: 298, y: 158, pose: 'stand', part: 'pong' },
   ];
   const PING_PONG = [6, 7];
 
@@ -71,6 +71,42 @@
   const MIC = { x: 311, y: 176 };
   /** The plant, moved to the lounge's bottom-left to make room for it: its leaves' left edge. */
   const PLANT_X = 226;
+
+  /**
+   * The room's two shapes. Wide, as above, for a screen on its side. Tall,
+   * for one held upright: the same back wall, door and desks, with the
+   * lounge below them, behind a wall of its own that the corridor runs
+   * through. Each part of the lounge is drawn as in the wide room, moved by
+   * the tall room's offset for that part, and so is every place round it.
+   */
+  const WIDE = { width: WIDTH, height: HEIGHT, offsets: {} };
+  const TALL = {
+    width: 224, height: 372,
+    loungeWall: 216, // where the lounge's wall meets the floor: the back wall's height below the desks
+    offsets: {
+      wall: { x: -214, y: 176 }, // the counter, the window and the cooler, along the lounge's wall
+      corner: { x: -120, y: 170 },
+      couch: { x: -236, y: 140 }, // with its rug and coffee table
+      pong: { x: -150, y: 170 },
+      plant: { x: -222, y: 192 },
+      button: { x: -10, y: 129 }, // in the lounge, below the doorway at the foot of the corridor
+      mic: { x: -97, y: 192 },
+    },
+  };
+  let shape = WIDE;
+  /** Steps into the lounge, held upright, through the doorway at the corridor's foot. */
+  const DOORWAY_STEP = 6;
+
+  /** `point`, as it is in the wide room, where `part` of the lounge puts it in the room's shape now. */
+  function placed(part, point) {
+    const { x, y } = shape.offsets[part] || { x: 0, y: 0 };
+    const moved = { ...point, x: point.x + x, y: point.y + y };
+    if (point.depth !== undefined) moved.depth = point.depth + y;
+    return moved;
+  }
+
+  /** Held upright, whether `point` is in the lounge, past its wall. */
+  const inLounge = (point) => shape.loungeWall !== undefined && point.y > shape.loungeWall;
 
   /**
    * How the office is furnished, as set up on the setup page: the layout's
@@ -122,7 +158,9 @@
   // The office as it's furnished now. There is one to a page, so the
   // drawing and the people's comings and goings read it from here.
   let decor = roomOf(null);
-  let spots = [...LOUNGE_SPOTS, ...CORNER_SPOTS[decor.corner]];
+  /** The lounge's spots, and those round its corner piece, where the room's shape puts them. */
+  const spotsOf = (room) => [...LOUNGE_SPOTS.map((spot) => placed(spot.part, spot)), ...CORNER_SPOTS[room.corner].map((spot) => placed('corner', spot))];
+  let spots = spotsOf(decor);
   let boardSpots = boardSpotsOf(decor);
   /** Under the clock by the door, where a rate-limited agent waits. */
   const CLOCK_SPOTS = [{ x: 202, y: 47 }, { x: 193, y: 47 }, { x: 184, y: 47 }];
@@ -151,7 +189,7 @@
       case 'clock': return CLOCK_SPOTS[Number(a)];
       case 'shred': return { x: desk.x + SHREDDING.dx, y: desk.y + SHREDDING.dy };
       case 'near': return { x: desk.x + INTERN_SLOTS[Number(b)].dx, y: desk.y + INTERN_SLOTS[Number(b)].dy };
-      default: return { door: DOOR, button: PRESSER, queue: NEXT_IN_LINE }[place];
+      default: return { door: DOOR, button: placed('button', PRESSER), queue: placed('button', NEXT_IN_LINE) }[place];
     }
   }
 
@@ -167,14 +205,17 @@
    * The way from where someone stands to a place. Desks, and what's round
    * them or on the back wall, are reached along the walkway behind their
    * row, from the corridor; the lounge is open floor, crossed in a straight
-   * line.
+   * line. Held upright, the lounge is through the doorway at the foot of
+   * the corridor.
    */
   function route(from, place) {
     const target = pointOf(place);
     const walkway = laneTo(place);
-    const amongDesks = from.x < CORRIDOR_X - 1 && from.y > WALL_BOTTOM;
+    const amongDesks = from.x < CORRIDOR_X - 1 && from.y > WALL_BOTTOM && !inLounge(from);
     const current = laneNearest(from.y);
     const path = [];
+    const doorway = { x: CORRIDOR_X, y: shape.loungeWall + DOORWAY_STEP };
+    if (inLounge(from) && !inLounge(target)) path.push(doorway);
     if (walkway !== null && amongDesks && walkway === current) {
       path.push({ x: from.x, y: current });
     } else {
@@ -182,6 +223,7 @@
       if (walkway !== null) path.push({ x: CORRIDOR_X, y: walkway });
       else if (place === 'door') path.push({ x: CORRIDOR_X, y: WALL_BOTTOM + 8 });
     }
+    if (!inLounge(from) && inLounge(target)) path.push(doorway);
     if (walkway !== null) path.push({ x: target.x, y: walkway });
     path.push({ x: target.x, y: target.y });
     return path.filter((p) => p.x !== from.x || p.y !== from.y);
@@ -418,7 +460,7 @@
       if (next.pet !== decor.pet) this.pet = next.pet === 'none' ? null : new Pet(next.pet);
       const boardGone = next.wall.indexOf('whiteboard') !== decor.wall.indexOf('whiteboard');
       decor = next;
-      spots = [...LOUNGE_SPOTS, ...CORNER_SPOTS[decor.corner]];
+      spots = spotsOf(decor);
       boardSpots = boardSpotsOf(decor);
       for (const person of this.people) {
         if (person.isLeaving) continue;
@@ -437,6 +479,27 @@
           this.send(person, 'door');
         }
       }
+    }
+
+    /**
+     * The room takes another shape. The desks stay where they are; anyone
+     * on the way somewhere is there at once, the lounge's places having
+     * moved, and the pet starts again from the door.
+     */
+    reshape(next, now) {
+      shape = next;
+      spots = spotsOf(decor);
+      for (const walker of [...this.people, ...this.interns]) {
+        if (walker.isWalking) {
+          walker.arrivedAt = now;
+          walker.nextMove = now + random(8, 20);
+        }
+        walker.path = [];
+        walker.position = pointOf(walker.place);
+        const spot = spotOf(walker.place);
+        if (spot !== null) walker.isFacingAway = spots[spot].pose === 'away';
+      }
+      if (this.pet) this.pet = new Pet(this.pet.kind);
     }
 
     apply(seats, colours, now) {
@@ -610,16 +673,16 @@
       const tops = { arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 } };
       switch (pet.kind) {
         case 'cat':
-          [3, 4, 5].forEach((spot) => { if (!taken(spot)) places.push({ x: LOUNGE_SPOTS[spot].x, y: 113, pose: 'sleep' }); });
+          [3, 4, 5].forEach((spot) => { if (!taken(spot)) places.push(placed('couch', { x: LOUNGE_SPOTS[spot].x, y: 113, pose: 'sleep' })); });
           for (const p of this.people) {
             if (!p.isStaff && p.isAtDesk) places.push({ x: DESKS[p.desk].x + 36, y: DESKS[p.desk].y + 2, depth: DESKS[p.desk].y + 5.6, pose: 'sit' });
           }
           if (desk) places.push({ x: desk.x - 5, y: desk.y + 15, pose: 'sit' });
-          if (decor.corner === 'fishtank') places.push({ x: 262, y: 95, pose: 'sit' });
-          places.push({ x: 252, y: 33, depth: 47, pose: 'sit' });
+          if (decor.corner === 'fishtank') places.push(placed('corner', { x: 262, y: 95, pose: 'sit' }));
+          places.push(placed('wall', { x: 252, y: 33, depth: 47, pose: 'sit' }));
           break;
         case 'dog': {
-          places.push({ x: 276, y: 138, pose: 'lie' }, { x: CORRIDOR_X, y: 72, pose: 'sit' }, { x: 290, y: 62, pose: 'sit' });
+          places.push(placed('couch', { x: 276, y: 138, pose: 'lie' }), { x: CORRIDOR_X, y: 72, pose: 'sit' }, placed('corner', { x: 290, y: 62, pose: 'sit' }));
           if (desk) places.push({ x: desk.x + DESK_WIDTH + 6, y: desk.y + 15, pose: 'lie' });
           const walker = this.people.find((p) => p.isWalking && !p.isLeaving);
           if (walker) places.push({ follow: walker, pose: 'stand' });
@@ -627,13 +690,13 @@
         }
         case 'lizard':
           decor.wall.forEach((piece, slot) => { if (piece === 'window') places.push({ x: WALL_SLOTS[slot] + 19, y: 22, depth: 41.5, pose: 'still' }); });
-          places.push({ x: 296, y: 24, depth: 41.5, pose: 'still' }, { x: 276, y: 58, pose: 'still' });
+          places.push(placed('wall', { x: 296, y: 24, depth: 41.5, pose: 'still' }), placed('corner', { x: 276, y: 58, pose: 'still' }));
           if (desk) places.push({ x: desk.x + 12, y: desk.y - 10, depth: desk.y + 5.6, pose: 'still' });
           break;
         case 'monkey':
-          places.push({ x: 308, y: 18, depth: 50.5, pose: 'sit' }, { x: CORRIDOR_X, y: 13, depth: 41.5, pose: 'sit' },
-            { x: 270, y: 102, depth: 110.5, pose: 'sit' }, { x: 247, y: 33, depth: 47, pose: 'sit', grab: true });
-          if (tops[decor.corner]) places.push({ ...tops[decor.corner], depth: 86.5, pose: 'sit' });
+          places.push(placed('wall', { x: 308, y: 18, depth: 50.5, pose: 'sit' }), { x: CORRIDOR_X, y: 13, depth: 41.5, pose: 'sit' },
+            placed('couch', { x: 270, y: 102, depth: 110.5, pose: 'sit' }), placed('wall', { x: 247, y: 33, depth: 47, pose: 'sit', grab: true }));
+          if (tops[decor.corner]) places.push(placed('corner', { ...tops[decor.corner], depth: 86.5, pose: 'sit' }));
           break;
       }
       return places;
@@ -1007,7 +1070,7 @@
   function effortChips(desk) {
     const { x, y } = DESKS[desk];
     const w = EFFORTS.length * CHIP.w + (EFFORTS.length - 1) * CHIP_GAP;
-    const left = Math.max(1, Math.min(WIDTH - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
+    const left = Math.max(1, Math.min(shape.width - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
     return { left, top: y + 5, w, h: CHIP.h, chips: EFFORTS.map((level, i) => ({ level, x: left + i * (CHIP.w + CHIP_GAP), y: y + 5 })) };
   }
 
@@ -1020,7 +1083,7 @@
     const label = kind === 'fire' ? "YOU'RE FIRED" : '+ HIRE';
     const w = textWidth(label) + 8, h = 11;
     const { x, y } = DESKS[desk];
-    const left = Math.max(1, Math.min(WIDTH - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
+    const left = Math.max(1, Math.min(shape.width - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
     return { kind, label, left, top: kind === 'fire' ? y - 8 : y + 4, w, h };
   }
 
@@ -1029,7 +1092,7 @@
   const DIALOG_KEY = { w: 34, h: 13 };
   function fireDialog() {
     const { w, h } = FIRE_DIALOG;
-    const left = Math.round(WIDTH / 2 - w / 2), top = Math.round(HEIGHT / 2 - h / 2);
+    const left = Math.round(shape.width / 2 - w / 2), top = Math.round(shape.height / 2 - h / 2);
     const y = top + h - DIALOG_KEY.h - 6;
     return {
       left, top, w, h,
@@ -1045,7 +1108,7 @@
     const w = CHOICE_INSET * 2 + CHOICE_KEY.w * 4 + CHOICE_GAP * 2 + CHOICE_SPLIT;
     const h = CHOICE_INSET * 2 + CHOICE_KEY.h;
     const tip = { x: seat(desk).x - 1, y: DESKS[desk].y - 15 };
-    const left = Math.max(1, Math.min(WIDTH - 1 - w, tip.x - Math.floor(w / 2)));
+    const left = Math.max(1, Math.min(shape.width - 1 - w, tip.x - Math.floor(w / 2)));
     const top = tip.y - 1 - h;
     let x = left + CHOICE_INSET;
     const keys = ['up', 'down', 'accept', 'reject'].map((action, i) => {
@@ -1092,9 +1155,9 @@
    * keeps every edge sharp, and what's left over is a border round it.
    */
   function fitRoom(width, height, margin = 0) {
-    const fit = Math.min((width - margin * 2) / WIDTH, (height - margin * 2) / HEIGHT);
+    const fit = Math.min((width - margin * 2) / shape.width, (height - margin * 2) / shape.height);
     const scale = fit >= 1 ? Math.floor(fit) : fit;
-    return { scale, ox: Math.round((width - WIDTH * scale) / 2), oy: Math.round((height - HEIGHT * scale) / 2) };
+    return { scale, ox: Math.round((width - shape.width * scale) / 2), oy: Math.round((height - shape.height * scale) / 2) };
   }
 
   /**
@@ -1191,10 +1254,10 @@
     ctx.clearRect(0, 0, width, height);
 
     // Through a window, the room stays inside it, even while it shakes.
-    let glass = framed && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    let glass = framed && { x: room.ox, y: room.oy, w: shape.width * scale, h: shape.height * scale, r: WINDOW_CORNER * ratio };
     if (floating) {
-      const w = Math.min(width - inset * 2, WIDTH * scale * FLOAT_REACH);
-      const h = Math.min(height - inset * 2, HEIGHT * scale * FLOAT_REACH);
+      const w = Math.min(width - inset * 2, shape.width * scale * FLOAT_REACH);
+      const h = Math.min(height - inset * 2, shape.height * scale * FLOAT_REACH);
       glass = { x: Math.round((width - w) / 2), y: Math.round((height - h) / 2), w, h, r: WINDOW_CORNER * ratio };
     }
     // What can be seen of the office, in art pixels: the room, and floating,
@@ -1202,7 +1265,7 @@
     const seen = floating
       ? { left: Math.floor((glass.x - ox) / scale), top: Math.floor((glass.y - oy) / scale),
           right: Math.ceil((glass.x + glass.w - ox) / scale), bottom: Math.ceil((glass.y + glass.h - oy) / scale) }
-      : { left: 0, top: 0, right: WIDTH, bottom: HEIGHT };
+      : { left: 0, top: 0, right: shape.width, bottom: shape.height };
     seen.width = seen.right - seen.left;
     seen.height = seen.bottom - seen.top;
     // Floating, the window glows while anyone waits on you.
@@ -1296,16 +1359,31 @@
       dot(x, y, PALETTE.eye);
     }
 
+    /**
+     * Draws `part` of the lounge where the room's shape puts it: just as in
+     * the wide room, moved.
+     */
+    function moved(part, draw) {
+      const { x, y } = placed(part, { x: 0, y: 0 });
+      ox += x * scale;
+      oy += y * scale;
+      draw();
+      ox -= x * scale;
+      oy -= y * scale;
+    }
+
     function drawWall() {
       const { left, top, right, width: across } = seen;
       const paint = PAINTS[decor.paint];
-      fill(left, top, LOUNGE_LEFT - left, WALL_BOTTOM - top, paint.wall);
-      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, WALL_BOTTOM - top, paint.lounge);
+      // Held upright, the back wall is the office's alone: the lounge has its own, below.
+      const wide = shape === WIDE, loungeLeft = wide ? LOUNGE_LEFT : right;
+      fill(left, top, loungeLeft - left, WALL_BOTTOM - top, paint.wall);
+      fill(loungeLeft, top, right - loungeLeft, WALL_BOTTOM - top, paint.lounge);
       fill(left, top, across, 2, paint.top);
       fill(left, 30, across, 8, paint.wainscot);
       fill(left, 30, across, 1, paint.rail);
       fill(left, 38, across, 2, PALETTE.baseboard);
-      fill(LOUNGE_LEFT, top, 1, WALL_BOTTOM - top, paint.top);
+      if (wide) fill(LOUNGE_LEFT, top, 1, WALL_BOTTOM - top, paint.top);
 
       decor.wall.forEach((piece, slot) => drawWallPiece(piece, WALL_SLOTS[slot]));
       // String lights along the top of the wall through December
@@ -1317,7 +1395,7 @@
           fill(bx, 4, 2, 2, bulbs[((i % 4) + 4) % 4], lit ? 1 : 0.35);
         }
       }
-      drawWindow(260, 6, 30, 20, true);
+      if (wide) drawWindow(260, 6, 30, 20, true);
 
       drawDoor();
       drawClock(CORRIDOR_X, 6);
@@ -1412,11 +1490,14 @@
 
     function drawFloor() {
       const { left, right, bottom } = seen;
-      const top = WALL_BOTTOM, depth = bottom - top, across = LOUNGE_LEFT - left;
+      // The office's floor, to the lounge: on its right, or held upright, behind its wall.
+      const wide = shape === WIDE;
+      const officeRight = wide ? LOUNGE_LEFT : right, officeBottom = wide ? bottom : shape.loungeWall;
+      const top = WALL_BOTTOM, depth = officeBottom - top, across = officeRight - left;
       /** Squares of `size` from the room's corner outwards, cut at the lounge: `paint(x, y, column, row, width)` for each. */
       const squares = (size, paint) => {
-        for (let y = top, r = 0; y < bottom; y += size, r++) {
-          for (let x = Math.floor(left / size) * size; x < LOUNGE_LEFT; x += size) paint(x, y, Math.floor(x / size), r, Math.min(size, LOUNGE_LEFT - x));
+        for (let y = top, r = 0; y < officeBottom; y += size, r++) {
+          for (let x = Math.floor(left / size) * size; x < officeRight; x += size) paint(x, y, Math.floor(x / size), r, Math.min(size, officeRight - x));
         }
       };
       if (decor.floor === 'tiles') {
@@ -1438,21 +1519,57 @@
       } else {
         fill(left, top, across, depth, PALETTE.wood);
         let row = 0;
-        for (let y = top + 4; y < bottom + 4; y += 5, row++) {
+        for (let y = top + 4; y < officeBottom + 4; y += 5, row++) {
           fill(left, y, across, 1, PALETTE.plankSeam);
           // The planks' ends, staggered from row to row, from the room's left edge outwards
           let x = (row % 3) * 11;
           while (x > left) x -= 33;
-          for (; x < LOUNGE_LEFT; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
+          for (; x < officeRight; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
         }
       }
       const [carpet, carpetEdge] = LOUNGES[decor.lounge];
-      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, depth, carpet);
-      fill(LOUNGE_LEFT, top, 1, depth, carpetEdge);
-      fill(244, 124, 64, 20, PALETTE.rugEdge);
-      fill(246, 126, 60, 16, PALETTE.rug);
+      if (wide) {
+        fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, depth, carpet);
+        fill(LOUNGE_LEFT, top, 1, depth, carpetEdge);
+      } else {
+        fill(left, officeBottom, right - left, bottom - officeBottom, carpet);
+      }
+      moved('couch', () => {
+        fill(244, 124, 64, 20, PALETTE.rugEdge);
+        fill(246, 126, 60, 16, PALETTE.rug);
+      });
       fill(207, 40, 14, 2, PALETTE.mat);
       fill(left, top, right - left, 1, SHADOW);
+    }
+
+    /**
+     * Held upright, the lounge's own wall, as high as the back wall, with
+     * its window, and a doorway under the back door through which the
+     * corridor goes on into the lounge. It hides the office's floor behind it.
+     */
+    function drawLoungeWall() {
+      const { left, right } = seen;
+      const paint = PAINTS[decor.paint];
+      const top = shape.loungeWall - WALL_BOTTOM;
+      const face = (l, r) => {
+        fill(l, top, r - l, WALL_BOTTOM, paint.lounge);
+        fill(l, top + 30, r - l, 8, paint.wainscot);
+        fill(l, top + 30, r - l, 1, paint.rail);
+        fill(l, top + 38, r - l, 2, PALETTE.baseboard);
+      };
+      // Either side of the doorway, and above it
+      face(left, 207);
+      face(221, right);
+      fill(207, top, 14, 13, paint.lounge);
+      fill(left, top, right - left, 2, paint.top);
+      // The doorway's frame, open onto the corridor
+      fill(205, top + 13, 18, 2, PALETTE.frame);
+      fill(205, top + 15, 2, 25, PALETTE.frame);
+      fill(221, top + 15, 2, 25, PALETTE.frame);
+      moved('wall', () => {
+        drawWindow(260, 6, 30, 20, true);
+        drawWallPiece('pinboard', 364); // between the cooler and the doorway
+      });
     }
 
     /* Furniture */
@@ -2081,6 +2198,7 @@
       all(PALETTE.alarm, 0.07 * (0.5 + 0.5 * Math.sin(since * 12)) * fade);
 
       // Two rings, flattened onto the floor
+      const button = placed('button', BUTTON);
       for (const delay of [0, 0.15]) {
         const age = (since - delay) / SHOCKWAVE_LENGTH;
         if (age < 0 || age >= 1) continue;
@@ -2088,7 +2206,7 @@
         const count = Math.floor(radius * 4);
         for (let k = 0; k < count; k++) {
           const angle = (k / count) * 2 * Math.PI;
-          dot(Math.round(BUTTON.x + Math.cos(angle) * radius), Math.round(BUTTON.y + Math.sin(angle) * radius * 0.55),
+          dot(Math.round(button.x + Math.cos(angle) * radius), Math.round(button.y + Math.sin(angle) * radius * 0.55),
             PALETTE.shockwave, 1 - age);
         }
       }
@@ -2384,7 +2502,8 @@
     function drawMicWaves() {
       if (!mic.held) return;
       const heldFor = now - mic.heldAt;
-      const mouth = decor.mic === 'megaphone' ? { x: MIC.x - 8, y: MIC.y - 20 } : { x: MIC.x, y: MIC.y - 21 };
+      const at = placed('mic', MIC);
+      const mouth = decor.mic === 'megaphone' ? { x: at.x - 8, y: at.y - 20 } : { x: at.x, y: at.y - 21 };
       for (let k = 0; k < 3; k++) {
         const age = (heldFor - k * WAVE_EVERY) % (WAVE_EVERY * 3) / (WAVE_EVERY * 3);
         if (heldFor < k * WAVE_EVERY) continue;
@@ -2555,11 +2674,15 @@
 
     // What stands on the floor, drawn in order of where it touches the
     // floor, so that nearer things cover farther ones.
+    /** A part of the lounge, at the depth it stands at in the wide room, where the room's shape puts it. */
+    const lounge = (part, depth, draw) => [placed(part, { x: 0, y: depth }).y, () => moved(part, draw)];
     const items = [
-      [46.5, drawCounter], [50, drawCooler], [110, drawCouchBack], [117, drawCouchFront],
-      [134, drawCoffeeTable], [157, drawPingPong], [176, drawPlant], [176.5, drawButton], [177, drawMic],
-      ...CORNER_PARTS[decor.corner],
+      lounge('wall', 46.5, drawCounter), lounge('wall', 50, drawCooler), lounge('couch', 110, drawCouchBack),
+      lounge('couch', 117, drawCouchFront), lounge('couch', 134, drawCoffeeTable), lounge('pong', 157, drawPingPong),
+      lounge('plant', 176, drawPlant), lounge('button', 176.5, drawButton), lounge('mic', 177, drawMic),
+      ...CORNER_PARTS[decor.corner].map(([depth, draw]) => lounge('corner', depth, draw)),
     ];
+    if (shape.loungeWall !== undefined) items.push([shape.loungeWall, drawLoungeWall]);
     const pet = office.pet;
     if (pet) items.push([!pet.isWalking && pet.target && pet.target.depth ? pet.target.depth : pet.position.y, drawPet]);
     DESKS.forEach((d, desk) => {
@@ -2911,6 +3034,9 @@
         held = finger.target.kind === 'session' ? { kind: 'session', id: finger.target.id } : { kind: 'empty', desk: finger.target.desk };
         if (chips() || heldButton()) on.held?.();
       }
+      // The room takes its canvas's shape: tall on a screen held upright, where it comes out bigger.
+      const fitting = canvas.height > canvas.width ? TALL : WIDE;
+      if (fitting !== shape) office.reshape(fitting, now);
       office.step(now);
       ambience.follow(office, now, loudness());
       drawOffice(ctx, office, {
@@ -2965,8 +3091,9 @@
         consider({ kind: 'session', id: person.session.id },
           { left: px - 5, right: px + 8, top: top - 11, bottom: Math.round(person.position.y) + 1 }, 0);
       }
-      consider({ kind: 'button' }, { left: BUTTON.x - 7, right: BUTTON.x + 8, top: BUTTON.y - 1, bottom: BUTTON.y + 16 }, 1);
-      consider({ kind: 'mic' }, { left: MIC.x - (decor.mic === 'megaphone' ? 9 : 5), right: MIC.x + 6, top: MIC.y - 25, bottom: MIC.y + 1 }, 1);
+      const dome = placed('button', BUTTON), stand = placed('mic', MIC);
+      consider({ kind: 'button' }, { left: dome.x - 7, right: dome.x + 8, top: dome.y - 1, bottom: dome.y + 16 }, 1);
+      consider({ kind: 'mic' }, { left: stand.x - (decor.mic === 'megaphone' ? 9 : 5), right: stand.x + 6, top: stand.y - 25, bottom: stand.y + 1 }, 1);
       DESKS.forEach(({ x: dx, y: dy }, desk) => {
         const seat = office.seats[desk] || {};
         // An empty desk only matters when there's someone to hire into it.
