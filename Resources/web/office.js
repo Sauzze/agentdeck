@@ -3195,8 +3195,8 @@
 
   /**
    * The channels of an old console: pulse waves of three widths, a triangle
-   * in 16 steps, as the NES plays it, and noise from a shift register, long
-   * (a hiss) or short (a metallic buzz). Each is made once for a context.
+   * in 16 steps, as the NES plays it, and noise from a shift register, kept
+   * for what should crunch. Each is made once for a context.
    */
   const waveCache = new WeakMap();
   function chipWaves(audio) {
@@ -3217,11 +3217,11 @@
     const pulse = (eighths) => stepped(Array.from({ length: 8 }, (_, k) => (k < eighths ? 1 : -1)));
     const triangle = stepped(Array.from({ length: 32 }, (_, k) => (k < 16 ? k : 31 - k) / 7.5 - 1));
     // Each step of the register is held for two samples; a sound pitches it with its playback rate.
-    const noise = (short, length) => {
+    const noise = (length) => {
       const buffer = audio.createBuffer(1, length, audio.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0, register = 1; i < length; i += 2) {
-        const bit = (register ^ (register >> (short ? 6 : 1))) & 1;
+        const bit = (register ^ (register >> 1)) & 1;
         register = (register >> 1) | (bit << 14);
         data.fill(register & 1 ? -1 : 1, i, i + 2);
       }
@@ -3229,7 +3229,7 @@
     };
     const waves = {
       pulse12: pulse(1), pulse25: pulse(2), pulse50: pulse(4), triangle,
-      hiss: noise(false, audio.sampleRate), metal: noise(true, audio.sampleRate / 2),
+      hiss: noise(audio.sampleRate),
     };
     waveCache.set(audio, waves);
     return waves;
@@ -3254,7 +3254,8 @@
     /**
      * The volume stepping down a frame at a time, in 15 steps, from `level`
      * to nothing over `length`; the higher the `curve`, the quicker it drops.
-     * Each step eases in over a few milliseconds, which keeps it from clicking.
+     * Each step eases in over a few milliseconds, which keeps it from clicking
+     * or buzzing.
      */
     envelope(at, length, level, curve) {
       const gain = this.audio.createGain();
@@ -3262,7 +3263,7 @@
       gain.gain.setValueAtTime(0, at);
       const frames = Math.max(1, Math.round(length / FRAME));
       for (let k = 0; k < frames; k++) {
-        gain.gain.setTargetAtTime((level * Math.ceil(15 * (1 - k / frames) ** curve)) / 15, at + k * FRAME, 0.002);
+        gain.gain.setTargetAtTime((level * Math.ceil(15 * (1 - k / frames) ** curve)) / 15, at + k * FRAME, k ? 0.005 : 0.002);
       }
       gain.gain.setTargetAtTime(0, at + length, 0.004);
       return gain;
@@ -3288,9 +3289,9 @@
     }
 
     /** A burst of noise, its `rate` a playback rate from 1, the brightest, down. */
-    noise(at, { kind = 'hiss', rate = 1, to = rate, length, level, pan = 0, curve = 1.5, lowpass = 0 }) {
+    noise(at, { rate = 1, to = rate, length, level, pan = 0, curve = 1.5, lowpass = 0 }) {
       const source = this.audio.createBufferSource();
-      source.buffer = this.waves[kind];
+      source.buffer = this.waves.hiss;
       source.loop = true;
       this.sweep(source.playbackRate, at, length, rate, to, 0);
       let node = source;
@@ -3370,14 +3371,13 @@
         }, at);
       },
     },
-    // The door latching, as someone comes or goes: ka-chunk, -14.
+    // The door, as someone comes or goes: the latch's click, then ka-chunk, -14.
     door: {
       gap: 1.2,
       play(chip, at, pan) {
-        chip.noise(at, { rate: 0.18, length: 0.05, level: dB(-16), pan, curve: 2 });
-        chip.note(at, { wave: 'triangle', pitch: hz('G3'), to: hz('D3'), length: 0.08, level: dB(-14), pan });
-        chip.noise(at + 0.13, { rate: 0.1, length: 0.07, level: dB(-18), pan, curve: 2 });
-        chip.note(at + 0.13, { wave: 'triangle', pitch: hz('D3'), to: hz('G2'), length: 0.1, level: dB(-15), pan });
+        chip.note(at, { wave: 'pulse12', pitch: hz('C6'), length: 0.015, level: dB(-26), pan, curve: 3 });
+        chip.note(at + 0.01, { wave: 'triangle', pitch: hz('G3'), to: hz('D3'), length: 0.08, level: dB(-14), pan });
+        chip.note(at + 0.14, { wave: 'triangle', pitch: hz('D3'), to: hz('G2'), length: 0.1, level: dB(-15), pan });
       },
     },
     // The ball off a paddle, -18, and off the table between, -26.
@@ -3392,23 +3392,29 @@
         chip.note(at, { wave: 'pulse12', pitch: hz('G6'), to: hz('E6'), length: 0.03, level: dB(-26), pan, curve: 2 });
       },
     },
-    // The coffee machine: a burble, then a drip, -18.
+    // The coffee machine: bubbles rising, then a drip, -18.
     coffee: {
       gap: 4,
       play(chip, at, pan) {
         for (let k = 0; k < 6; k++) {
-          chip.noise(at + 0.25 + k * 0.13, { kind: 'metal', rate: random(0.35, 0.6), to: random(0.6, 0.9), length: 0.09, level: dB(-18), pan, lowpass: 1600 });
+          const pitch = hz(pick(['C4', 'D4', 'E4', 'G4']));
+          chip.note(at + 0.25 + k * random(0.1, 0.15), { wave: 'triangle', pitch, to: pitch * 1.9, length: 0.06, level: dB(-18), pan });
         }
         chip.note(at + 1.2, { wave: 'pulse12', pitch: hz('G6'), to: hz('C6'), length: 0.05, level: dB(-22), pan, curve: 2 });
       },
     },
-    // A few keys, now and then, while someone types, -26.
-    keys: {
+    // An agent getting to work: a second of a mechanical keyboard, each key
+    // a switch's click and the key bottoming out, the space bar lower, -18.
+    typing: {
+      gap: 1.5,
       play(chip, at, pan) {
-        const count = Math.floor(random(3, 7));
-        for (let k = 0, when = at; k < count; k++, when += random(0.07, 0.15)) {
-          const last = k === count - 1 && Math.random() < 0.5; // a space bar, lower and heavier
-          chip.noise(when, { rate: last ? 0.35 : random(0.7, 1), length: last ? 0.03 : 0.015, level: dB(last ? -26 : -28), pan, curve: 2, lowpass: 6000 });
+        const count = Math.floor(random(13, 17));
+        for (let k = 0, when = at; k < count; k++) {
+          const space = k === count - 1 || (k > 2 && Math.random() < 0.12);
+          const thock = space ? hz('E3') : hz('A3') * random(0.94, 1.12);
+          chip.note(when, { wave: 'pulse12', pitch: random(2200, 2900), length: 0.01, level: dB(-26), pan, curve: 3 });
+          chip.note(when + 0.004, { wave: 'triangle', pitch: thock * 2, to: thock, length: space ? 0.05 : 0.03, level: dB(space ? -18 : -20), pan, curve: 2 });
+          when += random(0.055, 0.12) * (Math.random() < 0.12 ? 2.2 : 1); // now and then, a pause for thought
         }
       },
     },
@@ -3421,7 +3427,6 @@
     'put-down': {
       play(chip, at, pan) {
         chip.note(at, { wave: 'triangle', pitch: hz('E4'), to: hz('E3'), length: 0.1, level: dB(-14), pan });
-        chip.noise(at, { rate: 0.12, length: 0.05, level: dB(-20), pan, curve: 2 });
       },
     },
     // The mic switched on and off: a blip up and a blip down, -18.
@@ -3461,7 +3466,7 @@
     lizard: {
       gap: 60,
       play(chip, at, pan) {
-        for (const after of [0, 0.06]) chip.noise(at + after, { kind: 'metal', rate: 1, length: 0.02, level: dB(-26), pan, curve: 2 });
+        for (const after of [0, 0.06]) chip.note(at + after, { wave: 'pulse12', pitch: hz('C7'), length: 0.015, level: dB(-26), pan, curve: 3 });
       },
     },
     monkey: {
@@ -3472,16 +3477,11 @@
         });
       },
     },
-    // The seasons in the windows, now and then: a gust in winter, -34, leaves in autumn, -30, a bird the rest of the year, -26.
+    // The seasons in the windows, now and then: the wind whistling in winter, -30, a bird in spring and summer, -26.
     wind: {
       play(chip, at) {
-        chip.noise(at, { rate: 0.04, to: 0.1, length: 1.4, level: dB(-34), curve: 0.5, lowpass: 900 });
-        chip.noise(at + 1.2, { rate: 0.1, to: 0.03, length: 1.6, level: dB(-34), curve: 1, lowpass: 900 });
-      },
-    },
-    leaves: {
-      play(chip, at) {
-        for (let k = 0; k < 7; k++) chip.noise(at + k * random(0.06, 0.14), { rate: random(0.4, 0.8), length: 0.04, level: dB(-30 - k), pan: random(-0.3, 0.3), curve: 2, lowpass: 5000 });
+        chip.note(at, { wave: 'triangle', pitch: hz('D5'), to: hz('A5'), length: 1.2, level: dB(-30), curve: 0.3, vibrato: 0.01 });
+        chip.note(at + 1.2, { wave: 'triangle', pitch: hz('A5'), to: hz('E5'), length: 1.4, level: dB(-30), curve: 1, vibrato: 0.01 });
       },
     },
     bird: {
@@ -3507,10 +3507,10 @@
     },
     foosball: {
       play(chip, at, pan) {
-        // The ball struck and hitting the side, -24.
+        // The ball struck and hitting the side, -20.
         for (const after of Math.random() < 0.5 ? [0] : [0, random(0.2, 0.4)]) {
-          chip.noise(at + after, { kind: 'metal', rate: 0.8, length: 0.025, level: dB(-24), pan, curve: 2 });
-          chip.note(at + after, { wave: 'triangle', pitch: hz('A4'), to: hz('E4'), length: 0.04, level: dB(-26), pan });
+          chip.note(at + after, { wave: 'pulse12', pitch: hz('E6'), length: 0.012, level: dB(-24), pan, curve: 3 });
+          chip.note(at + after, { wave: 'triangle', pitch: hz('A4'), to: hz('E4'), length: 0.05, level: dB(-20), pan });
         }
       },
     },
@@ -3527,8 +3527,7 @@
         chip.note(at + 0.2, { wave: 'pulse12', pitch: hz('A6'), length: 0.04, level: dB(-22), pan });
         chip.note(at + 0.27, { wave: 'pulse12', pitch: hz('A6'), length: 0.04, level: dB(-22), pan });
         chip.note(at + 0.4, { wave: 'pulse50', pitch: hz('C3'), length: 0.5, level: dB(-28), pan, curve: 0.3, vibrato: 0.03 });
-        chip.noise(at + 0.95, { rate: 0.15, length: 0.12, level: dB(-20), pan, curve: 2 });
-        chip.note(at + 0.95, { wave: 'triangle', pitch: hz('G3'), to: hz('C3'), length: 0.12, level: dB(-20), pan });
+        chip.note(at + 0.95, { wave: 'triangle', pitch: hz('G3'), to: hz('C3'), length: 0.12, level: dB(-18), pan });
       },
     },
     remind: { play: remindSound },
@@ -3536,8 +3535,6 @@
 
   /** Sounds that are only the room getting on with its day: no more than one of them in this many seconds. */
   const BACKGROUND_GAP = 4;
-  /** Each typing agent's keys come in bursts, about this many seconds apart, more often with more typing but never twice as often. */
-  const KEYS_EVERY = [8, 20];
   /** A rally's hits are heard for its first few: after that, the players carry on in silence. */
   const RALLY_HEARD = 12;
   /** How often the weather in the windows, or the corner piece being played, makes itself heard, in seconds. */
@@ -3545,15 +3542,13 @@
   const CORNER_EVERY = [6, 14];
   /** The share of a pet's settlings that it makes a sound for. */
   const PET_CHATTY = 0.35;
-  /** How soft the room tone is: barely there. */
-  const AIR = 0.007;
 
   /**
    * The office's sound, in the style of an old console: the door, the coffee
-   * machine, the ping-pong ball, keys now and then, the pets and the
-   * seasons, a fanfare for a long turn done, the red button's blast and
-   * siren, and the air of the room, barely there. All of it is made on the
-   * spot, with nothing to download. Browsers only let a page play sound once
+   * machine, the ping-pong ball, an agent getting to work on their keyboard,
+   * the pets and the seasons, a fanfare for a long turn done, and the red
+   * button's blast and siren, with silence in between. All of it is made on
+   * the spot, with nothing to download. Browsers only let a page play sound once
    * it's been tapped, so it wakes with the first tap, and it sleeps while the
    * office is out of sight.
    */
@@ -3562,11 +3557,9 @@
       this.audio = null;      // the sound's own context, once a tap allows it
       this.chip = null;       // what it plays its sounds with
       this.master = null;
-      this.air = null;        // the room tone's volume
       this.since = null;      // when it started following the room, on the room's clock
       this.next = new Map();  // when each sound may next play, on the sound's clock
       this.quietUntil = 0;    // when the next of the room's background sounds may play
-      this.nextKeys = null;
       this.nextWeather = null;
       this.nextCorner = null;
       this.rally = { players: null, bounce: null, table: null, hits: 0 };
@@ -3574,7 +3567,7 @@
       this.petSettled = null; // when the pet last settled, heard
       this.mic = null;        // when the mic was last held and let go, heard
       this.carried = null;    // where the agent being carried is, as it's heard
-      this.heard = new WeakMap(); // what's been played for each person: { arrived, celebrated, fired, out }
+      this.heard = new WeakMap(); // what's been played for each person: { arrived, celebrated, fired, out, working }
     }
 
     /**
@@ -3609,29 +3602,6 @@
       limiter.release.value = 0.25;
       soft.connect(this.master).connect(limiter).connect(audio.destination);
       this.chip = new Chip(audio, soft);
-      // The room tone: soft air in the middle of the range, where a phone
-      // can play it, drifting slowly. Eight seconds of noise, looped; noise
-      // has nothing to jump between at the seam.
-      const tone = audio.createBuffer(1, audio.sampleRate * 8, audio.sampleRate);
-      const white = tone.getChannelData(0);
-      for (let i = 0; i < white.length; i++) white[i] = Math.random() * 2 - 1;
-      const hum = audio.createBufferSource();
-      hum.buffer = tone;
-      hum.loop = true;
-      const band = audio.createBiquadFilter();
-      band.type = 'bandpass';
-      band.frequency.value = 650;
-      band.Q.value = 0.7;
-      const drift = audio.createOscillator();
-      drift.frequency.value = 0.05;
-      const depth = audio.createGain();
-      depth.gain.value = 200;
-      drift.connect(depth).connect(band.frequency);
-      this.air = audio.createGain();
-      this.air.gain.value = AIR;
-      hum.connect(band).connect(this.air).connect(soft);
-      hum.start();
-      drift.start();
     }
 
     sleep() {
@@ -3678,15 +3648,6 @@
       if (this.since === null) this.since = now;
       for (const cue of cues) this.play(cue.name, cue.x);
 
-      // Keys, a few at a time, from one of the desks where someone's typing
-      const typists = office.people.filter((p) => !p.isStaff && p.isAtDesk && p.session.state === 'thinking');
-      if (!typists.length) this.nextKeys = null;
-      else if (this.nextKeys === null) this.nextKeys = t + random(1, 4);
-      else if (t >= this.nextKeys) {
-        const heard = this.murmur('keys', pick(typists).position.x);
-        this.nextKeys = t + (heard ? random(...KEYS_EVERY) / Math.min(2, Math.sqrt(typists.length)) : 1);
-      }
-
       // The ping-pong ball, off each paddle and the table between, for the start of each rally
       const players = PING_PONG.map((spot) => office.people.find((p) => p.place === spotPlace(spot) && !p.isWalking && !p.isLeaving));
       const rally = this.rally;
@@ -3713,7 +3674,7 @@
         const x = person.position.x;
         let heard = this.heard.get(person);
         if (!heard) {
-          heard = { arrived: person.arrivedAt, celebrated: person.celebratedAt, fired: !!person.isFired, out: false };
+          heard = { arrived: person.arrivedAt, celebrated: person.celebratedAt, fired: !!person.isFired, out: false, working: person.isAtDesk && person.session.state === 'thinking' };
           this.heard.set(person, heard);
           // Someone new, coming in at the door: an agent hired, or staff
           const atDoor = Math.hypot(x - DOOR.x, person.position.y - DOOR.y) < 14;
@@ -3727,6 +3688,13 @@
         if (person.isLeaving && !heard.out && Math.hypot(x - DOOR.x, person.position.y - DOOR.y) < 10) {
           heard.out = true;
           this.play('door', DOOR.x);
+        }
+        // Getting to work, once a turn: a turn waiting on you isn't over yet
+        const state = person.session.state;
+        if (state === 'idle' || state === 'unread') heard.working = false;
+        else if (state === 'thinking' && person.isAtDesk && !heard.working) {
+          heard.working = true;
+          this.play('typing', x);
         }
         if (person.isFired && !heard.fired) {
           heard.fired = true;
@@ -3759,14 +3727,11 @@
         this.petSettled = pet.arrivedAt;
       }
 
-      // The season in the windows, once in a while
-      if (decor.season !== 'calendar') this.nextWeather = null;
+      // The season in the windows, once in a while; autumn's leaves fall without a sound
+      const weather = decor.season === 'calendar' ? { winter: 'wind', spring: 'bird', summer: 'bird' }[SEASONS[new Date().getMonth()]] : null;
+      if (!weather) this.nextWeather = null;
       else if (this.nextWeather === null) this.nextWeather = t + random(20, 60);
-      else if (t >= this.nextWeather) {
-        const season = SEASONS[new Date().getMonth()];
-        const heard = this.murmur({ winter: 'wind', autumn: 'leaves' }[season] || 'bird');
-        this.nextWeather = t + (heard ? random(...WEATHER_EVERY) : 2);
-      }
+      else if (t >= this.nextWeather) this.nextWeather = t + (this.murmur(weather) ? random(...WEATHER_EVERY) : 2);
 
       // The mic switched on and off, and an agent picked up and put down
       // A quick tap can hold and let go of the mic between two frames: each is told by its time.
