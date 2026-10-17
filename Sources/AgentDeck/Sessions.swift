@@ -226,6 +226,8 @@ final class Sessions {
             session.turnStartedAt = time
             session.stoppedSubagents = []
             session.clearTool()
+            // A compaction that never said it ended is over by now.
+            session.compacting = false
         case "PreToolUse" where isAgentsOwn:
             let tool = event["tool_name"] as? String ?? ""
             session.tool = tool

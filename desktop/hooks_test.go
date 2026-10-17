@@ -64,7 +64,7 @@ func TestConnectingAddsTheDecksHooksAndKeepsTheRest(t *testing.T) {
 }`
 	writeFile(t, settings, original)
 
-	if err := connect(Claude); err != nil {
+	if err := connect(Claude, true); err != nil {
 		t.Fatal(err)
 	}
 	saved := readJSON(t, settings)
@@ -101,7 +101,7 @@ func TestConnectingLeavesVoiceSetUpYourWay(t *testing.T) {
 	home := isolate(t)
 	settings := filepath.Join(home, ".claude", "settings.json")
 	writeFile(t, settings, `{"voice": {"enabled": false}}`)
-	if err := connect(Claude); err != nil {
+	if err := connect(Claude, true); err != nil {
 		t.Fatal(err)
 	}
 	if voice, _ := readJSON(t, settings)["voice"].(map[string]any); voice["enabled"] != false || voice["mode"] != nil {
@@ -130,7 +130,7 @@ func TestDisconnectingRemovesOnlyTheDecksHooks(t *testing.T) {
 
 func TestGrokGetsAHooksFileOfItsOwn(t *testing.T) {
 	home := isolate(t)
-	if err := connect(Grok); err != nil {
+	if err := connect(Grok, true); err != nil {
 		t.Fatal(err)
 	}
 	file := filepath.Join(home, ".grok", "hooks", "sauzzedeck-pro.json")

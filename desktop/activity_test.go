@@ -14,6 +14,7 @@ func TestAnActivitySaysWhatAToolIsFor(t *testing.T) {
 		{"Write", map[string]any{"file_path": "/work/api-server/notes/todo.md"}, "Editing todo.md"},
 		{"read_file", map[string]any{"absolute_path": `C:\work\site\index.html`}, "Reading index.html"},
 		{"Grep", map[string]any{"pattern": "subagent"}, "Searching for subagent"},
+		{"Glob", map[string]any{"pattern": "/home/someone/work/**/*.go"}, "Searching for *.go"},
 		{"WebFetch", map[string]any{"url": "https://www.example.com/docs/page?q=1"}, "Reading example.com"},
 		{"WebSearch", map[string]any{"query": "anything"}, "Searching the web"},
 		{"Agent", map[string]any{"description": "Review the diff", "prompt": "…"}, "Review the diff"},

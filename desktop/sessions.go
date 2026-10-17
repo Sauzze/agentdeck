@@ -297,6 +297,8 @@ func followDetails(name string, event map[string]any, session *Session, at float
 		session.TurnStartedAt = at
 		session.StoppedSubagents = nil
 		session.clearTool()
+		// A compaction that never said it ended is over by now.
+		session.Compacting = false
 	case "PreToolUse":
 		if fromSubagent {
 			return

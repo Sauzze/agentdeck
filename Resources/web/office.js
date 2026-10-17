@@ -253,6 +253,10 @@
       // The last ☢ Max press they've answered, so only a new one sends them.
       this.answeredPress = session.maxPressedAt;
       this.isGoingNuclear = false;
+      // Their session has shown max since the press. Until it does, the
+      // press is still on its way to the agent, and an old effort means
+      // nothing.
+      this.sawMax = false;
       this.pressedAt = null;
       this.isFacingAway = false;
       this.nextMove = Infinity; // when an idle person next decides where to go
@@ -301,7 +305,9 @@
 
       const current = new Map();
       this.seats.forEach((s, desk) => { if (s.session) current.set(s.session.id, { desk, session: s.session }); });
-      const known = new Set(this.people.map((p) => p.session.id));
+      // Someone on their way out isn't there any more: a session back on a
+      // key in the meantime gets a person of its own.
+      const known = new Set(this.people.filter((p) => !p.isLeaving).map((p) => p.session.id));
       const newcomers = new Map([...current].filter(([id]) => !known.has(id)));
 
       for (const person of this.people) {
@@ -522,8 +528,11 @@
       const pressed = session.maxPressedAt;
       if (pressed && pressed !== person.answeredPress && !person.isGoingNuclear) {
         person.isGoingNuclear = true;
+        person.sawMax = false;
         this.nuclearQueue.push(person);
-      } else if (person.isGoingNuclear && session.effort !== 'max' && person.pressedAt === null) {
+      }
+      if (person.isGoingNuclear && session.effort === 'max') person.sawMax = true;
+      if (person.isGoingNuclear && person.sawMax && session.effort !== 'max' && person.pressedAt === null) {
         this.standDown(person);
         this.send(person, deskPlace(placement.desk));
       }
@@ -1596,6 +1605,12 @@
 
   /** At most 30 frames a second: the art moves in whole pixels, and more would only spend battery. */
   const FRAME_TIME = 1000 / 30;
+  /**
+   * Out of sight this long, the room starts over from the latest snapshot
+   * when it's seen again, everyone in place: nobody replays a press of ☢ Max
+   * or a walk out that happened while nobody was looking.
+   */
+  const STALE_AFTER = 2000;
 
   /** The deck's snapshot, as the office reads it: a seat per key, its session if it has one. */
   function seatsOf(snapshot) {
@@ -1622,6 +1637,7 @@
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
+    let latest = null;   // the deck's last snapshot
     // The mic: whether a finger holds it, when it last went on and off, and
     // who it talks to.
     const mic = { held: false, heldAt: null, releasedAt: null, listener: null, usable: true };
@@ -1650,6 +1666,10 @@
       if (!visible || document.hidden) return;
       frame = requestAnimationFrame(tick);
       if (time - last < FRAME_TIME - 1) return;
+      if (last && time - last > STALE_AFTER && latest) {
+        office.close();
+        office.apply(seatsOf(latest), latest.theme, time / 1000);
+      }
       last = time;
       const now = time / 1000, date = new Date();
       // Dimmed only for a picked session with no voice input: with none
@@ -1764,8 +1784,14 @@
     run();
 
     return {
-      show(snapshot) { office.apply(seatsOf(snapshot), snapshot.theme, clock()); },
-      close() { office.close(); },
+      show(snapshot) {
+        latest = snapshot;
+        office.apply(seatsOf(snapshot), snapshot.theme, clock());
+      },
+      close() {
+        latest = null;
+        office.close();
+      },
       select(id) { selected = id; },
       setVisible(shown) {
         visible = shown;

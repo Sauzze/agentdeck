@@ -11,8 +11,9 @@ import (
 // app's Activity.swift.
 //
 // It's built only from the parts of a call that say what it's for: a file's
-// name, a web page's host, the description the agent gave it. Never from a
-// command or a path, which can hold anything, and goes to every paired phone.
+// name, a web page's host, the description the agent gave it, the end of a
+// search's pattern. Never from a command or a path, which can hold anything,
+// and goes to every paired phone.
 // Each agent names its tools its own way, so they're matched in lower case,
 // under each of their names.
 func activityOf(tool string, input map[string]any) string {
@@ -29,6 +30,8 @@ func activityLine(tool string, input map[string]any) string {
 		return strings.TrimSpace(value)
 	}
 	file := fileNameIn(input)
+	// A glob can be a whole path: only its last part says what's looked for.
+	pattern := afterLastSeparator(text("pattern"))
 
 	if strings.HasPrefix(tool, "mcp__") {
 		return "Using " + mcpServer(tool)
@@ -53,10 +56,10 @@ func activityLine(tool string, input map[string]any) string {
 		}
 		return "Reading " + file
 	case "grep", "glob", "search_file_content":
-		if text("pattern") == "" {
+		if pattern == "" {
 			return "Searching"
 		}
-		return "Searching for " + text("pattern")
+		return "Searching for " + pattern
 	case "webfetch", "web_fetch":
 		if host := hostOf(text("url")); host != "" {
 			return "Reading " + host
@@ -99,10 +102,19 @@ func cutActivity(line string) string {
 func fileNameIn(input map[string]any) string {
 	for _, key := range []string{"file_path", "filePath", "absolute_path", "notebook_path", "path"} {
 		if path, _ := input[key].(string); path != "" {
-			return lastPart(path)
+			return afterLastSeparator(path)
 		}
 	}
 	return ""
+}
+
+// afterLastSeparator is what comes after a path's last separator, or nothing.
+func afterLastSeparator(path string) string {
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' || r == '\\' })
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }
 
 // programOf is the program a command runs, without its arguments or its

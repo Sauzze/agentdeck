@@ -4,8 +4,9 @@ import Foundation
 /// "Searching the web". The office shows it under the agent's desk.
 ///
 /// It's built only from the parts of a call that say what it's for: a file's
-/// name, a web page's host, the description the agent gave it. Never from a
-/// command or a path, which can hold anything, and goes to every paired phone.
+/// name, a web page's host, the description the agent gave it, the end of a
+/// search's pattern. Never from a command or a path, which can hold anything,
+/// and goes to every paired phone.
 /// Each agent names its tools its own way, so they're matched in lower case,
 /// under each of their names.
 enum Activity {
@@ -19,6 +20,8 @@ enum Activity {
     private static func line(tool: String, input: [String: Any]) -> String {
         func text(_ key: String) -> String { (input[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "" }
         let file = fileName(input)
+        // A glob can be a whole path: only its last part says what's looked for.
+        let pattern = lastPart(of: text("pattern"))
 
         if tool.hasPrefix("mcp__") {
             return "Using \(server(ofMCPTool: tool))"
@@ -32,7 +35,7 @@ enum Activity {
         case "read", "notebookread", "read_file", "read_many_files":
             return file.isEmpty ? "Reading files" : "Reading \(file)"
         case "grep", "glob", "search_file_content":
-            return text("pattern").isEmpty ? "Searching" : "Searching for \(text("pattern"))"
+            return pattern.isEmpty ? "Searching" : "Searching for \(pattern)"
         case "webfetch", "web_fetch":
             return host(text("url")).map { "Reading \($0)" } ?? "Reading the web"
         case "websearch", "web_search", "google_web_search":
@@ -61,11 +64,14 @@ enum Activity {
 
     private static func fileName(_ input: [String: Any]) -> String {
         for key in ["file_path", "filePath", "absolute_path", "notebook_path", "path"] {
-            if let path = input[key] as? String, !path.isEmpty {
-                return path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
-            }
+            if let path = input[key] as? String, !path.isEmpty { return lastPart(of: path) }
         }
         return ""
+    }
+
+    /// What comes after a path's last separator, or nothing.
+    private static func lastPart(of path: String) -> String {
+        path.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
     }
 
     /// The program a command runs, without its arguments or its folder:

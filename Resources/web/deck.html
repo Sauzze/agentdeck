@@ -380,7 +380,8 @@
   /* ------------------------------------------------------------- office */
 
   // Tapping the room does what the keys and buttons do, with the deck's tick.
-  const office = AgentOffice.create($('office-canvas'), {
+  // Without its script, lost on a bad connection, the keys still work.
+  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {} } : AgentOffice.create($('office-canvas'), {
     select(id) {
       tick();
       selected = id;
