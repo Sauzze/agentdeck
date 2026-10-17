@@ -495,21 +495,19 @@
 
   /* ------------------------------------------------------------ pop out */
 
-  /** The room's own shape, two screen pixels to each of its own: sharp, and small enough for a corner. */
-  const POP_OUT_SIZE = { width: 640, height: 360 };
   let popped = null; // the office's own window, while the room is in it
 
   // Chrome and Edge can keep a window of the page on top of the others, but
   // only for a secure page, such as localhost on the computer. The button
   // shows only where that works: never on a phone, which reaches the
   // computer over plain http.
-  if (whole && window.documentPictureInPicture) $('pop-out').hidden = false;
+  if (whole && window.documentPictureInPicture && window.AgentOffice) $('pop-out').hidden = false;
 
   $('pop-out').addEventListener('click', async () => {
     $('pop-out').hidden = true;
     let win;
     try {
-      win = await documentPictureInPicture.requestWindow(POP_OUT_SIZE);
+      win = await documentPictureInPicture.requestWindow(AgentOffice.popOutSize);
     } catch {
       $('pop-out').hidden = false;
       return flash("Couldn't open the office's window");
@@ -548,6 +546,7 @@
     watching.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
     watching.observe($('status'), { attributes: true, childList: true, characterData: true, subtree: true });
     mirror();
+    office.setFloating(true);
     office.moved();
     $('away').hidden = false;
 
@@ -555,6 +554,7 @@
     win.addEventListener('pagehide', () => {
       watching.disconnect();
       $('office').prepend(canvas);
+      office.setFloating(false);
       office.moved();
       popped = null;
       $('away').hidden = true;
