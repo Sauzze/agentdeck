@@ -58,8 +58,8 @@ func (k *KeyCount) UnmarshalJSON(data []byte) error {
 // lounge's carpet and the piece in its corner, whether the sky keeps the
 // computer's time or it's always day, its pet, whether the windows follow the
 // seasons, how loud it is, the desks' finish and the chairs' colour, how many
-// of its own staff hang about, and your team, as the Mac app's Room. office.js
-// draws it, with the same choices. Anything unknown, or of the wrong kind, is
+// of its own staff hang about, your team, and the dress code, as the Mac app's
+// Room. office.js draws it, with the same choices. Anything unknown, or of the wrong kind, is
 // as standard: it only changes how the room looks.
 type Room struct {
 	Mic    string   `json:"mic"`
@@ -77,6 +77,9 @@ type Room struct {
 	Staff  string   `json:"staff"`
 	// How each project's agent looks, by the project's name.
 	Team map[string]TeamMember `json:"team"`
+	// What agents wear by their model's size and by agent. After the team, so
+	// it's written in the same place as the Mac app's Room has it.
+	Dress Dress `json:"dress"`
 }
 
 // TeamMember is how one project's agent looks in the office: skin, hair, a
@@ -109,9 +112,10 @@ var teamChoices = map[string][]string{
 		"pink", "blue", "green", "purple"},
 	"hairstyle": {"auto", "short", "long", "spiky", "bun", "curly", "ponytail", "afro", "mohawk", "buzz", "bald"},
 	"extra":     {"none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"},
-	"outfit":    {"auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat"},
-	"colour":    {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
-	"desk":      {"auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"},
+	"outfit": {"auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat", "polo", "cardigan", "hawaiian",
+		"tracksuit", "overalls", "waistcoat"},
+	"colour": {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
+	"desk":   {"auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"},
 }
 
 // checked is the member with anything unknown as standard, and the nickname
@@ -126,6 +130,126 @@ func (m TeamMember) checked() TeamMember {
 	return TeamMember{Skin: choose("skin", m.Skin), Hair: choose("hair", m.Hair), Hairstyle: choose("hairstyle", m.Hairstyle),
 		Extra: choose("extra", m.Extra), Outfit: choose("outfit", m.Outfit), Colour: choose("colour", m.Colour),
 		Desk: choose("desk", m.Desk), Name: oneLine(m.Name, nicknameLimit)}
+}
+
+// Dress is the office's dress code: what agents wear by the size of their
+// model, and by which agent they are, and rules that give a model its size by
+// part of its name, as the Mac app's Dress. Every size and every agent is
+// always there, "auto" when it isn't set, so office.js never finds one
+// missing. Anything unknown, or of the wrong kind, is as standard, as in the
+// rest of the room.
+type Dress struct {
+	Sizes  DressSizes  `json:"sizes"`
+	Agents DressAgents `json:"agents"`
+	// In the order given.
+	Rules []DressRule `json:"rules"`
+}
+
+// DressSizes is what agents wear by the size of their model. A struct rather
+// than a map, which would be written in alphabetical order: this keeps the
+// sizes small to top.
+type DressSizes struct {
+	Small  Attire `json:"small"`
+	Medium Attire `json:"medium"`
+	Large  Attire `json:"large"`
+	Top    Attire `json:"top"`
+}
+
+// DressAgents is what each agent wears, in the deck's order of agents.
+type DressAgents struct {
+	Claude   Attire `json:"claude"`
+	Codex    Attire `json:"codex"`
+	Gemini   Attire `json:"gemini"`
+	OpenCode Attire `json:"opencode"`
+	Grok     Attire `json:"grok"`
+}
+
+// Attire is what the dress code puts on agents: an outfit and its colour,
+// from a team member's choices. "auto" is as its model's, as for a team
+// member.
+type Attire struct {
+	Outfit string `json:"outfit"`
+	Colour string `json:"colour"`
+}
+
+// DressRule dresses a model whose name has Contains in it as Size. What it
+// looks for is kept on one line, and lowercased.
+type DressRule struct {
+	Contains string `json:"contains"`
+	Size     string `json:"size"`
+}
+
+const (
+	// The most rules kept, and the most a rule's part of a name can be, in
+	// characters.
+	dressRuleLimit     = 20
+	dressContainsLimit = 32
+)
+
+var dressSizes = []string{"small", "medium", "large", "top"}
+
+// UnmarshalJSON keeps what it knows of the dress code it's given. A dress
+// code, an attire or a rule that isn't an object is as standard.
+func (d *Dress) UnmarshalJSON(data []byte) error {
+	object := func(data json.RawMessage) map[string]json.RawMessage {
+		var o map[string]json.RawMessage
+		json.Unmarshal(data, &o)
+		return o
+	}
+	text := func(data json.RawMessage) string {
+		var s string
+		json.Unmarshal(data, &s)
+		return s
+	}
+	attire := func(set map[string]json.RawMessage, name string) Attire {
+		parts := object(set[name])
+		return Attire{Outfit: text(parts["outfit"]), Colour: text(parts["colour"])}
+	}
+	raw := object(data)
+	sizes, agents := object(raw["sizes"]), object(raw["agents"])
+	*d = Dress{
+		Sizes: DressSizes{Small: attire(sizes, "small"), Medium: attire(sizes, "medium"), Large: attire(sizes, "large"),
+			Top: attire(sizes, "top")},
+		Agents: DressAgents{Claude: attire(agents, string(Claude)), Codex: attire(agents, string(Codex)),
+			Gemini: attire(agents, string(Gemini)), OpenCode: attire(agents, string(OpenCode)), Grok: attire(agents, string(Grok))},
+	}
+	var rules []json.RawMessage
+	json.Unmarshal(raw["rules"], &rules)
+	for _, rule := range rules {
+		parts := object(rule)
+		d.Rules = append(d.Rules, DressRule{Contains: text(parts["contains"]), Size: text(parts["size"])})
+	}
+	*d = d.checked()
+	return nil
+}
+
+// checked is the dress code with anything unknown as auto, and the rules
+// that name a part of a name and a size the office has, as many as it keeps.
+func (d Dress) checked() Dress {
+	checked := Dress{
+		Sizes: DressSizes{Small: d.Sizes.Small.checked(), Medium: d.Sizes.Medium.checked(), Large: d.Sizes.Large.checked(),
+			Top: d.Sizes.Top.checked()},
+		Agents: DressAgents{Claude: d.Agents.Claude.checked(), Codex: d.Agents.Codex.checked(), Gemini: d.Agents.Gemini.checked(),
+			OpenCode: d.Agents.OpenCode.checked(), Grok: d.Agents.Grok.checked()},
+		Rules: []DressRule{},
+	}
+	for _, rule := range d.Rules {
+		if len(checked.Rules) == dressRuleLimit {
+			break
+		}
+		contains := oneLine(strings.ToLower(rule.Contains), dressContainsLimit)
+		if contains != "" && slices.Contains(dressSizes, rule.Size) {
+			checked.Rules = append(checked.Rules, DressRule{Contains: contains, Size: rule.Size})
+		}
+	}
+	return checked
+}
+
+// checked is the attire with anything unknown as auto, by a team member's
+// choices.
+func (a Attire) checked() Attire {
+	member := TeamMember{Outfit: a.Outfit, Colour: a.Colour}.checked()
+	return Attire{Outfit: member.Outfit, Colour: member.Colour}
 }
 
 var (
@@ -175,6 +299,7 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 			Extra: text(parts["extra"]), Outfit: text(parts["outfit"]), Colour: text(parts["colour"]), Desk: text(parts["desk"]),
 			Name: text(parts["name"])}
 	}
+	json.Unmarshal(raw["dress"], &r.Dress)
 	*r = r.checked()
 	return nil
 }
@@ -198,7 +323,7 @@ func (r Room) checked() Room {
 		Lounge: choose("lounge", r.Lounge), Corner: choose("corner", r.Corner), Sky: choose("sky", r.Sky),
 		Pet: choose("pet", r.Pet), Season: choose("season", r.Season), Sound: choose("sound", r.Sound),
 		Desk: choose("desk", r.Desk), Chair: choose("chair", r.Chair), Staff: choose("staff", r.Staff),
-		Wall: slices.Clone(standardWall)}
+		Wall: slices.Clone(standardWall), Dress: r.Dress.checked()}
 	for i := range checked.Wall {
 		if i < len(r.Wall) && slices.Contains(wallChoices, r.Wall[i]) {
 			checked.Wall[i] = r.Wall[i]

@@ -153,12 +153,47 @@
   const WALL_SLOTS = [44, 77, 110, 143, 176];
 
   /** A room as the layout gives it: anything unknown or left out is as standard. */
+  /**
+   * The dress code: an outfit and colour for each size of model, and for
+   * each agent while its model isn't known, and your own rules for telling
+   * a model's size from its name. Outfits and colours are the team's
+   * choices. The apps' Layout.swift and layout.go keep the same.
+   */
+  const DRESS_SIZES = ['small', 'medium', 'large', 'top'];
+  const DRESS_AGENTS = ['claude', 'codex', 'gemini', 'opencode', 'grok'];
+  /** The most rules a dress code keeps, and the most characters a rule's words can be. */
+  const DRESS_RULE_LIMIT = 20;
+  const DRESS_WORDS_LIMIT = 32;
+  const AUTO_ATTIRE = { outfit: 'auto', colour: 'auto' };
+
+  /** A dress code as given: anything unknown is Auto, and a rule that can't be read is left out. */
+  function dressOf(given) {
+    const raw = given && typeof given === 'object' && !Array.isArray(given) ? given : {};
+    // Read only when there's something to read: this runs as the office loads, before the team's choices exist.
+    const attire = (a) => (a && typeof a === 'object' ? {
+      outfit: TEAM_CHOICES.outfit.includes(a.outfit) ? a.outfit : 'auto',
+      colour: TEAM_CHOICES.colour.includes(a.colour) ? a.colour : 'auto',
+    } : { ...AUTO_ATTIRE });
+    const each = (keys, from) => Object.fromEntries(keys.map((key) =>
+      [key, attire(from && typeof from === 'object' && Object.hasOwn(from, key) ? from[key] : null)]));
+    const rules = (Array.isArray(raw.rules) ? raw.rules : [])
+      .map((rule) => ({
+        contains: rule && typeof rule.contains === 'string'
+          ? [...rule.contains.replace(/[\x00-\x1f\x7f]/g, '').trim().toLowerCase()].slice(0, DRESS_WORDS_LIMIT).join('') : '',
+        size: rule && rule.size,
+      }))
+      .filter((rule) => rule.contains && DRESS_SIZES.includes(rule.size))
+      .slice(0, DRESS_RULE_LIMIT);
+    return { sizes: each(DRESS_SIZES, raw.sizes), agents: each(DRESS_AGENTS, raw.agents), rules };
+  }
+
   function roomOf(given) {
     const raw = given && typeof given === 'object' ? given : {};
     const room = {};
     for (const [part, choices] of Object.entries(ROOM_CHOICES)) room[part] = choices.includes(raw[part]) ? raw[part] : choices[0];
     room.wall = STANDARD_WALL.map((standard, i) => (Array.isArray(raw.wall) && WALL_CHOICES.includes(raw.wall[i]) ? raw.wall[i] : standard));
     room.team = teamOf(raw.team);
+    room.dress = dressOf(raw.dress);
     return room;
   }
 
@@ -296,39 +331,74 @@
   /** Each agent wears its own colour. */
   const SHIRTS = { claude: 0xd97757, codex: 0x10a37f, gemini: 0x4c8bf5, opencode: 0x9aa0a6, grok: 0xe8e8e8 };
   /**
-   * Claude Code's agents and interns dress for the model they run, the
-   * bigger the model the smarter: Haiku in a T-shirt and jeans, Sonnet in a
-   * collared shirt, Opus in a jacket, Fable in a suit and tie. Other agents,
-   * and a model not known yet, wear their agent's colour.
+   * Each outfit, and what goes with it: jeans and trainers with a T-shirt, a
+   * dark suit and an orange tie, denim overalls, a tracksuit's bottoms to
+   * match its top, a white shirt's sleeves under a waistcoat.
    */
-  /** Each outfit, and what goes with it: jeans and trainers with a T-shirt, a dark suit and an orange tie. */
+  const DENIM = 0x46679a, TRAINERS = 0xe9e6df;
   const OUTFITS = {
-    tee: { style: 'tee', pants: 0x46679a, shoes: 0xe9e6df },
+    tee: { style: 'tee', pants: DENIM, shoes: TRAINERS },
     hoodie: { style: 'hoodie' },
     collar: { style: 'collar' },
     sweater: { style: 'sweater' },
     jacket: { style: 'jacket' },
     suit: { style: 'suit', shirt: 0x2c2f3a, pants: 0x23252d, tie: 0xd97757 },
     labcoat: { style: 'labcoat', shirt: 0xeeeae2 },
-  };
-  const MODEL_OUTFITS = {
-    haiku: { ...OUTFITS.tee, shirt: 0xf59a3e },
-    sonnet: { ...OUTFITS.collar, shirt: 0xd97757 },
-    opus: { ...OUTFITS.jacket, shirt: 0xa94a2c },
-    fable: OUTFITS.suit,
+    polo: { style: 'polo' },
+    cardigan: { style: 'cardigan' },
+    hawaiian: { style: 'hawaiian', shoes: 0x8a6a4a },
+    tracksuit: { style: 'tracksuit', matching: true, shoes: TRAINERS },
+    overalls: { style: 'overalls', pants: DENIM },
+    waistcoat: { style: 'waistcoat', sleeves: 0xeeeae2 },
   };
 
   /**
-   * What an agent running `model` wears: a style, and its colours. A team
-   * `member` can pick another outfit, or another colour for it.
+   * The bigger the model the smarter, unless the dress code says otherwise:
+   * small models in a T-shirt and jeans, medium in a collared shirt, large in
+   * a jacket, the top ones in a suit and tie. Claude Code's wear its own
+   * oranges, from Haiku's bright one to Opus's deep one.
+   */
+  const SIZE_OUTFITS = { small: 'tee', medium: 'collar', large: 'jacket', top: 'suit' };
+  const CLAUDE_SIZE_SHIRTS = { small: 0xf59a3e, medium: 0xd97757, large: 0xa94a2c };
+  /**
+   * Words model names use for their size, as their own words: so `gemini`
+   * isn't `mini`. A model with none of them is medium.
+   */
+  const SIZE_WORDS = {
+    top: ['fable', 'ultra', 'heavy', 'max'],
+    small: ['haiku', 'mini', 'nano', 'lite', 'fast', 'small'],
+    large: ['opus', 'pro', 'large'],
+    medium: ['sonnet', 'flash', 'medium'],
+  };
+
+  /** How big a model is, by its name: your own rules first, then the words in it. */
+  function sizeOf(model) {
+    const name = model.toLowerCase();
+    const rule = decor.dress.rules.find((r) => name.includes(r.contains));
+    if (rule) return rule.size;
+    if (/deep-?think/.test(name)) return 'top';
+    const words = name.split(/[^a-z0-9]+/);
+    return ['top', 'small', 'large', 'medium'].find((size) => SIZE_WORDS[size].some((word) => words.includes(word))) || 'medium';
+  }
+
+  /**
+   * What an agent running `model` wears: its project's own outfit on the team
+   * card first, then the dress code for the model's size, or for the agent
+   * while its model isn't known, then plain clothes in its agent's colour.
    */
   function outfitOf(agent, model, member) {
-    const family = (/haiku|sonnet|opus|fable/.exec(model || '') || [''])[0];
-    const dressed = agent === 'claude' ? MODEL_OUTFITS[family] : null;
-    const plain = { style: 'plain', shirt: SHIRTS[agent] ?? SHIRTS.claude, pants: PALETTE.pants, shoes: PALETTE.shoes };
-    const chosen = member && member.outfit !== 'auto' ? OUTFITS[member.outfit] : dressed;
-    const outfit = { ...plain, ...chosen };
-    if (member && member.colour !== 'auto') outfit.shirt = SHIRT_COLOURS[member.colour];
+    const own = SHIRTS[agent] ?? SHIRTS.claude;
+    const size = model ? sizeOf(model) : null;
+    const code = (size ? decor.dress.sizes[size] : decor.dress.agents[agent]) || AUTO_ATTIRE;
+    const chosen = member && member.outfit !== 'auto' ? member.outfit : null;
+    const style = chosen || (code.outfit !== 'auto' ? code.outfit : size ? SIZE_OUTFITS[size] : null);
+    const outfit = { style: 'plain', shirt: own, pants: PALETTE.pants, shoes: PALETTE.shoes, ...(style ? OUTFITS[style] : {}) };
+    // A size's own outfit, left on Auto, is in Claude's oranges; a suit's tie is in its agent's colour.
+    if (!chosen && code.outfit === 'auto' && agent === 'claude' && CLAUDE_SIZE_SHIRTS[size]) outfit.shirt = CLAUDE_SIZE_SHIRTS[size];
+    if (style === 'suit' && agent && agent !== 'claude') outfit.tie = own;
+    const colour = member && member.colour !== 'auto' ? member.colour : code.colour !== 'auto' ? code.colour : null;
+    if (colour) outfit.shirt = SHIRT_COLOURS[colour];
+    if (outfit.matching) outfit.pants = darker(outfit.shirt);
     return outfit;
   }
   /** Staff wear plain colours, none of them an agent's. */
@@ -358,6 +428,8 @@
 
   /** What people wear besides their clothes: dark lenses, headphones, a bow, glasses, a lab coat's shirt and pen. */
   const SHADES = 0x15161a, HEADPHONES = 0x6a7080, BOW = 0xe0507a, GLASS = 0xcfe3ef, LAB_SHIRT = 0x8fb3d9, LAB_PEN = 0x3f6fc4;
+  /** A Hawaiian shirt's yellow flowers, and the overalls' buttons. */
+  const HIBISCUS = 0xf2d35b;
 
   /** A colour as the deck's theme writes it, `#rrggbb`, as a number. */
   function fromCss(text) {
@@ -380,7 +452,8 @@
       'pink', 'blue', 'green', 'purple'],
     hairstyle: ['auto', 'short', 'long', 'spiky', 'bun', 'curly', 'ponytail', 'afro', 'mohawk', 'buzz', 'bald'],
     extra: ['none', 'glasses', 'sunglasses', 'headphones', 'cap', 'beanie', 'beard', 'moustache', 'bow'],
-    outfit: ['auto', 'tee', 'hoodie', 'collar', 'sweater', 'jacket', 'suit', 'labcoat'],
+    outfit: ['auto', 'tee', 'hoodie', 'collar', 'sweater', 'jacket', 'suit', 'labcoat', 'polo', 'cardigan', 'hawaiian', 'tracksuit',
+      'overalls', 'waistcoat'],
     colour: ['auto', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'yellow', 'grey', 'black', 'white'],
     desk: ['auto', 'plant', 'papers', 'lamp', 'cactus', 'duck', 'trophy', 'photo', 'mug', 'none'],
   };
@@ -2243,8 +2316,9 @@
         ? { ...outfitOf(null), shirt: STAFF_SHIRTS[Math.floor(look.phase * STAFF_SHIRTS.length) % STAFF_SHIRTS.length] }
         : outfitOf(person.session.agent, person.session.model, memberOf(person.session));
       const shirtColour = outfit.shirt;
+      // Sleeves are the shirt's, or a white shirt's under a waistcoat.
       const sleeve = (px, py, w, h) => {
-        ctx.fillStyle = css(shirtColour, 1, 0.78);
+        ctx.fillStyle = css(outfit.sleeves ?? shirtColour, 1, 0.78);
         ctx.fillRect(ox + px * scale, oy + py * scale, w * scale, h * scale);
       };
 
@@ -2691,6 +2765,40 @@
         dot(x - 1, y, white);
         dot(x + 1, y, white);
         fill(x, y, 1, rows - 2, outfit.tie);
+      } else if (outfit.style === 'polo') {
+        // A soft collar, and a short placket with a button
+        dot(x - 1, y, lighter(outfit.shirt));
+        dot(x + 1, y, lighter(outfit.shirt));
+        dot(x, y + 1, darker(outfit.shirt));
+        dot(x, y + 2, white);
+      } else if (outfit.style === 'cardigan') {
+        // Open over a white shirt, buttoned down one side
+        fill(x, y, 1, rows - 1, white);
+        for (let row = 2; row < rows; row += 2) dot(x - 1, y + row, darker(outfit.shirt));
+      } else if (outfit.style === 'hawaiian') {
+        // An open collar, and flowers
+        dot(x - 1, y, white);
+        dot(x + 1, y, white);
+        for (const [dx, dy, flower] of [[-half, 1, white], [half - 1, 2, HIBISCUS], [1 - half, 3, HIBISCUS], [half, 4, white]]) {
+          if (dy < rows) dot(x + dx, y + dy, flower);
+        }
+      } else if (outfit.style === 'tracksuit') {
+        // A zip down the middle, and a stripe on each shoulder
+        fill(x, y, 1, rows - 1, lighter(outfit.shirt));
+        dot(x - half, y, white);
+        dot(x + half, y, white);
+      } else if (outfit.style === 'overalls') {
+        // The bib over the shirt, its straps and their buttons
+        fill(x - half + 1, y + 2, half * 2 - 1, rows - 2, DENIM);
+        for (const side of [-1, 1]) {
+          fill(x + side * (half - 1), y, 1, 2, DENIM);
+          dot(x + side * (half - 1), y + 2, HIBISCUS);
+        }
+      } else if (outfit.style === 'waistcoat') {
+        // The white shirt showing at the neck, and buttons down the front
+        fill(x - 1, y, 3, 1, outfit.sleeves);
+        dot(x, y + 1, outfit.sleeves);
+        for (let row = 2; row < rows; row += 2) dot(x, y + row, darker(outfit.shirt));
       }
     }
 
@@ -2714,7 +2822,7 @@
       // The badge goes beside buttons, a jacket's opening or a tie.
       if (outfit.style === 'plain' || outfit.style === 'tee') dot(x, top + 6, PALETTE.bubble);
       else dot(x + 1, top + 7, PALETTE.bubble);
-      ctx.fillStyle = css(shirt, 1, 0.78);
+      ctx.fillStyle = css(outfit.sleeves ?? shirt, 1, 0.78);
       for (const side of [-3, 3]) ctx.fillRect(ox + (x + side) * scale, oy + (top + 6) * scale, scale, 2 * scale);
       dot(x - 3, top + 8, look.skin);
       dot(x + 3, top + 8, look.skin);

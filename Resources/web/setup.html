@@ -151,6 +151,15 @@
   .member input, .member select { min-width: 0; background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
     padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
   .team .empty { color: var(--dim); font-size: 13px; }
+  /* The dress code: a row for each size of model, each agent and each rule. */
+  .dress { display: grid; gap: 6px; }
+  .dress h4 { margin: 8px 0 2px; font-size: 12px; color: var(--dim); font-weight: 600; }
+  .dress-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 170px) minmax(0, 120px); gap: 8px; align-items: center; }
+  .dress-row.rule { grid-template-columns: minmax(0, 1fr) minmax(0, 170px) auto; }
+  .dress-row .what { min-width: 0; font-size: 13px; }
+  .dress-row .what small { display: block; color: var(--dim); font-size: 12px; }
+  .dress input, .dress select { min-width: 0; background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
+    padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
   .rows { display: grid; gap: 8px; }
   .line { display: flex; gap: 10px; align-items: center; }
   .chips { flex: 1; min-width: 0; display: flex; gap: 6px; }
@@ -349,7 +358,10 @@
         <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Sound starts with your first tap. The preview shows the office while you change it.</p>
         <h3>Your team</h3>
         <div class="team" id="room-team"></div>
-        <p class="hint">Each project's agent, your way. Anything on Auto is as the project's name picks it. Clothes on Auto follow Claude Code's model: Haiku dresses casual, Sonnet wears a shirt, Opus a jacket, and Fable a suit and tie. Interns dress for their own model.</p>
+        <p class="hint">Each project's agent, your way. Anything on Auto is as the project's name picks it, and clothes on Auto follow the dress code below.</p>
+        <h3>Dress code</h3>
+        <div class="dress" id="room-dress"></div>
+        <p class="hint">What agents and their interns wear, by the size of the model they run: the bigger, the smarter, unless you say otherwise. The office tells a model's size from the words in its name; your own rules come first. While an agent's model isn't known, as for most agents but Claude Code, it dresses by agent. A project's own outfit on its team card comes before all of this.</p>
         <h3>Buttons</h3>
         <div class="rows" id="rows"></div>
         <p class="note" id="stick-note" hidden>Without the stick, add ▲ and ▼ to answer your agents' questions.</p>
@@ -836,8 +848,10 @@
       ['curly', 'Curly'], ['ponytail', 'Ponytail'], ['afro', 'Afro'], ['mohawk', 'Mohawk'], ['buzz', 'Buzz cut'], ['bald', 'Bald']]],
     extra: ['Extra', [['none', 'Nothing'], ['glasses', 'Glasses'], ['sunglasses', 'Sunglasses'], ['headphones', 'Headphones'],
       ['cap', 'A cap'], ['beanie', 'A beanie'], ['beard', 'A beard'], ['moustache', 'A moustache'], ['bow', 'A bow']]],
-    outfit: ['Outfit', [['auto', 'For the model'], ['tee', 'T-shirt and jeans'], ['hoodie', 'Hoodie'], ['collar', 'Shirt'],
-      ['sweater', 'Sweater'], ['jacket', 'Jacket'], ['suit', 'Suit and tie'], ['labcoat', 'Lab coat']]],
+    outfit: ['Outfit', [['auto', 'By the dress code'], ['tee', 'T-shirt and jeans'], ['hoodie', 'Hoodie'], ['collar', 'Shirt'],
+      ['sweater', 'Sweater'], ['jacket', 'Jacket'], ['suit', 'Suit and tie'], ['labcoat', 'Lab coat'], ['polo', 'Polo shirt'],
+      ['cardigan', 'Cardigan'], ['hawaiian', 'Hawaiian shirt'], ['tracksuit', 'Tracksuit'], ['overalls', 'Overalls'],
+      ['waistcoat', 'Waistcoat']]],
     colour: ['Colour', [['auto', 'Auto'], ['orange', 'Orange'], ['red', 'Red'], ['pink', 'Pink'], ['purple', 'Purple'], ['blue', 'Blue'],
       ['teal', 'Teal'], ['green', 'Green'], ['yellow', 'Yellow'], ['grey', 'Grey'], ['black', 'Black'], ['white', 'White']]],
     desk: ['On the desk', [['auto', 'Auto'], ['plant', 'A plant'], ['papers', 'Papers'], ['lamp', 'A lamp'], ['cactus', 'A cactus'],
@@ -903,6 +917,95 @@
     }));
   }
 
+  /* The dress code: what each size of model wears, what each agent wears
+     while its model isn't known, and your rules for sizing models. */
+  const DRESS_SIZES = [
+    ['small', 'Small models', 'Haiku, GPT mini and nano, Gemini Flash-Lite', 'T-shirt'],
+    ['medium', 'Medium models', 'Sonnet, GPT, Gemini Flash', 'Shirt'],
+    ['large', 'Large models', 'Opus, GPT Pro, Gemini Pro', 'Jacket'],
+    ['top', 'Top models', 'Fable, Gemini Ultra, Grok Heavy', 'Suit'],
+  ];
+  const DRESS_AGENTS = [['claude', 'Claude Code'], ['codex', 'Codex'], ['gemini', 'Gemini CLI'], ['opencode', 'OpenCode'], ['grok', 'Grok']];
+  const DRESS_RULE_LIMIT = 20;
+  const DRESS_WORDS_LIMIT = 32;
+  // A rule just added, kept here until it has words: the apps drop a rule without any.
+  let draftRule = null;
+  const blankDress = () => ({
+    sizes: Object.fromEntries(DRESS_SIZES.map(([size]) => [size, { outfit: 'auto', colour: 'auto' }])),
+    agents: Object.fromEntries(DRESS_AGENTS.map(([agent]) => [agent, { outfit: 'auto', colour: 'auto' }])),
+    rules: [],
+  });
+
+  function drawDress(room) {
+    const dress = room.dress || (room.dress = blankDress());
+    const furnish = (edit) => change(edit, true);
+    const [, outfits] = TEAM_CHOICES.outfit, [, colours] = TEAM_CHOICES.colour;
+    /** A row: what it's for, then its outfit (Auto saying what that is) and colour. */
+    const row = (title, note, attire, auto) => {
+      const el = document.createElement('div');
+      el.className = 'dress-row';
+      const what = document.createElement('div');
+      what.className = 'what';
+      what.textContent = title;
+      if (note) {
+        const small = document.createElement('small');
+        small.textContent = note;
+        what.append(small);
+      }
+      const outfit = select([['auto', `Auto: ${auto}`], ...outfits.slice(1)], attire.outfit, (value) => furnish(() => { attire.outfit = value; }));
+      outfit.setAttribute('aria-label', `What ${title.toLowerCase()} wear`);
+      const colour = select(colours, attire.colour, (value) => furnish(() => { attire.colour = value; }));
+      colour.setAttribute('aria-label', `Its colour, for ${title.toLowerCase()}`);
+      el.append(what, outfit, colour);
+      return el;
+    };
+    const heading = (text) => Object.assign(document.createElement('h4'), { textContent: text });
+    const ruleRow = (rule, i) => {
+      const draft = i === null;
+      const el = document.createElement('div');
+      el.className = 'dress-row rule';
+      const words = document.createElement('input');
+      words.type = 'text';
+      words.maxLength = DRESS_WORDS_LIMIT;
+      words.spellcheck = false;
+      words.placeholder = 'A model whose name contains…';
+      words.value = rule.contains;
+      words.setAttribute('aria-label', 'Words in the model\'s name');
+      const set = (edit) => {
+        if (!draft) return furnish(() => edit(rule));
+        edit(rule);
+        // Words make a draft a rule.
+        if (rule.contains) {
+          draftRule = null;
+          furnish(() => { dress.rules.push(rule); });
+        }
+      };
+      words.onchange = () => set((r) => { r.contains = words.value.trim().toLowerCase(); });
+      const size = select(DRESS_SIZES.map(([id, label]) => [id, `is ${label.split(' ')[0].toLowerCase()}`]), rule.size,
+        (value) => set((r) => { r.size = value; }));
+      size.setAttribute('aria-label', 'Its size');
+      const remove = draft
+        ? tool('Remove', 'Remove this rule', () => { draftRule = null; drawDress(room); })
+        : tool('Remove', 'Remove this rule', () => furnish(() => { dress.rules.splice(i, 1); }));
+      el.append(words, size, remove);
+      return el;
+    };
+    const rules = [...dress.rules.map(ruleRow), ...(draftRule ? [ruleRow(draftRule, null)] : [])];
+    const add = tool('Add a Rule', 'Say the size of a model the office doesn\'t know', () => {
+      draftRule = { contains: '', size: 'medium' };
+      drawDress(room);
+      [...$('room-dress').querySelectorAll('.rule input')].pop()?.focus();
+    }, !!draftRule || dress.rules.length >= DRESS_RULE_LIMIT);
+    $('room-dress').replaceChildren(
+      heading('By the model\'s size'),
+      ...DRESS_SIZES.map(([size, label, note, auto]) => row(label, note, dress.sizes[size], auto)),
+      heading('By agent, while its model isn\'t known'),
+      ...DRESS_AGENTS.map(([agent, label]) => row(label, null, dress.agents[agent], 'Plain')),
+      heading('Your rules for sizing models'),
+      ...rules,
+      add);
+  }
+
   function select(options, value, onchange) {
     const el = document.createElement('select');
     for (const [id, label] of options) el.add(new Option(label, id, false, id === value));
@@ -926,6 +1029,7 @@
     corner.replaceChildren(...ROOM_CHOICES.corner.map(([id, label]) => new Option(label, id, false, id === room.corner)));
     corner.onchange = () => furnish(() => { room.corner = corner.value; });
     drawTeam(room);
+    drawDress(room);
   }
 
   /** Each row as the phone draws it, with its own tools. */
