@@ -427,14 +427,15 @@
     held() {
       tick();
     },
-    // Firing, once the office has asked, and hiring into an empty desk.
-    fire(id) {
+    // Firing, once the office has asked: whether the agent was let go,
+    // which only a plain yes means. And hiring, into the desk held.
+    async fire(id) {
       tick();
-      send('/act', { session: id, action: 'fire' });
+      return (await send('/act', { session: id, action: 'fire' })) === 204;
     },
-    hire() {
+    hire(desk) {
       tick();
-      send('/act', { action: 'hire' });
+      send('/act', { action: 'hire', desk });
     },
     // An agent carried from one desk to another: the two swap, and stay so.
     swap(from, to) {
@@ -830,14 +831,25 @@
     armed = null;
   }
 
-  /** POST and say anything that is not a plain yes on the status line. */
+  /**
+   * POST and say anything that is not a plain yes on the status line. It
+   * comes to the computer's status, or false with no answer: in the
+   * preview, or out of reach.
+   */
   async function send(pathname, params, signal) {
-    if (preview) return flash(rehearse(params));
+    if (preview) {
+      flash(rehearse(params));
+      return false;
+    }
     const res = await post(pathname, params, signal);
-    if (!res) return flash("Can't reach your computer");
-    if (res.status === 401) return unpaired();
-    if (res.status === 202) return flash('queued — goes in when Claude is done');
-    if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
+    if (!res) {
+      flash("Can't reach your computer");
+      return false;
+    }
+    if (res.status === 401) unpaired();
+    else if (res.status === 202) flash('queued — goes in when Claude is done');
+    else if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
+    return res.status;
   }
 
   let flashTimer = null;

@@ -401,9 +401,12 @@
     yellow: 0xe8c04a, grey: 0x8a8f9c, black: 0x2c2f3a, white: 0xeeeae2,
   };
 
-  /** A team as given, with anything unknown left out or as 'auto'. */
+  /**
+   * A team as given, with anything unknown left out or as 'auto'. It has no
+   * prototype, so a project called `constructor` or `__proto__` is only a name.
+   */
   function teamOf(given) {
-    const team = {};
+    const team = Object.create(null);
     if (!given || typeof given !== 'object' || Array.isArray(given)) return team;
     // The first projects by name, as many as a team remembers, as the apps keep them.
     const projects = Object.entries(given).filter(([project]) => project).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
@@ -437,7 +440,7 @@
   }
 
   /** A session's place on your team, if you've made one for its project. */
-  const memberOf = (session) => (session && decor.team[session.name]) || null;
+  const memberOf = (session) => (session && Object.hasOwn(decor.team, session.name) && decor.team[session.name]) || null;
 
   /** How a person looks: as their project's name picks it, with your choices for them over the top. */
   function lookFor(person) {
@@ -582,6 +585,10 @@
       this.staffHired = 0; // numbers each new member of staff, for a face of their own
       this.interns = [];
       this.pet = null;
+      // When each session started waiting on you, by its id. It outlasts
+      // close(), so a room started over after being out of sight still
+      // knows who has been kept waiting.
+      this.waiting = new Map();
     }
 
     /**
@@ -644,6 +651,8 @@
 
       const current = new Map();
       this.seats.forEach((s, desk) => { if (s.session) current.set(s.session.id, { desk, session: s.session }); });
+      for (const id of this.waiting.keys()) if (current.get(id)?.session.state !== 'asking') this.waiting.delete(id);
+      for (const [id, { session }] of current) if (session.state === 'asking' && !this.waiting.has(id)) this.waiting.set(id, now);
       // Someone on their way out isn't there any more: a session back on a
       // key in the meantime gets a person of its own.
       const known = new Set(this.people.filter((p) => !p.isLeaving).map((p) => p.session.id));
@@ -670,7 +679,7 @@
 
       for (const placement of [...newcomers.values()].sort((a, b) => a.desk - b.desk)) {
         const person = new Person(placement.session, placement.desk);
-        if (placement.session.state === 'asking') person.askingSince = now;
+        person.askingSince = this.waiting.get(placement.session.id) ?? null;
         if (this.isOpen) {
           person.position = { ...DOOR };
           this.send(person, deskPlace(placement.desk));
@@ -951,8 +960,7 @@
       if (session.tool !== before.tool) person.toolSince = now;
       person.session = session;
 
-      if (session.state !== 'asking') person.askingSince = null;
-      else if (person.askingSince === null) person.askingSince = now;
+      person.askingSince = this.waiting.get(session.id) ?? null;
       // A turn of an hour or more, finished: a little party.
       const finished = before.state === 'thinking' && (session.state === 'unread' || session.state === 'idle');
       if (finished && before.turnStartedAt && Date.now() - before.turnStartedAt >= LONG_HAUL * 1000) person.celebratedAt = now;
@@ -2921,7 +2929,7 @@
       ctx.fillText(fitText(ctx, `Fire ${name}?`, (w - 12) * scale), middle, screen(0, top + 11).y);
       ctx.font = font(500, size);
       ctx.fillStyle = css(PALETTE.bubbleEdge, 0.7);
-      ctx.fillText(fitText(ctx, 'Its agent stops, and its window closes.', (w - 12) * scale), middle, screen(0, top + 21).y);
+      ctx.fillText(fitText(ctx, 'Its agent stops, and its tab closes.', (w - 12) * scale), middle, screen(0, top + 21).y);
       for (const key of keys) drawPixelKey(key.x, key.y, key.w, key.h, key.action === 'fired' ? PALETTE.dome : PALETTE.rail, key.label);
     }
 
@@ -3033,7 +3041,10 @@
     return `${chars.join('').trimEnd()}…`;
   }
 
-  function roundedRect(ctx, x, y, w, h, r) {
+  function roundedRect(ctx, x, y, w, h, radius) {
+    // Square corners, as the screen saver has, can bring an inner ring's
+    // radius below nothing, which the canvas refuses outright.
+    const r = Math.max(0, radius);
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -3070,11 +3081,14 @@
       this.heard = new WeakMap(); // what's been played for each person: { arrived, celebrated }
     }
 
-    /** From a tap: starts the sound, or carries it on. */
+    /**
+     * From a tap: starts the sound, or carries it on. Asleep, or cut off by
+     * a call on iOS ('interrupted'), it resumes.
+     */
     wake(win, level) {
       if (!level) return;
       if (this.audio) {
-        if (this.audio.state === 'suspended') this.audio.resume().catch(() => {});
+        if (this.audio.state !== 'running' && this.audio.state !== 'closed') this.audio.resume().catch(() => {});
         return;
       }
       const Context = win.AudioContext || win.webkitAudioContext;
@@ -3142,8 +3156,9 @@
     follow(office, now, level) {
       const audio = this.audio;
       if (!audio || audio.state !== 'running') return;
+      // Turned off, it sleeps rather than play on at nothing; turned back on, a tap wakes it.
+      if (!level) return this.sleep();
       this.master.gain.setTargetAtTime(level, audio.currentTime, 0.2);
-      if (!level) return;
       const t = audio.currentTime;
 
       // Keys, at a rate that rises with the number of agents typing
@@ -3200,6 +3215,14 @@
    * or a walk out that happened while nobody was looking.
    */
   const STALE_AFTER = 2000;
+  /**
+   * How many of the latest snapshots the computer's clock is judged by. Each
+   * is a little late, so the smallest gap between the clocks is the truest:
+   * a snapshot held up on its way can only make it seem bigger.
+   */
+  const CLOCK_SAMPLES = 5;
+  /** The numbers of keys a layout can fix; anything else is Auto, a key for each agent. */
+  const FIXED_KEYS = [3, 6, 9];
 
   /**
    * The deck's snapshot, as the office reads it: a seat per key, its session
@@ -3235,7 +3258,8 @@
     let last = 0;
     let selected = null; // the session the deck's controls act on
     let latest = null;   // the deck's last snapshot
-    let ahead = 0;       // how far this device's clock was ahead of the computer's when it came, in ms
+    let ahead = 0;       // how far this device's clock is ahead of the computer's, in ms
+    let gaps = [];       // how far ahead it seemed as each of the latest snapshots came, in ms
     // The mic: whether a finger holds it, when it last went on and off, and
     // who it talks to.
     const mic = { held: false, heldAt: null, releasedAt: null, listener: null, usable: true };
@@ -3243,7 +3267,7 @@
     let buttonDown = false;  // a finger on the nuclear button
     let choiceDown = null;   // the last choice key tapped: { action, at, held }
     let chipDown = null;     // the last paint chip tapped: { level, at, held }
-    // A desk held down: { kind: 'session', id } for its agent, or { kind: 'empty', desk }
+    // A desk held down: { kind: 'session', id } for its agent, or { kind: 'empty', desk } for a hire
     let held = null;
     let firing = null;       // an agent about to be fired, while the question is up: { id, name }
     let carrying = null;     // an agent carried to another desk: { person, from, x, y, over }
@@ -3308,10 +3332,27 @@
       return desk >= 0 && office.seats[desk].session.dial ? effortChips(desk) : null;
     }
 
+    /**
+     * Whether a hire on `desk` would sit at it: a pinned desk with nothing
+     * running, whose project the new agent starts in, or the one desk an
+     * agent hired into no project lands on. That's the first free key's;
+     * with none free, Auto adds a key after the last, while there's room
+     * for one, and a fixed number of keys has nowhere to put them.
+     */
+    function hiresInto(desk) {
+      if (framed || !hiring.hire) return false;
+      const seat = office.seats[desk];
+      if (seat && seat.pin) return !seat.session;
+      const free = office.seats.findIndex((s) => !s.pin && !s.session);
+      if (free >= 0) return desk === free;
+      const fixed = FIXED_KEYS.includes(latest && latest.layout && latest.layout.keys);
+      return !fixed && desk === office.seats.length && desk < DESKS.length;
+    }
+
     /** The button on a held desk, if the computer allows it: fire its agent, or hire one into it. */
     function heldButton() {
       if (framed || !held) return null;
-      if (held.kind === 'empty') return hiring.hire ? deskButton(held.desk, 'hire') : null;
+      if (held.kind === 'empty') return hiresInto(held.desk) ? deskButton(held.desk, 'hire') : null;
       if (held.id !== selected || !hiring.fire) return null;
       const desk = office.seats.findIndex((s) => s.session && s.session.id === held.id);
       return desk >= 0 ? deskButton(desk, 'fire') : null;
@@ -3343,11 +3384,12 @@
       const session = selectedSession();
       mic.usable = !session || !!session.mic;
       // A finger held on a desk, or its person, puts out its chips and
-      // button; on an empty desk, the button to hire.
+      // button; on a desk a hire would sit at, the button to hire.
       const holding = finger && !finger.held && ['session', 'pinned', 'empty'].includes(finger.target.kind);
       if (holding && now - finger.at >= HOLD_FOR_CHIPS) {
         finger.held = true;
-        held = finger.target.kind === 'session' ? { kind: 'session', id: finger.target.id } : { kind: 'empty', desk: finger.target.desk };
+        const { kind, id, desk } = finger.target;
+        held = kind === 'session' ? { kind, id } : hiresInto(desk) ? { kind: 'empty', desk } : null;
         if (chips() || heldButton()) on.held?.();
       }
       // The room takes its canvas's shape: tall on a screen held upright, where it comes out bigger.
@@ -3427,10 +3469,10 @@
       consider({ kind: 'mic' }, { left: stand.x - (decor.mic === 'megaphone' ? 9 : 5), right: stand.x + 6, top: stand.y - 25, bottom: stand.y + 1 }, 1);
       DESKS.forEach(({ x: dx, y: dy }, desk) => {
         const seat = office.seats[desk] || {};
-        // An empty desk only matters when there's someone to hire into it.
+        // An empty desk only matters where a hire would sit.
         const target = seat.session ? { kind: 'session', id: seat.session.id }
           : seat.pin ? { kind: 'pinned', name: seat.pin, desk }
-          : hiring.hire && !framed ? { kind: 'empty', desk } : null;
+          : hiresInto(desk) ? { kind: 'empty', desk } : null;
         // The desk, its chair and monitor, and its label
         if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
       });
@@ -3470,19 +3512,23 @@
         firing = null;
         return;
       }
+      // They carry their things out in a box only once the computer says
+      // they're fired; if it couldn't, the deck says why.
       if (target.kind === 'fired') {
         const { id } = firing;
         firing = null;
-        const person = office.people.find((p) => !p.isStaff && p.session.id === id);
-        if (person) person.isFired = true;
-        return on.fire?.(id);
+        return Promise.resolve(on.fire?.(id)).then((fired) => {
+          const person = office.people.find((p) => !p.isStaff && p.session.id === id);
+          if (fired && person) person.isFired = true;
+        });
       }
       if (target.kind === 'fire') {
         const seat = office.seats.find((s) => s.session && s.session.id === holding.id);
-        if (seat) firing = { id: holding.id, name: seat.session.name };
+        // Asked about by the name on their desk: a nickname, or their project's.
+        if (seat) firing = { id: holding.id, name: memberOf(seat.session)?.name || seat.session.name };
         return on.held?.();
       }
-      if (target.kind === 'hire') return on.hire?.();
+      if (target.kind === 'hire') return on.hire?.(holding.desk);
       // An empty or pinned desk says something on a tap, once the finger lifts: holding it is something else.
       if (target.kind === 'empty' || target.kind === 'pinned') return;
       if (target.kind === 'choice') {
@@ -3527,8 +3573,8 @@
       // A chip, once chosen, goes away with the rest.
       if (finger && finger.target.kind === 'chip') held = null;
       if (finger && !finger.held) {
-        const { kind, name } = finger.target;
-        const hold = hiring.hire && !framed ? 'Hold the desk to hire someone' : '';
+        const { kind, name, desk } = finger.target;
+        const hold = hiresInto(desk) ? 'Hold the desk to hire someone' : '';
         if (kind === 'pinned') on.hint?.(`Nothing running in ${name}${hold ? `. ${hold}` : ''}`);
         else if (kind === 'empty') on.hint?.(hold);
       }
@@ -3545,7 +3591,11 @@
     canvas.addEventListener('pointerdown', (e) => {
       if (finger) return; // one finger at a time
       const target = targetAt(e.clientX, e.clientY);
-      if (!target) return;
+      // A tap on the floor, with nothing there, puts away whatever was held out.
+      if (!target) {
+        held = null;
+        return;
+      }
       canvas.setPointerCapture(e.pointerId);
       finger = { id: e.pointerId, target, at: clock(), x: e.clientX, y: e.clientY };
       press(target);
@@ -3583,17 +3633,26 @@
     return {
       show(snapshot) {
         latest = snapshot;
-        ahead = snapshot.now ? Date.now() - snapshot.now : 0;
+        if (snapshot.now) gaps = [...gaps.slice(1 - CLOCK_SAMPLES), Date.now() - snapshot.now];
+        ahead = gaps.length ? Math.min(...gaps) : 0;
         hiring = snapshot.hiring || { fire: false, hire: false };
-        if (!hiring.fire) firing = null;
         office.furnish(snapshot.layout && snapshot.layout.room);
         office.apply(seatsOf(snapshot, ahead), snapshot.theme, clock());
+        // The question and what's held out go with their agent; a hire, once its desk is taken.
+        const there = (id) => office.deskOfSession(id) !== null;
+        if (firing && (!hiring.fire || !there(firing.id))) firing = null;
+        if (held && (held.kind === 'session' ? !there(held.id) : !hiresInto(held.desk))) held = null;
       },
       close() {
         latest = null;
+        gaps = [];
         office.close();
       },
-      select(id) { selected = id; },
+      select(id) {
+        // Another agent picked: what was held out for the last one goes away.
+        if (held && held.kind === 'session' && held.id !== id) held = null;
+        selected = id;
+      },
       setVisible(shown) {
         visible = shown;
         if (shown) {
