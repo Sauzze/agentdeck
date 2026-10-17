@@ -137,6 +137,9 @@ final class Sessions {
     /// from the outside, so one heard from again was running all along, and
     /// takes back its place, its key and what it knew.
     private var dropped: [String: (session: Session, at: Double)] = [:]
+    /// Sessions that took another's place in its tab since the deck last
+    /// looked, new id and old: the deck gives each the key the old one had.
+    private var replacements: [(new: String, old: String)] = []
     var onChange: () -> Void = {}
 
     /// Oldest first, so a session keeps its place as others come and go.
@@ -203,6 +206,7 @@ final class Sessions {
             session.effort = previous.effort
             session.model = previous.model
             end(previous.id, at: time)
+            replacements.append((id, previous.id))
         }
         byID[id] = session
         return session
@@ -337,6 +341,13 @@ final class Sessions {
         guard let session = dropped.removeValue(forKey: id)?.session else { return nil }
         byID[id] = session
         return session
+    }
+
+    /// The sessions that have taken another's place since this was last
+    /// asked, such as after /clear, each with the id it replaced.
+    func takeReplacements() -> [(new: String, old: String)] {
+        defer { replacements = [] }
+        return replacements
     }
 
     /// Whether `id` was dropped by `prune` and may yet come back, so its key

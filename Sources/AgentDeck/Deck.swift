@@ -161,6 +161,10 @@ final class Deck {
         let config = Config.shared
         var remaining = sessions.all
         let live = Set(remaining.map(\.id))
+        // A session that took another's place in its tab, as after /clear, takes its key too.
+        for (new, old) in sessions.takeReplacements() where keyOf[new] == nil {
+            if let key = keyOf[old] { keyOf[new] = key }
+        }
         // A session dropped as its tab seemed to close keeps its key, should it come back.
         keyOf = keyOf.filter { live.contains($0.key) || sessions.wasDropped($0.key) }
 
