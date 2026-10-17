@@ -3,7 +3,7 @@
 [![CI](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml)
 
 <p align="center">
-  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: an agent's key blinks orange and a tap on ✓ approves it, the stick answers its question, the dial raises Claude's effort, and the mic dictates the next prompt" width="800">
+  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: the phone's keys become a pixel-art office, which goes full screen sideways; an agent waiting on you is answered from the room with ▼ and ✓, the big red button sends another to max effort, and the office pops out into a window on a Mac" width="800">
 </p>
 
 A control pad on your phone for the AI coding agents in your terminal: Claude
