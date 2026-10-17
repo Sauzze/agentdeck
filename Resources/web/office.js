@@ -680,6 +680,17 @@
   const LABEL_SIZE = 3.4;
   /** …and never smaller than this on screen, in CSS pixels, so a phone can read it. */
   const LABEL_SMALLEST = 8;
+  /**
+   * How long a turn has run, short enough for its monitor: 9:41 for the
+   * first ten minutes, then 12m, then 2h.
+   */
+  function turnLength(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 10) return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.min(Math.floor(minutes / 60), 99)}h`;
+  }
+
   /** After this long, a turn's timer shows its agent sweating, in seconds. */
   const LONG_TURN = 600;
   /** Digits and a few marks, three art pixels wide and five tall, for timers and counts. */
@@ -688,6 +699,7 @@
     3: ['111', '001', '111', '001', '111'], 4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
     6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '001', '001', '001'], 8: ['111', '101', '111', '101', '111'],
     9: ['111', '101', '111', '001', '111'], ':': ['0', '1', '0', '1', '0'], '+': ['000', '010', '111', '010', '000'],
+    m: ['000', '000', '111', '111', '101'], h: ['100', '100', '111', '101', '101'],
   };
   /** How long everyone looks up when the mic goes on, as if the boss were shouting. */
   const LOOK_UP_LENGTH = 1;
@@ -763,12 +775,12 @@
   }
 
   /**
-   * Where the room goes on a canvas `width` × `height`: a whole number of
-   * the screen's pixels to each art pixel keeps every edge sharp, and
-   * what's left over is a border round it.
+   * Where the room goes on a canvas `width` × `height`, at least `margin`
+   * from its edges: a whole number of the screen's pixels to each art pixel
+   * keeps every edge sharp, and what's left over is a border round it.
    */
-  function fitRoom(width, height) {
-    const fit = Math.min(width / WIDTH, height / HEIGHT);
+  function fitRoom(width, height, margin = 0) {
+    const fit = Math.min((width - margin * 2) / WIDTH, (height - margin * 2) / HEIGHT);
     const scale = fit >= 1 ? Math.floor(fit) : fit;
     return { scale, ox: Math.round((width - WIDTH * scale) / 2), oy: Math.round((height - HEIGHT * scale) / 2) };
   }
@@ -784,13 +796,29 @@
   const WINDOW_SHADOW_DEPTH = 0.32;
 
   /**
+   * In the pop-out window, the room's window floats: this much of the
+   * deck's background all round it, and a soft shadow under it. In CSS
+   * pixels.
+   */
+  const FLOAT_MARGIN = 14;
+  const FLOAT_SHADOW = 16;
+  const FLOAT_DROP = 3;
+  /**
+   * While an agent waits on you, the floating window's edge glows in the
+   * waiting colour, rising and falling once in this many seconds: the
+   * pop-out is mostly seen out of the corner of an eye.
+   */
+  const GLOW_PERIOD = 1.6;
+  const GLOW_REACH = 14;
+
+  /**
    * Draws one frame of the office: the room, then everything on the floor
    * from back to front, then what floats above it: the screens' light, the
    * speech bubbles and the name on each desk.
    */
   function drawOffice(ctx, office, frame) {
-    const { now, hour, minute, width, height, ratio, selected, mic, framed } = frame;
-    const room = fitRoom(width, height);
+    const { now, hour, minute, width, height, ratio, selected, mic, framed, floating } = frame;
+    const room = fitRoom(width, height, floating ? FLOAT_MARGIN * ratio : 0);
     const { scale } = room;
     let { ox, oy } = room;
 
@@ -841,7 +869,11 @@
     ctx.clearRect(0, 0, width, height);
 
     // Through a window, the room stays inside it, even while it shakes.
-    const glass = framed && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    const glass = (framed || floating) && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    // Floating, the window glows while anyone waits on you.
+    const calling = floating && office.seats.some((s) => s.session && s.session.state === 'asking');
+    const glow = calling ? 0.5 - 0.5 * Math.cos((now / GLOW_PERIOD) * 2 * Math.PI) : 0;
+    if (floating) drawFloat(glass);
     if (glass) {
       ctx.save();
       roundedRect(ctx, glass.x, glass.y, glass.w, glass.h, glass.r);
@@ -1563,7 +1595,7 @@
       const session = sessionAt(desk);
       if (!session || !session.turnStartedAt || (session.state !== 'thinking' && session.state !== 'asking')) return;
       const seconds = Math.max(0, Math.floor((Date.now() - session.turnStartedAt) / 1000));
-      const text = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      const text = turnLength(seconds);
       pixelText(text, x + 13 - Math.floor(pixelWidth(text) / 2), y - 8, PALETTE.bubble, false);
 
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
@@ -1661,6 +1693,33 @@
       ctx.strokeStyle = css(fromCss(office.colours.edge) ?? EDGE);
       roundedRect(ctx, x + ratio / 2, y + ratio / 2, w - ratio, h - ratio, r - ratio / 2);
       ctx.stroke();
+      if (calling) {
+        ctx.strokeStyle = css(colour('asking'), 0.35 + 0.65 * glow);
+        ctx.lineWidth = 1.5 * ratio;
+        roundedRect(ctx, x + ratio * 0.75, y + ratio * 0.75, w - ratio * 1.5, h - ratio * 1.5, r - ratio * 0.75);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    /**
+     * Under the floating window, before the room: a soft shadow, and while
+     * anyone waits on you, the glow round it.
+     */
+    function drawFloat({ x, y, w, h, r }) {
+      ctx.save();
+      roundedRect(ctx, x, y, w, h, r);
+      ctx.fillStyle = css(BLACK);
+      ctx.shadowColor = css(BLACK, 0.55);
+      ctx.shadowBlur = FLOAT_SHADOW * ratio;
+      ctx.shadowOffsetY = FLOAT_DROP * ratio;
+      ctx.fill();
+      if (calling) {
+        ctx.shadowColor = css(colour('asking'), 0.25 + 0.6 * glow);
+        ctx.shadowBlur = GLOW_REACH * ratio;
+        ctx.shadowOffsetY = 0;
+        ctx.fill();
+      }
       ctx.restore();
     }
 
@@ -1756,6 +1815,7 @@
     const clock = () => performance.now() / 1000;
     let visible = true;
     let framed = false;  // seen through a window, beside the phone's controls
+    let floating = false; // in the pop-out window, its own window floating in it
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
@@ -1840,7 +1900,7 @@
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
-        selected, mic, wobble: wobbling, buttonDown, framed, choices: choices(), choiceDown,
+        selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown,
       });
     }
 
@@ -1857,10 +1917,11 @@
      */
     function targetAt(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
-      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height);
+      const ratio = host.window.devicePixelRatio || 1;
+      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGIN * ratio : 0);
       const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
       const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
-      const reach = (SMALLEST_TARGET * (host.window.devicePixelRatio || 1)) / scale;
+      const reach = (SMALLEST_TARGET * ratio) / scale;
       const now = clock();
       let best = null;
       const consider = (target, box, rank) => {
@@ -1970,6 +2031,7 @@
         if (shown) { resize(); run(); } else if (finger) lift();
       },
       setFramed(shown) { framed = shown; },
+      setFloating(shown) { floating = shown; },
       /**
        * The canvas is in another window now, or back on its page. Moving it
        * takes the finger off without a word to the canvas, so the mic is let
@@ -1984,5 +2046,8 @@
     };
   }
 
-  window.AgentOffice = { create };
+  /** The pop-out window's size, in CSS pixels: two to each of the room's, and the margin round it. */
+  const popOutSize = { width: WIDTH * 2 + FLOAT_MARGIN * 2, height: HEIGHT * 2 + FLOAT_MARGIN * 2 };
+
+  window.AgentOffice = { create, popOutSize };
 })();
