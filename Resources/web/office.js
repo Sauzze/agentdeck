@@ -4809,6 +4809,116 @@
         for (let k = 0; k < 3; k++) chip.note(at + k * random(0.08, 0.16), { wave: 'triangle', pitch: hz('G4'), to: hz('D5') * random(1, 1.4), length: 0.04, level: dB(-26), pan });
       },
     },
+    // The newer corner pieces, as quiet as the rest of the room's goings-on.
+    pinball: {
+      play(chip, at, pan) {
+        // Flippers, -24, and the ball off a bumper or two, -26.
+        chip.note(at, { wave: 'triangle', pitch: hz('E4'), to: hz('C4'), length: 0.04, level: dB(-24), pan, curve: 3 });
+        let when = at + random(0.15, 0.3);
+        for (let k = 0; k < Math.floor(random(1, 4)); k++, when += random(0.1, 0.2)) {
+          chip.note(when, { wave: 'pulse25', pitch: hz(pick(['G5', 'A5', 'C6'])), to: hz('C7'), length: 0.06, level: dB(-26), pan });
+        }
+      },
+    },
+    jukebox: {
+      play(chip, at, pan) {
+        // A phrase of a song, -26, a bass under it.
+        const tune = pick([['C5', 'E5', 'G5', 'E5'], ['A4', 'C5', 'D5', 'E5'], ['G5', 'E5', 'D5', 'C5']]);
+        tune.forEach((name, k) => {
+          chip.note(at + k * 0.22, { wave: 'pulse25', pitch: hz(name), length: 0.2, level: dB(-26), pan, curve: 0.8 });
+          if (k % 2 === 0) chip.note(at + k * 0.22, { wave: 'triangle', pitch: hz(name) / 4, length: 0.4, level: dB(-28), pan });
+        });
+      },
+    },
+    pool: {
+      play(chip, at, pan) {
+        // The cue, then a ball off another, -22.
+        chip.note(at, { wave: 'triangle', pitch: hz('C4'), to: hz('G3'), length: 0.04, level: dB(-24), pan, curve: 3 });
+        const click = at + random(0.25, 0.45);
+        chip.note(click, { wave: 'pulse12', pitch: hz('E7'), length: 0.015, level: dB(-22), pan, curve: 3 });
+        if (Math.random() < 0.5) chip.note(click + random(0.3, 0.5), { wave: 'triangle', pitch: hz('A3'), to: hz('E3'), length: 0.08, level: dB(-26), pan });
+      },
+    },
+    piano: {
+      play(chip, at, pan) {
+        // A few notes up and back, -24.
+        const run = pick([['C5', 'E5', 'G5', 'C6', 'G5'], ['A4', 'C5', 'E5', 'A5'], ['D5', 'G5', 'A5', 'D6', 'A5']]);
+        run.forEach((name, k) => chip.note(at + k * 0.16, { wave: 'triangle', pitch: hz(name), length: 0.5, level: dB(-24), pan, curve: 1.2 }));
+      },
+    },
+    drums: {
+      play(chip, at, pan) {
+        // A bar on the kit: kick, hat, snare, hat, -24.
+        for (let k = 0; k < 4; k++) {
+          const beat = at + k * 0.2;
+          if (k % 2 === 0) chip.note(beat, { wave: 'triangle', pitch: hz('C4'), to: hz('C2'), length: 0.1, level: dB(-22), pan, curve: 2 });
+          else chip.note(beat, { wave: 'pulse50', pitch: hz('E5'), to: hz('C5'), length: 0.06, level: dB(-28), pan, curve: 3 });
+          chip.note(beat + 0.1, { wave: 'pulse12', pitch: hz('G7'), length: 0.012, level: dB(-30), pan, curve: 3 });
+        }
+      },
+    },
+    dragon: {
+      gap: 20,
+      play(chip, at, pan) {
+        // A snore from deep in its chest, -26.
+        chip.note(at, { wave: 'triangle', pitch: hz('C2'), to: hz('E2'), length: 1.1, level: dB(-26), pan, curve: 0.5, vibrato: 0.04 });
+        chip.note(at + 1.3, { wave: 'triangle', pitch: hz('E2'), to: hz('A1'), length: 0.9, level: dB(-28), pan, curve: 0.6, vibrato: 0.05 });
+      },
+    },
+    twinkle: {
+      play(chip, at, pan) {
+        // A star found, -28.
+        for (let k = 0; k < 3; k++) chip.note(at + k * 0.09, { wave: 'pulse12', pitch: hz(pick(['E7', 'G7', 'A7'])), length: 0.08, level: dB(-28), pan });
+      },
+    },
+    hum: {
+      play(chip, at, pan) {
+        // Machines at work: a few blinks, -28.
+        for (let k = 0; k < 3; k++) chip.note(at + k * random(0.12, 0.25), { wave: 'pulse12', pitch: hz(pick(['C7', 'G6'])), length: 0.03, level: dB(-28), pan });
+      },
+    },
+    printer: {
+      play(chip, at, pan) {
+        // The head stepping to and fro, -28.
+        for (let k = 0; k < 6; k++) {
+          chip.note(at + k * 0.1, { wave: 'pulse50', pitch: hz(pick(['C4', 'D4', 'E4'])), length: 0.08, level: dB(-30), pan, curve: 0.5 });
+        }
+      },
+    },
+    boxing: {
+      play(chip, at, pan) {
+        // The bag hit, once or twice, -22.
+        for (const after of Math.random() < 0.5 ? [0] : [0, 0.22]) {
+          chip.note(at + after, { wave: 'triangle', pitch: hz('A3'), to: hz('C3'), length: 0.06, level: dB(-22), pan, curve: 2.5 });
+        }
+      },
+    },
+    treadmill: {
+      play(chip, at, pan) {
+        // Steps on the belt, -28.
+        for (let k = 0; k < 6; k++) chip.note(at + k * 0.18, { wave: 'triangle', pitch: hz(k % 2 ? 'E3' : 'D3'), length: 0.03, level: dB(-28), pan, curve: 3 });
+      },
+    },
+    splash: {
+      play(chip, at, pan) {
+        // Bubbles in warm water, lower than the fish tank's, -26.
+        for (let k = 0; k < 4; k++) chip.note(at + k * random(0.08, 0.18), { wave: 'triangle', pitch: hz('C4'), to: hz('G4') * random(1, 1.3), length: 0.05, level: dB(-26), pan });
+      },
+    },
+    rustle: {
+      play(chip, at, pan) {
+        // Balls rolling over each other, -28.
+        for (let k = 0; k < 5; k++) chip.note(at + k * random(0.04, 0.09), { wave: 'pulse12', pitch: hz(pick(['G5', 'A5', 'C6', 'D6'])), length: 0.02, level: dB(-28), pan, curve: 3 });
+      },
+    },
+    crackle: {
+      play(chip, at, pan) {
+        // The fire popping, now and then, -28.
+        for (let k = 0; k < Math.floor(random(2, 5)); k++) {
+          chip.note(at + random(0, 0.6), { wave: 'pulse12', pitch: hz(pick(['C6', 'E6', 'A6'])), length: 0.01, level: dB(-28), pan, curve: 3 });
+        }
+      },
+    },
     vending: {
       gap: 4,
       play(chip, at, pan) {
@@ -4826,6 +4936,15 @@
   const BACKGROUND_GAP = 4;
   /** A rally's hits are heard for its first few: after that, the players carry on in silence. */
   const RALLY_HEARD = 12;
+  /**
+   * The sound each corner piece makes while someone's at it, if any: its
+   * own, or one it shares. The coffee bar has the coffee machine's.
+   */
+  const CORNER_SOUNDS = {
+    arcade: 'arcade', foosball: 'foosball', fishtank: 'fishtank', jellyfish: 'fishtank', dragon: 'dragon', pinball: 'pinball',
+    jukebox: 'jukebox', pool: 'pool', piano: 'piano', drums: 'drums', telescope: 'twinkle', jungle: 'bird', coffee: 'coffee',
+    servers: 'hum', printer: 'printer', boxing: 'boxing', treadmill: 'treadmill', hottub: 'splash', ballpit: 'rustle', campfire: 'crackle',
+  };
   /** How often the weather in the windows, or the corner piece being played, makes itself heard, in seconds. */
   const WEATHER_EVERY = [50, 120];
   const CORNER_EVERY = [6, 14];
@@ -5005,9 +5124,10 @@
 
       // The corner piece, now and then, while someone's at it
       const cornering = office.people.find((p) => !p.isWalking && !p.isLeaving && spotOf(p.place) >= LOUNGE_SPOTS.length);
-      if (!cornering || !['arcade', 'foosball', 'fishtank'].includes(decor.corner)) this.nextCorner = null;
+      const cornerSound = CORNER_SOUNDS[decor.corner];
+      if (!cornering || !cornerSound) this.nextCorner = null;
       else if (this.nextCorner === null) this.nextCorner = t + random(1, 4);
-      else if (t >= this.nextCorner) this.nextCorner = t + (this.murmur(decor.corner, cornering.position.x) ? random(...CORNER_EVERY) : 1);
+      else if (t >= this.nextCorner) this.nextCorner = t + (this.murmur(cornerSound, cornering.position.x) ? random(...CORNER_EVERY) : 1);
 
       // The pet, sometimes, as it settles somewhere new
       const pet = office.pet;
