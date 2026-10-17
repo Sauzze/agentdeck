@@ -558,7 +558,7 @@
 
   /**
    * An agent left waiting on you this long gets one reminder: three buzzes
-   * and a soft chime, once a wait. Nothing sooner, so the deck stays quiet;
+   * and a chime, once a wait. Nothing sooner, so the deck stays quiet;
    * the office shows the wait wearing on meanwhile. The chime needs a tap
    * first, as all sound does, which the deck has had by then.
    */
@@ -592,17 +592,8 @@
   function remind() {
     if (navigator.vibrate) navigator.vibrate([90, 120, 90, 120, 90]);
     else for (let k = 0; k < 3; k++) setTimeout(tick, k * 210);
-    if (!chimes || chimes.state !== 'running') return;
-    const t = chimes.currentTime;
-    [880, 1320].forEach((pitch, k) => {
-      const osc = chimes.createOscillator(), gain = chimes.createGain();
-      osc.frequency.value = pitch;
-      gain.gain.setValueAtTime(0.09, t + k * 0.16);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.6);
-      osc.connect(gain).connect(chimes.destination);
-      osc.start(t + k * 0.16);
-      osc.stop(t + k * 0.16 + 0.6);
-    });
+    if (!chimes || chimes.state !== 'running' || !window.AgentOffice) return;
+    AgentOffice.remind(chimes); // the office's sound, in the same style as the rest of it
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
