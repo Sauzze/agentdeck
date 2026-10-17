@@ -464,8 +464,8 @@
     if (!h) return;
     const detail = $('step-hiring').querySelector('.detail');
     if (h.canHire) {
-      detail.dataset.pending = "Optional. Hold a desk in the office: on an empty one, hire an agent into a new Terminal window; on an agent's, fire it, which stops its work and closes its window.";
-      detail.dataset.done = h.folder ? 'New hires start in the folder below. Hold a desk in the office to hire or fire.'
+      detail.dataset.pending = "Optional. Hold a desk in the office: on the next free one, hire an agent into a new Terminal window; on an agent's, fire it, which stops its work and closes its tab.";
+      detail.dataset.done = h.folder ? "New hires start in the folder below, or in a pinned project's on its desk. Hold a desk in the office to hire or fire."
         : 'Choose the folder new hires start in.';
     } else {
       detail.dataset.pending = "Optional. Hold an agent's desk in the office to fire it: its work stops and its pane closes. Hiring needs the Mac app, for now.";

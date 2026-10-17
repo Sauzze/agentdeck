@@ -132,10 +132,10 @@ opens in your browser.
 
 ## Set up
 
-The setup page walks you through four steps:
+The setup page walks you through five steps:
 
 <p align="center">
-  <img src="docs/setup.png" alt="The setup page: a four-step checklist, the keys, and a pairing code with its QR code for your phone" width="720">
+  <img src="docs/setup.png" alt="The setup page: its checklist, the keys, and a pairing code with its QR code for your phone" width="720">
 </p>
 
 1. **Connect your coding agents.** This lets every supported agent on your Mac
@@ -146,7 +146,10 @@ The setup page walks you through four steps:
    this.
 3. **Let the stick scroll Terminal** (optional). Turns the stick into a scroll
    wheel for the selected session's Terminal window.
-4. **Open at login** (optional). Keeps the deck ready whenever your Mac is on.
+4. **Let the office hire and fire** (optional). Lets you start and stop agents
+   from [the office](#the-office): choose the folder new hires start in, and
+   which agent they are.
+5. **Open at login** (optional). Keeps the deck ready whenever your Mac is on.
 
 The first time you press a button, macOS asks whether SauzzeDeck Pro may
 control Terminal. Click **Allow**.
@@ -164,8 +167,8 @@ control Terminal. Click **Allow**.
    screen**. SauzzeDeck Pro now opens full screen and stays paired.
 
 While the deck is open, your phone's screen stays on, from your first tap. If
-an agent has been waiting on you for five minutes, your phone buzzes three
-times and chimes once, to remind you.
+an agent has been waiting on you for five minutes, the deck reminds you once,
+with a chime, and a buzz on phones that allow it.
 
 Each phone you pair appears under **Paired phones** on the setup page, with
 when it was last used. **Revoke** cuts one phone off straight away;
@@ -200,9 +203,9 @@ The setup page also has:
   phone updates as you pick.
 - **Profiles.** Save a layout and its colours under a name, and switch between
   them in a click: one for the couch, one for the desk. Default is always the
-  standard deck. Export a profile to back it up or share it; before an
-  imported profile is added, the setup page lists everything its buttons
-  would type or press.
+  standard deck. Export a profile to back it up or share it; it carries your
+  office and your team's nicknames too. Before an imported profile is added,
+  the setup page lists everything its buttons would type or press.
 
 <p align="center">
   <img src="docs/layout.png" alt="Profiles and Layout on the setup page: the Couch profile, Auto keys, buttons ✓, ✕ and ☢ Max over esc, send and a /compact button, beside a live preview of the phone" width="720">
@@ -294,8 +297,11 @@ the room works like the keys:
 | An agent's desk, held, then dragged | Picks the agent up, chair and all. Let go over another desk and the two swap. They stay that way: each project is pinned to its new key, as on the setup page's *Keys*, where you can undo it. |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
-| A desk, or its person, held | On a Claude Code desk, puts paint chips along its front, from white for low to red for max: tap one to set its effort, like the dial, and they go away. Max is the red button's. With hiring and firing on, also **YOU'RE FIRED**, and **HIRE** on an empty desk (see below). Wherever the dial is out of sight: in full screen, on `/office` and in the pop-out window. |
-| ▲ ▼ ✓ ✕, over an agent waiting on you | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk wherever the deck's controls are out of sight: in full screen, on `/office` and in the pop-out window. |
+| A desk, or its person, held* | On a Claude Code desk, puts paint chips along its front, from white for low to red for max: tap one to set its effort, like the dial, and they go away. Max is the red button's. With hiring and firing on, also **YOU'RE FIRED**, or **HIRE** on a desk a new hire would take (see below). |
+| ▲ ▼ ✓ ✕, over an agent waiting on you* | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk. |
+
+\* Where the deck's own controls are out of sight: in full screen, on `/office`
+and in the pop-out window. Beside the dial and the stick, use those.
 
 **Hire and fire**, once you turn on **Let the office hire and fire** on the
 setup page (it's off until you do):
@@ -304,9 +310,11 @@ setup page (it's off until you do):
   chips. Tap it, confirm, and its work stops and its Terminal tab closes. The
   agent packs a box and walks out. Claude Code keeps the conversation, so
   `claude --resume` can bring it back.
-- **Hold an empty desk**, and **HIRE** comes out. Tap it, and a new Terminal
-  window opens in the folder you chose on the setup page, with the agent you
-  chose at work in it. The new hire walks in through the door.
+- **Hold the desk a new hire would take**, the next free one, and **HIRE**
+  comes out. Tap it, and a new Terminal window opens in the folder you chose
+  on the setup page, with the agent you chose at work in it. The new hire walks
+  in through the door. On a pinned project's empty desk, HIRE starts the agent
+  in that project instead.
 
 On Windows and Linux, firing closes the agent's pane in tmux, kitty and
 WezTerm, and stops an agent started with `sauzzedeck run`. Hiring needs the
@@ -336,9 +344,9 @@ ends the screen saver as usual. When SauzzeDeck Pro isn't running, or the screen
 saver was unpaired, it says what to do instead. After updating SauzzeDeck Pro,
 choose **Install Screen Saver…** again.
 
-In full screen, on a spare screen, in the pop-out window and in the screen
-saver, the office fills
-a rounded window, and its edge glows while an agent is waiting on you.
+In full screen, on a spare screen and in the pop-out window, the office fills a
+rounded window; the screen saver fills each display edge to edge. Either way,
+its edge glows while an agent is waiting on you.
 
 ## Voice
 
@@ -377,9 +385,13 @@ hears it.
   an agent is doing. A phone's key can't pose as an agent, and the agents' key
   can't drive the deck.
 - **Scrolling, hiring and firing are off until you turn them on.** Out of the
-  box, a paired phone can only use the deck's buttons, dial and choices. Even
-  turned on, firing asks first, and hiring only starts the agent you chose,
-  in the folder you chose.
+  box, a paired phone can only use the deck's buttons, dial and choices, and
+  move desks around in the office, which pins projects to keys as the setup
+  page does. Even turned on, firing asks first, and only stops the agent
+  itself; hiring only starts the agent you chose, in the folder you chose or
+  in a pinned project's.
+- **The screen saver pairs like a phone,** and keeps its key in its own
+  settings, as a phone's browser does.
 - **The office says what your agents are doing in a few words.** They're made
   from a file's name, a web page's site or the description the agent gave a
   step, never from a command or a file's path.
@@ -421,6 +433,16 @@ empty, and voice has to be in tap mode: see [Voice](#voice).
 **The phone can't connect.** Check that both devices are on the same Wi-Fi.
 If macOS or Windows Firewall asked whether SauzzeDeck Pro may accept incoming
 connections, allow it.
+
+**HIRE doesn't come out.** Turn on **Let the office hire and fire** on the
+setup page, and choose a folder for new hires. HIRE shows only on a desk a new
+hire would take: the next free one, or a pinned project's. Hiring needs the
+Mac app, for now.
+
+**The screen saver says to open SauzzeDeck Pro, or to pair again.** Make sure
+SauzzeDeck Pro is running. If it was unpaired, open System Settings → Screen
+Saver, click **Options…** and enter a new code. After updating SauzzeDeck Pro,
+choose **Install Screen Saver…** again.
 
 **"Port 7710 is in use."** Another copy of SauzzeDeck Pro, or another app, is
 using that port. Quit it and open SauzzeDeck Pro again.
@@ -473,6 +495,10 @@ On the Mac, controls work in one of two ways:
 - **Keys and scrolling** are sent as ordinary keystrokes. Scrolling uses
   Terminal's own View → Line Up and Line Down, so it moves the window's view
   and the agent receives nothing.
+- **Hiring** opens a new Terminal window through Terminal's scripting, in the
+  folder you chose, with the agent's own command. **Firing** stops the agent's
+  process in its tab, only once it's sure that's the agent, then closes the
+  tab.
 
 The Mac app is plain Swift with no dependencies. The Windows and Linux app is
 Go, with a handful: a tray icon, pseudo-terminals, QR codes. The phone side is
