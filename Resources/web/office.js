@@ -7,10 +7,16 @@
  * grid of art pixels, scaled by a whole number of the screen's pixels so
  * every edge stays sharp.
  *
- *   AgentOffice.create(canvas) → { show(snapshot), close(), setVisible(on) }
+ *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown) }
  *
  * `show` takes what the deck streams; `close` empties the office when the
  * stream drops, and whoever is there when it's back is already at work.
+ * `select` marks the session the deck's controls act on.
+ *
+ * The room can be tapped, and says what was tapped through `on`, for the
+ * page to do what its keys and buttons would: `on.select(id)` for a desk or
+ * its person, `on.max()` for the nuclear button, `on.mic('down' | 'up')` for
+ * the microphone, held, and `on.hint(text)` for a word on the status line.
  */
 (() => {
   'use strict';
@@ -56,6 +62,11 @@
   const BUTTON = { x: CORRIDOR_X, y: 161 };
   const PRESSER = { x: CORRIDOR_X - 9, y: 163 };
   const NEXT_IN_LINE = { x: CORRIDOR_X + 12, y: 163 };
+
+  /** The microphone on its stand, in the lounge's bottom-right corner: where its base meets the floor. */
+  const MIC = { x: 311, y: 176 };
+  /** The plant, moved to the lounge's bottom-left to make room for it: its pot's left edge. */
+  const PLANT_X = 226;
 
   // Where a person is, or is heading: 'desk:n', 'spot:n', 'door', 'button'
   // or 'queue', the spot beside it.
@@ -112,6 +123,8 @@
     shockwave: 0xffb04a,
   };
   const BLACK = 0x000000, WHITE = 0xffffff;
+  /** The deck's text colour, for a theme that leaves it out: it marks the picked desk. */
+  const INK = 0xececec;
   const SHADOW = [BLACK, 0.25];
 
   /** A desk's paint for each effort level, from white to the ☢ dome's red. */
@@ -486,6 +499,48 @@
   const LABEL_SIZE = 3.4;
   /** …and never smaller than this on screen, in CSS pixels, so a phone can read it. */
   const LABEL_SMALLEST = 8;
+  /** How long everyone looks up when the mic goes on, as if the boss were shouting. */
+  const LOOK_UP_LENGTH = 1;
+  /** The listener's nod, once the mic is let go. */
+  const NOD_LENGTH = 0.6;
+  /** A wobble, for the button or the mic tapped with no desk picked. */
+  const WOBBLE_LENGTH = 0.4;
+  /** Sound waves leave the mic this often while it's held, and spread this far. */
+  const WAVE_EVERY = 0.5;
+  const WAVE_REACH = 110;
+
+  /** What a person is doing with their body, at `now`. */
+  function poseOf(person, now) {
+    if (person.isWalking) return { kind: 'walk', step: Math.floor(now * 6) % 2 };
+    if (person.isGoingNuclear && person.place === 'button') return { kind: 'press', raised: person.pressedAt === null };
+    if (deskOf(person.place) !== null) {
+      if (person.session.state === 'asking') return { kind: 'wave', frame: Math.floor(now * 4) % 2 };
+      if (person.session.state === 'error') return { kind: 'slump' };
+      return { kind: 'sit' };
+    }
+    const spot = spotOf(person.place);
+    if (spot !== null) return { kind: SPOTS[spot].pose === 'sit' ? 'sit' : 'stand' };
+    return { kind: 'stand' };
+  }
+
+  /** The top row of a person's hair. Sitting lowers it; standing at the desk to wave raises them back up. */
+  function topOf(person, pose) {
+    const feet = Math.round(person.position.y);
+    if (pose.kind === 'sit') return feet - 15;
+    if (pose.kind === 'slump') return feet - 14;
+    return feet - 17;
+  }
+
+  /**
+   * Where the room goes on a canvas `width` × `height`: a whole number of
+   * the screen's pixels to each art pixel keeps every edge sharp, and
+   * what's left over is a border round it.
+   */
+  function fitRoom(width, height) {
+    const fit = Math.min(width / WIDTH, height / HEIGHT);
+    const scale = fit >= 1 ? Math.floor(fit) : fit;
+    return { scale, ox: Math.round((width - WIDTH * scale) / 2), oy: Math.round((height - HEIGHT * scale) / 2) };
+  }
 
   /**
    * Draws one frame of the office: the room, then everything on the floor
@@ -493,13 +548,10 @@
    * speech bubbles and the name on each desk.
    */
   function drawOffice(ctx, office, frame) {
-    const { now, hour, minute, width, height, ratio } = frame;
-
-    // A whole number of the screen's pixels to each art pixel keeps every
-    // edge sharp; what's left over is a border round the room.
-    const fit = Math.min(width / WIDTH, height / HEIGHT);
-    const scale = fit >= 1 ? Math.floor(fit) : fit;
-    let ox = Math.round((width - WIDTH * scale) / 2), oy = Math.round((height - HEIGHT * scale) / 2);
+    const { now, hour, minute, width, height, ratio, selected, mic } = frame;
+    const room = fitRoom(width, height);
+    const { scale } = room;
+    let { ox, oy } = room;
 
     // The room shakes for a moment when the button goes down.
     const blast = office.detonation;
@@ -524,7 +576,13 @@
     const isNight = hour >= 20 || hour < 5;
     const alarm = sinceBlast >= 0 && sinceBlast < ALARM_LENGTH ? sinceBlast : null;
     const colour = (state) => fromCss(office.colours[state]) ?? fromCss(STANDARD_STATES[state]);
+    const ink = fromCss(office.colours.ink) ?? INK;
     const sessionAt = (desk) => (desk < office.seats.length ? office.seats[desk].session : null);
+    const selectedDesk = office.seats.findIndex((s) => s.session && s.session.id === selected);
+    /** How far a wobbling thing is pushed sideways, in art pixels. */
+    const wobble = (what) => (frame.wobble && frame.wobble.what === what && now - frame.wobble.at < WOBBLE_LENGTH
+      ? Math.round(Math.sin((now - frame.wobble.at) * 50)) : 0);
+    const lookingUp = mic.heldAt !== null && now - mic.heldAt < LOOK_UP_LENGTH;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -789,13 +847,42 @@
     }
 
     function drawPlant() {
-      fill(309, 158, 4, 6, PALETTE.leaf);
-      fill(313, 154, 4, 10, PALETTE.leafDark);
-      fill(316, 159, 4, 6, PALETTE.leaf);
-      fill(311, 162, 7, 6, PALETTE.leaf);
-      fill(311, 168, 7, 8, PALETTE.pot);
-      fill(310, 168, 9, 1, 0x8a4f32);
-      fill(311, 176, 7, 1, SHADOW);
+      const x = PLANT_X;
+      fill(x, 158, 4, 6, PALETTE.leaf);
+      fill(x + 4, 154, 4, 10, PALETTE.leafDark);
+      fill(x + 7, 159, 4, 6, PALETTE.leaf);
+      fill(x + 2, 162, 7, 6, PALETTE.leaf);
+      fill(x + 2, 168, 7, 8, PALETTE.pot);
+      fill(x + 1, 168, 9, 1, 0x8a4f32);
+      fill(x + 2, 176, 7, 1, SHADOW);
+    }
+
+    /**
+     * The office's microphone, on a stand: the deck's 🎙. Its on-air light
+     * glows while it's held; with no voice input in the picked session, it's
+     * dimmed.
+     */
+    function drawMic() {
+      const x = MIC.x + wobble('mic'), y = MIC.y;
+      const a = mic.usable ? 1 : 0.4;
+      fill(x - 4, y, 9, 1, SHADOW);
+      fill(x - 3, y - 1, 7, 1, PALETTE.machine, a);
+      fill(x - 1, y - 2, 3, 1, PALETTE.machine, a);
+      fill(x, y - 17, 1, 15, PALETTE.monitorStand, a);
+      // The head: a grille in a rounded case
+      fill(x - 1, y - 24, 3, 1, PALETTE.sill, a);
+      fill(x - 2, y - 23, 5, 5, PALETTE.sill, a);
+      for (const row of [-22, -20]) fill(x - 1, y + row, 3, 1, PALETTE.monitor, a);
+      fill(x - 1, y - 18, 3, 1, PALETTE.monitorStand, a);
+      // The on-air light, on the stand's clip
+      fill(x - 1, y - 15, 3, 2, PALETTE.frame, a);
+      if (mic.held) {
+        fill(x - 2, y - 16, 5, 3, PALETTE.alarm, 0.3);
+        fill(x - 1, y - 17, 3, 5, PALETTE.alarm, 0.3);
+        fill(x, y - 15, 1, 1, PALETTE.alarm);
+      } else {
+        fill(x, y - 15, 1, 1, PALETTE.alarmOff, a);
+      }
     }
 
     /**
@@ -803,9 +890,9 @@
      * ☢ Max button on the deck. The dome sinks while it's pressed.
      */
     function drawButton() {
-      const { x, y } = BUTTON;
+      const x = BUTTON.x + wobble('button'), y = BUTTON.y;
       const pressedAt = office.nuclearQueue[0] ? office.nuclearQueue[0].pressedAt : null;
-      const sink = pressedAt !== null && now - pressedAt < 0.5 ? 1 : 0;
+      const sink = frame.buttonDown || (pressedAt !== null && now - pressedAt < 0.5) ? 1 : 0;
       for (let row = 0; row < 9; row++) {
         for (let column = 0; column < 11; column++) {
           dot(x - 5 + column, y + 6 + row, Math.floor((column + row) / 2) % 2 === 0 ? PALETTE.hazard : PALETTE.machine);
@@ -822,34 +909,20 @@
 
     /* People */
 
-    function poseOf(person) {
-      if (person.isWalking) return { kind: 'walk', step: Math.floor(now * 6) % 2 };
-      if (person.isGoingNuclear && person.place === 'button') return { kind: 'press', raised: person.pressedAt === null };
-      if (deskOf(person.place) !== null) {
-        if (person.session.state === 'asking') return { kind: 'wave', frame: Math.floor(now * 4) % 2 };
-        if (person.session.state === 'error') return { kind: 'slump' };
-        return { kind: 'sit' };
-      }
-      const spot = spotOf(person.place);
-      if (spot !== null) return { kind: SPOTS[spot].pose === 'sit' ? 'sit' : 'stand' };
-      return { kind: 'stand' };
-    }
-
-    /** The top row of a person's hair. Sitting lowers it; standing at the desk to wave raises them back up. */
-    function topOf(person, pose) {
-      const feet = Math.round(person.position.y);
-      if (pose.kind === 'sit') return feet - 15;
-      if (pose.kind === 'slump') return feet - 14;
-      return feet - 17;
-    }
+    /** The one the mic talks to: while it's held, and for the nod once it's let go. */
+    const isListener = (person) => !person.isStaff && person.session.id === mic.listener;
 
     /**
      * A person is 17 art pixels tall, standing: two rows of hair, five of
      * face, six of shirt, a belt, two of legs and a row of shoes.
      */
     function drawPerson(person) {
-      const pose = poseOf(person);
-      const x = Math.round(person.position.x), top = topOf(person, pose);
+      const pose = poseOf(person, now);
+      const x = Math.round(person.position.x);
+      // The listener nods, twice, once the mic is let go.
+      const since = mic.releasedAt === null ? Infinity : now - mic.releasedAt;
+      const nod = isListener(person) && since < NOD_LENGTH && Math.floor((since / NOD_LENGTH) * 4) % 2 === 0 ? 1 : 0;
+      const top = topOf(person, pose) + nod;
       const { look } = person, away = person.isFacingAway;
       const shirtColour = person.isStaff ? STAFF_SHIRTS[Math.floor(look.phase * STAFF_SHIRTS.length) % STAFF_SHIRTS.length]
         : SHIRTS[person.session.agent] ?? SHIRTS.claude;
@@ -918,7 +991,15 @@
 
       if (away) return;
       const blinking = (now + look.phase * 5) % 4.5 < 0.15;
-      if (pose.kind === 'slump') {
+      // While the mic is held its listener looks toward it, and when it goes
+      // on, everyone looks up for a moment.
+      if (isListener(person) && mic.held && pose.kind !== 'slump') {
+        dot(x - 1, top + 4, PALETTE.eye);
+        dot(x + 3, top + 4, PALETTE.eye);
+      } else if (lookingUp && pose.kind !== 'slump') {
+        dot(x - 2, top + 3, PALETTE.eye);
+        dot(x + 2, top + 3, PALETTE.eye);
+      } else if (pose.kind === 'slump') {
         // Eyes shut, head in hands
         dot(x - 2, top + 4, PALETTE.eye, 0.45);
         dot(x + 2, top + 4, PALETTE.eye, 0.45);
@@ -1000,8 +1081,24 @@
       // Going nuclear says enough on its own.
       if (person.isLeaving || person.isGoingNuclear) return;
       const state = person.session.state;
-      const pose = poseOf(person);
+      const pose = poseOf(person, now);
       const x = Math.round(person.position.x), top = topOf(person, pose);
+
+      if (mic.held && isListener(person)) {
+        // Listening: sound lines coming in from the right.
+        const bottom = top - 3;
+        fill(x - 4, bottom - 7, 9, 9, PALETTE.bubbleEdge);
+        fill(x - 5, bottom - 6, 11, 7, PALETTE.bubbleEdge);
+        fill(x - 4, bottom - 6, 9, 7, PALETTE.bubble);
+        dot(x - 1, bottom + 1, PALETTE.bubble);
+        dot(x - 1, bottom + 2, PALETTE.bubbleEdge);
+        const lit = Math.floor(now * 4) % 3;
+        for (let k = 0; k <= lit; k++) {
+          const lx = x - 2 + k * 2;
+          fill(lx, bottom - 4 - k, 1, 3 + k * 2, PALETTE.bubbleEdge);
+        }
+        return;
+      }
 
       if (state === 'idle') {
         // A nap, after a while on the couch
@@ -1073,16 +1170,57 @@
       ctx.fillText(shown, left + padding + dotSize + gap, center.y);
     }
 
+    /**
+     * The picked desk, as the deck marks its key: a pool of light on the
+     * floor under it, and corners in the ink colour round it.
+     */
+    function drawSpotlight() {
+      if (selectedDesk < 0) return;
+      const { x, y } = DESKS[selectedDesk];
+      for (const [grow, alpha] of [[0, 0.1], [3, 0.06]]) {
+        fill(x - 4 - grow, y - 14 + grow / 2, DESK_WIDTH + 8 + grow * 2, 34 - grow, ink, alpha);
+      }
+    }
+
+    function drawSelectionCorners() {
+      if (selectedDesk < 0) return;
+      const { x, y } = DESKS[selectedDesk];
+      const left = x - 3, right = x + DESK_WIDTH + 2, top = y - 14, bottom = y + 18;
+      for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
+        fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink);
+        fill(cx, dy > 0 ? cy : cy - 3, 1, 4, ink);
+      }
+    }
+
+    /** Sound waves from the mic while it's held, spreading across the room. */
+    function drawMicWaves() {
+      if (!mic.held) return;
+      const heldFor = now - mic.heldAt;
+      for (let k = 0; k < 3; k++) {
+        const age = (heldFor - k * WAVE_EVERY) % (WAVE_EVERY * 3) / (WAVE_EVERY * 3);
+        if (heldFor < k * WAVE_EVERY) continue;
+        const radius = 6 + age * WAVE_REACH;
+        const count = Math.floor(radius * 1.5);
+        for (let i = 0; i <= count; i++) {
+          // A quarter turn, out into the room from the corner
+          const angle = Math.PI + (i / count) * (Math.PI / 2);
+          dot(Math.round(MIC.x + Math.cos(angle) * radius), Math.round(MIC.y - 21 + Math.sin(angle) * radius * 0.8),
+            PALETTE.alarm, 0.6 * (1 - age));
+        }
+      }
+    }
+
     /* The frame, back to front */
 
     drawWall();
     drawFloor();
+    drawSpotlight();
 
     // What stands on the floor, drawn in order of where it touches the
     // floor, so that nearer things cover farther ones.
     const items = [
       [46.5, drawCounter], [50, drawCooler], [110, drawCouchBack], [117, drawCouchFront],
-      [134, drawCoffeeTable], [157, drawPingPong], [176, drawPlant], [176.5, drawButton],
+      [134, drawCoffeeTable], [157, drawPingPong], [176, drawPlant], [176.5, drawButton], [177, drawMic],
     ];
     DESKS.forEach((d, desk) => {
       items.push([d.y + 5, () => drawDesk(desk)]);
@@ -1092,7 +1230,9 @@
     items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
 
     if (isNight) fill(0, 0, WIDTH, HEIGHT, PALETTE.night, 0.3);
+    drawSelectionCorners();
     drawDetonation();
+    drawMicWaves();
     DESKS.forEach((_, desk) => drawScreenLight(desk));
     office.people.forEach(drawBubble);
     DESKS.forEach((_, desk) => drawLabel(desk));
@@ -1135,12 +1275,23 @@
     }));
   }
 
-  function create(canvas) {
+  /** Nothing to tap is smaller than this, in CSS pixels, so a finger finds it. */
+  const SMALLEST_TARGET = 44;
+
+  function create(canvas, on = {}) {
     const ctx = canvas.getContext('2d');
     const office = new Office();
+    const clock = () => performance.now() / 1000;
     let visible = true;
     let frame = null;
     let last = 0;
+    let selected = null; // the session the deck's controls act on
+    // The mic: whether a finger holds it, when it last went on and off, and
+    // who it talks to.
+    const mic = { held: false, heldAt: null, releasedAt: null, listener: null, usable: true };
+    let wobbling = null;     // the button or the mic, tapped with no desk picked: { what, at }
+    let buttonDown = false;  // a finger on the nuclear button
+    let finger = null;       // the one finger on the room: { id }
 
     // The canvas holds the screen's own pixels, so the art can be scaled by
     // a whole number of them.
@@ -1153,6 +1304,11 @@
     }
     new ResizeObserver(resize).observe(canvas);
 
+    function selectedSession() {
+      const seat = office.seats.find((s) => s.session && s.session.id === selected);
+      return seat ? seat.session : null;
+    }
+
     function tick(time) {
       frame = null;
       if (!visible || document.hidden) return;
@@ -1160,26 +1316,124 @@
       if (time - last < FRAME_TIME - 1) return;
       last = time;
       const now = time / 1000, date = new Date();
+      // Dimmed only for a picked session with no voice input: with none
+      // picked, a tap wobbles it and asks for a desk.
+      const session = selectedSession();
+      mic.usable = !session || !!session.mic;
       office.step(now);
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
         width: canvas.width, height: canvas.height, ratio: window.devicePixelRatio || 1,
+        selected, mic, wobble: wobbling, buttonDown,
       });
     }
 
     function run() {
       if (frame === null && visible && !document.hidden) frame = requestAnimationFrame(tick);
     }
-    document.addEventListener('visibilitychange', run);
+
+    /**
+     * What's under a point on the page, if it can be tapped. Each target
+     * reaches at least SMALLEST_TARGET round its middle; of those in reach,
+     * the nearest wins, and on a tie people come before things, and things
+     * before desks.
+     */
+    function targetAt(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height);
+      const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
+      const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
+      const reach = (SMALLEST_TARGET * (window.devicePixelRatio || 1)) / scale;
+      const now = clock();
+      let best = null;
+      const consider = (target, box, rank) => {
+        const grow = (low, high) => {
+          const extra = Math.max(0, reach - (high - low)) / 2;
+          return [low - extra, high + extra];
+        };
+        const [left, right] = grow(box.left, box.right), [top, bottom] = grow(box.top, box.bottom);
+        if (x < left || x > right || y < top || y > bottom) return;
+        const distance = Math.hypot(Math.max(box.left - x, 0, x - box.right), Math.max(box.top - y, 0, y - box.bottom));
+        if (!best || distance < best.distance || (distance === best.distance && rank < best.rank)) best = { target, distance, rank };
+      };
+
+      for (const person of office.people) {
+        if (person.isStaff || person.isLeaving) continue;
+        const px = Math.round(person.position.x), top = topOf(person, poseOf(person, now));
+        // The sprite, its arms, and the bubble over its head
+        consider({ kind: 'session', id: person.session.id },
+          { left: px - 5, right: px + 8, top: top - 11, bottom: Math.round(person.position.y) + 1 }, 0);
+      }
+      consider({ kind: 'button' }, { left: BUTTON.x - 7, right: BUTTON.x + 8, top: BUTTON.y - 1, bottom: BUTTON.y + 16 }, 1);
+      consider({ kind: 'mic' }, { left: MIC.x - 5, right: MIC.x + 6, top: MIC.y - 25, bottom: MIC.y + 1 }, 1);
+      office.seats.forEach((seat, desk) => {
+        const target = seat.session ? { kind: 'session', id: seat.session.id } : seat.pin ? { kind: 'pinned', name: seat.pin } : null;
+        // The desk, its chair and monitor, and its label
+        const { x: dx, y: dy } = DESKS[desk];
+        if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
+      });
+      return best && best.target;
+    }
+
+    /** Everything a key or button does on the deck, done by tapping the room. */
+    function press(target) {
+      if (target.kind === 'session') return on.select?.(target.id);
+      if (target.kind === 'pinned') return on.hint?.(`Nothing running in ${target.name}`);
+      const session = selectedSession();
+      if (!session) {
+        wobbling = { what: target.kind, at: clock() };
+        return on.hint?.('Pick a desk first');
+      }
+      // As the deck's ☢ Max and 🎙: only for an agent with an effort setting,
+      // or with voice input.
+      if (target.kind === 'button' && session.dial) {
+        buttonDown = true;
+        on.max?.();
+      } else if (target.kind === 'mic' && session.mic) {
+        Object.assign(mic, { held: true, heldAt: clock(), releasedAt: null, listener: session.id });
+        on.mic?.('down');
+      }
+    }
+
+    /** The finger lifts, or is taken away: the mic must always hear about it, or it keeps listening. */
+    function lift() {
+      finger = null;
+      buttonDown = false;
+      if (!mic.held) return;
+      mic.held = false;
+      mic.releasedAt = clock();
+      on.mic?.('up');
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (finger) return; // one finger at a time
+      const target = targetAt(e.clientX, e.clientY);
+      if (!target) return;
+      canvas.setPointerCapture(e.pointerId);
+      finger = { id: e.pointerId };
+      press(target);
+    });
+    for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+      canvas.addEventListener(type, (e) => { if (finger && e.pointerId === finger.id) lift(); });
+    }
+    // A mouse shows what can be clicked.
+    canvas.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse' && !finger) canvas.style.cursor = targetAt(e.clientX, e.clientY) ? 'pointer' : '';
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && finger) lift();
+      run();
+    });
     resize();
     run();
 
     return {
-      show(snapshot) { office.apply(seatsOf(snapshot), snapshot.theme, performance.now() / 1000); },
+      show(snapshot) { office.apply(seatsOf(snapshot), snapshot.theme, clock()); },
       close() { office.close(); },
-      setVisible(on) {
-        visible = on;
-        if (on) { resize(); run(); }
+      select(id) { selected = id; },
+      setVisible(shown) {
+        visible = shown;
+        if (shown) { resize(); run(); } else if (finger) lift();
       },
     };
   }

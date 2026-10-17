@@ -379,7 +379,27 @@
 
   /* ------------------------------------------------------------- office */
 
-  const office = AgentOffice.create($('office-canvas'));
+  // Tapping the room does what the keys and buttons do, with the deck's tick.
+  const office = AgentOffice.create($('office-canvas'), {
+    select(id) {
+      tick();
+      selected = id;
+      render();
+      post('/focus', { session: id });
+    },
+    max() {
+      tick();
+      setEffort('max', 'max');
+    },
+    mic(phase) {
+      if (phase === 'down') tick();
+      talk(phase);
+    },
+    hint(text) {
+      tick();
+      flash(text);
+    },
+  });
 
   /**
    * The keys or the office, as chosen in setup's layout. The legend above
@@ -498,17 +518,7 @@
   function act(el, phase) {
     const action = el.dataset.action;
 
-    // The Mac stops recording in the tab where it started, so a release has
-    // to arrive even if the selection has gone in the meantime. It goes after
-    // its press: one that overtook it would stop nothing, and the press would
-    // then start a recording nothing stops.
-    if (action === 'mic' && (phase === 'up' || selected)) {
-      const params = { session: selected || '', action, phase };
-      listening = listening
-        .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
-        .catch(() => {}); // one that fails mustn't stop those after it
-      return listening;
-    }
+    if (action === 'mic') return talk(phase);
     if (!selected) return;
 
     // /clear throws the conversation away, and a made button can ask twice
@@ -526,6 +536,22 @@
     } else {
       send('/act', { session: selected, action });
     }
+  }
+
+  /**
+   * The mic, from the 🎙 button or the office's: pressed to start listening,
+   * let go to send. The Mac stops recording in the tab where it started, so
+   * a release has to arrive even if the selection has gone in the meantime.
+   * It goes after its press: one that overtook it would stop nothing, and
+   * the press would then start a recording nothing stops.
+   */
+  function talk(phase) {
+    if (phase === 'down' && !selected) return;
+    const params = { session: selected || '', action: 'mic', phase };
+    listening = listening
+      .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
+      .catch(() => {}); // one that fails mustn't stop those after it
+    return listening;
   }
 
   /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it.
@@ -761,6 +787,7 @@
     // Nothing chosen: whoever is waiting on you, else the first.
     if (!selected && sessions.length) selected = (sessions.find((s) => s.state === 'asking') || sessions[0]).id;
     const sel = sessions.find((s) => s.id === selected);
+    office.select(selected);
 
     [...$('keys').children].forEach((el, i) => {
       const k = keyData[i] || {};
