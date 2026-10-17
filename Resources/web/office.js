@@ -152,22 +152,23 @@
    * desk's corner (the top-left of a monitor 13 × 9, whose back shows the
    * turn's time); whether its person stands at it; whether it has the
    * office's chair, or what's carried over their head instead when they're
-   * moved to another desk; and where what's on the desk goes, moved from
-   * where a desk has it. Each is drawn in drawOffice's WORKSPACE_PARTS.
+   * moved to another desk; where what's on the desk goes, moved from
+   * where a desk has it; and how far above the desk's corner it reaches, so
+   * a finger finds it there. Each is drawn in drawOffice's WORKSPACE_PARTS.
    */
   const WORKSPACES = {
-    desk: { screen: { dx: 6, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 } },
-    standing: { screen: { dx: 6, dy: -12 }, stands: true, chair: false, carry: [0x5a5f6c, 0x737987], things: { dx: 0, dy: 0 } },
-    gaming: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x1d1f25, 0xd4140b], things: { dx: 0, dy: 0 } },
-    tent: { screen: { dx: 22, dy: -3 }, stands: false, chair: false, carry: [0x6f8a4a, 0x8aa65e], things: null },
-    box: { screen: { dx: 6, dy: -9 }, stands: false, chair: false, carry: [0xa07a4a, 0xc9a06a], things: { dx: 0, dy: 1 } },
-    beanbag: { screen: { dx: 22, dy: -4 }, stands: false, chair: false, carry: [0xc0584a, 0xd96a5a], things: { dx: 4, dy: 12 } },
-    igloo: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xc4d2de, 0xeef4f8], things: { dx: 0, dy: 0 } },
-    van: { screen: { dx: 11, dy: -10 }, stands: false, chair: true, things: { dx: -1, dy: 0 } },
-    cockpit: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x3a3f4a, 0x8a93a3], things: { dx: 0, dy: 0 } },
-    ship: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x7a5232, 0x3a3a40], things: null },
-    throne: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xd6b25e, 0x9a2a3a], things: { dx: 0, dy: 0 } },
-    greenhouse: { screen: { dx: 4, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 } },
+    desk: { screen: { dx: 6, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 }, top: -14 },
+    standing: { screen: { dx: 6, dy: -12 }, stands: true, chair: false, carry: [0x5a5f6c, 0x737987], things: { dx: 0, dy: 0 }, top: -14 },
+    gaming: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x1d1f25, 0xd4140b], things: { dx: 0, dy: 0 }, top: -15 },
+    tent: { screen: { dx: 22, dy: -3 }, stands: false, chair: false, carry: [0x6f8a4a, 0x8aa65e], things: null, top: -24 },
+    box: { screen: { dx: 6, dy: -9 }, stands: false, chair: false, carry: [0xa07a4a, 0xc9a06a], things: { dx: 0, dy: 1 }, top: -14 },
+    beanbag: { screen: { dx: 22, dy: -4 }, stands: false, chair: false, carry: [0xc0584a, 0xd96a5a], things: { dx: 4, dy: 12 }, top: -14 },
+    igloo: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xc4d2de, 0xeef4f8], things: { dx: 0, dy: 0 }, top: -22 },
+    van: { screen: { dx: 11, dy: -10 }, stands: false, chair: true, things: { dx: -1, dy: 0 }, top: -21 },
+    cockpit: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x3a3f4a, 0x8a93a3], things: { dx: 0, dy: 0 }, top: -24 },
+    ship: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x7a5232, 0x3a3a40], things: null, top: -24 },
+    throne: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xd6b25e, 0x9a2a3a], things: { dx: 0, dy: 0 }, top: -23 },
+    greenhouse: { screen: { dx: 4, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 }, top: -23 },
   };
   /** The colours of what can sit on a desk besides a plant, papers and a lamp. */
   const DESK_THINGS = { cactus: 0x5a9a4a, duck: 0xf2cf3a, beak: 0xe8823a, sky: 0x8fc0e8, coffee: 0x5a3a24 };
@@ -1563,6 +1564,12 @@
     const colour = (state) => fromCss(office.colours[state]) ?? fromCss(STANDARD_STATES[state]);
     const ink = fromCss(office.colours.ink) ?? INK;
     const sessionAt = (desk) => (desk < office.seats.length ? office.seats[desk].session : null);
+    /** How far above its corner a desk's workspace reaches, in art pixels: a negative number. */
+    const reachOf = (desk) => WORKSPACES[workspaceOf(sessionAt(desk))].top;
+    // Someone being carried is drawn where the finger has them, so nothing of them stays at their desk.
+    const carried = frame.carrying && frame.carrying.person;
+    /** Who is at a desk now, if anyone. */
+    const occupantOf = (desk) => office.people.find((p) => p.desk === desk && p.isAtDesk && p !== carried) || null;
     const selectedDesk = office.seats.findIndex((s) => s.session && s.session.id === selected);
     /** How far a wobbling thing is pushed sideways, in art pixels. */
     const wobble = (what) => (frame.wobble && frame.wobble.what === what && now - frame.wobble.at < WOBBLE_LENGTH
@@ -2067,7 +2074,7 @@
           fill(s.x - 4, y - 6, 9, 1, tint(0xc9a06a, 1));
           fill(s.x, y - 6, 1, 7, 0xe0cfa0);
         },
-        front({ x, y, tint }) {
+        front({ x, y, s, tint }) {
           const face = 0xb58a55, top = 0xc9a06a, ink = 0x6e5233;
           fill(x - 2, y + 1, 3, 3, tint(top, 0.95));
           fill(x + 43, y + 1, 3, 3, tint(top, 0.95));
@@ -2089,6 +2096,9 @@
           fill(x + 31, y + 14, 5, 1, ink);
           fill(x + 2, y + 16, 41, 1, SHADOW);
           drawLaptop(x + 6, y - 9);
+          // A keyboard of its own in front of whoever sits there, the laptop being out of reach
+          fill(s.x - 4, y + 1, 9, 2, 0x3a3d47);
+          fill(s.x - 3, y + 1, 7, 1, 0x5a5f6c);
         },
       },
 
@@ -2417,45 +2427,45 @@
         x, y, s: seat(desk),
         tint: (plain, shade) => (paint === null ? plain : shaded(paint, shade)),
         finish: DESK_FINISHES[decor.desk],
-        occupant: office.people.find((p) => p.desk === desk && p.isAtDesk) || null,
+        occupant: occupantOf(desk),
       };
     }
 
     /** Something on a desk whose corner is at `x`, `y`: a plant, papers, a lamp, or what you've put on it. */
     function drawDeskThing(thing, x, y) {
-        if (thing === 'plant') {
-          fill(x + 38, y - 2, 3, 3, PALETTE.pot);
-          fill(x + 37, y - 5, 5, 3, PALETTE.leaf);
-          dot(x + 39, y - 6, PALETTE.leafDark);
-        } else if (thing === 'papers') {
-          fill(x + 35, y + 1, 6, 3, PALETTE.paper);
-          fill(x + 36, y + 2, 4, 1, PALETTE.counterTop);
-        } else if (thing === 'lamp') {
-          fill(x + 39, y - 6, 1, 6, PALETTE.frame);
-          fill(x + 36, y - 7, 5, 2, PALETTE.brass);
-          fill(x + 37, y, 5, 1, PALETTE.frame);
-        } else if (thing === 'cactus') {
-          fill(x + 38, y - 2, 3, 3, PALETTE.pot);
-          fill(x + 39, y - 7, 1, 5, DESK_THINGS.cactus);
-          dot(x + 38, y - 5, DESK_THINGS.cactus);
-          dot(x + 40, y - 4, DESK_THINGS.cactus);
-        } else if (thing === 'duck') {
-          fill(x + 36, y - 2, 4, 2, DESK_THINGS.duck);
-          fill(x + 38, y - 4, 2, 2, DESK_THINGS.duck);
-          dot(x + 40, y - 3, DESK_THINGS.beak);
-        } else if (thing === 'trophy') {
-          fill(x + 36, y - 6, 5, 3, PALETTE.brass);
-          dot(x + 38, y - 3, PALETTE.brass);
-          fill(x + 37, y - 2, 3, 2, darker(PALETTE.brass));
-        } else if (thing === 'photo') {
-          fill(x + 36, y - 6, 5, 6, PALETTE.frame);
-          fill(x + 37, y - 5, 3, 3, DESK_THINGS.sky);
-          fill(x + 37, y - 3, 3, 1, PALETTE.leaf);
-        } else if (thing === 'mug') {
-          fill(x + 37, y - 3, 3, 3, PALETTE.mug);
-          dot(x + 40, y - 2, PALETTE.mug);
-          fill(x + 37, y - 3, 3, 1, DESK_THINGS.coffee);
-        }
+      if (thing === 'plant') {
+        fill(x + 38, y - 2, 3, 3, PALETTE.pot);
+        fill(x + 37, y - 5, 5, 3, PALETTE.leaf);
+        dot(x + 39, y - 6, PALETTE.leafDark);
+      } else if (thing === 'papers') {
+        fill(x + 35, y + 1, 6, 3, PALETTE.paper);
+        fill(x + 36, y + 2, 4, 1, PALETTE.counterTop);
+      } else if (thing === 'lamp') {
+        fill(x + 39, y - 6, 1, 6, PALETTE.frame);
+        fill(x + 36, y - 7, 5, 2, PALETTE.brass);
+        fill(x + 37, y, 5, 1, PALETTE.frame);
+      } else if (thing === 'cactus') {
+        fill(x + 38, y - 2, 3, 3, PALETTE.pot);
+        fill(x + 39, y - 7, 1, 5, DESK_THINGS.cactus);
+        dot(x + 38, y - 5, DESK_THINGS.cactus);
+        dot(x + 40, y - 4, DESK_THINGS.cactus);
+      } else if (thing === 'duck') {
+        fill(x + 36, y - 2, 4, 2, DESK_THINGS.duck);
+        fill(x + 38, y - 4, 2, 2, DESK_THINGS.duck);
+        dot(x + 40, y - 3, DESK_THINGS.beak);
+      } else if (thing === 'trophy') {
+        fill(x + 36, y - 6, 5, 3, PALETTE.brass);
+        dot(x + 38, y - 3, PALETTE.brass);
+        fill(x + 37, y - 2, 3, 2, darker(PALETTE.brass));
+      } else if (thing === 'photo') {
+        fill(x + 36, y - 6, 5, 6, PALETTE.frame);
+        fill(x + 37, y - 5, 3, 3, DESK_THINGS.sky);
+        fill(x + 37, y - 3, 3, 1, PALETTE.leaf);
+      } else if (thing === 'mug') {
+        fill(x + 37, y - 3, 3, 3, PALETTE.mug);
+        dot(x + 40, y - 2, PALETTE.mug);
+        fill(x + 37, y - 3, 3, 1, DESK_THINGS.coffee);
+      }
     }
 
     function drawDesk(desk) {
@@ -2468,7 +2478,7 @@
       const thing = member && member.desk !== 'auto' ? member.desk : ['plant', 'papers', 'lamp'][desk % 3];
       if (workspace.things) drawDeskThing(thing, x + workspace.things.dx, y + workspace.things.dy);
 
-      const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
+      const occupant = occupantOf(desk);
       if (!occupant) return;
       const skin = lookFor(occupant).skin;
       const tool = occupant.session.state === 'thinking' ? toolKind(occupant.session.tool) : null;
@@ -3867,9 +3877,10 @@
       }
 
       if (state === 'idle') {
-        // A nap, after a while on the couch
+        // A nap, after a while on the couch or the beanbag, not at the drums or in the hot tub
         const spot = spotOf(person.place);
         if (person.isWalking || spot === null || spots[spot].pose !== 'sit' || now - person.arrivedAt <= 20) return;
+        if (spot >= LOUNGE_SPOTS.length && decor.corner !== 'books') return;
         const rise = (now * 0.35 + person.look.phase) % 1;
         const zx = x + 3 + Math.round(rise * 3), zy = top - 3 - Math.round(rise * 8);
         fill(zx, zy, 3, 1, WHITE, 1 - rise);
@@ -4131,7 +4142,7 @@
         at += GLYPHS[c][0].length + gap(c, chars[i + 1]);
       });
 
-      const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
+      const occupant = occupantOf(desk);
       if (seconds < LONG_TURN || !occupant) return;
       const s = seat(desk), top = topOf(occupant, poseOf(occupant, now));
       const run = (now * 1.5 + occupant.look.phase) % 1;
@@ -4144,16 +4155,16 @@
      */
     function drawSpotlight() {
       if (selectedDesk < 0) return;
-      const { x, y } = DESKS[selectedDesk];
+      const { x, y } = DESKS[selectedDesk], top = y + reachOf(selectedDesk);
       for (const [grow, alpha] of [[0, 0.1], [3, 0.06]]) {
-        fill(x - 4 - grow, y - 14 + grow / 2, DESK_WIDTH + 8 + grow * 2, 34 - grow, ink, alpha);
+        fill(x - 4 - grow, top + grow / 2, DESK_WIDTH + 8 + grow * 2, y + 20 - top - grow, ink, alpha);
       }
     }
 
     function drawSelectionCorners() {
       if (selectedDesk < 0) return;
       const { x, y } = DESKS[selectedDesk];
-      const left = x - 3, right = x + DESK_WIDTH + 2, top = y - 14, bottom = y + 18;
+      const left = x - 3, right = x + DESK_WIDTH + 2, top = y + reachOf(selectedDesk), bottom = y + 18;
       for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
         fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink);
         fill(cx, dy > 0 ? cy : cy - 3, 1, 4, ink);
@@ -4168,7 +4179,7 @@
     function drawCarried({ person, x, y, over, from }) {
       if (over !== null && over !== from) {
         const d = DESKS[over];
-        const left = d.x - 3, right = d.x + DESK_WIDTH + 2, top = d.y - 14, bottom = d.y + 18;
+        const left = d.x - 3, right = d.x + DESK_WIDTH + 2, top = d.y + reachOf(over), bottom = d.y + 18;
         const blink = 0.55 + 0.45 * Math.sin(now * 8);
         for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
           fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink, blink);
@@ -4384,9 +4395,13 @@
       items.push([d.y + 3.5, () => drawChair(desk)]); // just behind whoever sits in it
       items.push([d.y + 3, () => drawWorkspaceBack(desk)]);
     });
-    // Someone being carried is drawn on top, where the finger has them, not at their desk.
-    const carried = frame.carrying && frame.carrying.person;
-    for (const person of office.people) if (person !== carried) items.push([person.position.y, () => drawPerson(person)]);
+    // Someone being carried is drawn on top, where the finger has them, not at their desk. Someone at
+    // the clock or the whiteboard is in front of the first row's workspaces, the tallest of which reach
+    // the wall: they're there to be seen.
+    const atWall = (person) => !person.isWalking && /^(clock|board):/.test(person.place);
+    for (const person of office.people) {
+      if (person !== carried) items.push([atWall(person) ? DESKS[0].y + 5.5 : person.position.y, () => drawPerson(person)]);
+    }
     office.seats.forEach((s, desk) => { if (s.session && s.session.compacting) items.push([DESKS[desk].y + 16, () => drawShredder(desk)]); });
     for (const intern of office.interns) {
       // One still waiting for room hasn't come in yet.
@@ -4810,10 +4825,26 @@
       };
     }
 
+    /**
+     * Where a key's desk is, to a finger: its workspace, as high as that
+     * reaches, down to the desk's front; and its label below. A tall one
+     * reaches up into the label of the desk behind it, where it wins.
+     */
+    function deskBoxes(desk) {
+      const { x, y } = DESKS[desk], seat = office.seats[desk] || {};
+      const left = x - 2, right = x + DESK_WIDTH + 2;
+      return [
+        { left, right, top: y + WORKSPACES[workspaceOf(seat.session)].top, bottom: y + 18 },
+        { left, right, top: y + 18, bottom: y + 27 },
+      ];
+    }
+
     /** The key's desk under a point of the room, if there is one: where a carried agent would land. */
     function deskAt(x, y) {
-      const desk = DESKS.findIndex((d, i) => i < office.seats.length
-        && x >= d.x - 2 && x <= d.x + DESK_WIDTH + 2 && y >= d.y - 14 && y <= d.y + 27);
+      const within = (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+      const boxes = DESKS.slice(0, office.seats.length).map((_, desk) => deskBoxes(desk));
+      let desk = boxes.findIndex(([workspace]) => within(workspace));
+      if (desk < 0) desk = boxes.findIndex(([, label]) => within(label));
       return desk >= 0 ? desk : null;
     }
 
@@ -4849,14 +4880,17 @@
       const dome = placed('button', BUTTON), stand = placed('mic', MIC);
       consider({ kind: 'button' }, { left: dome.x - 7, right: dome.x + 8, top: dome.y - 1, bottom: dome.y + 16 }, 1);
       consider({ kind: 'mic' }, { left: stand.x - (decor.mic === 'megaphone' ? 9 : 5), right: stand.x + 6, top: stand.y - 25, bottom: stand.y + 1 }, 1);
-      DESKS.forEach(({ x: dx, y: dy }, desk) => {
+      DESKS.forEach((_, desk) => {
         const seat = office.seats[desk] || {};
         // An empty desk only matters where a hire would sit.
         const target = seat.session ? { kind: 'session', id: seat.session.id }
           : seat.pin ? { kind: 'pinned', name: seat.pin, desk }
           : hiresInto(desk) ? { kind: 'empty', desk } : null;
-        // The desk, its chair and monitor, and its label
-        if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
+        // The desk, its chair and monitor, and below them its label
+        if (!target) return;
+        const [workspace, label] = deskBoxes(desk);
+        consider(target, workspace, 2);
+        consider(target, label, 3);
       });
       const button = heldButton();
       if (button) {
@@ -5068,6 +5102,7 @@
     corner: { x: 238, y: 49, w: 80, h: 51 },
     workspace: { x: DESKS[0].x - 6, y: DESKS[0].y - 27, w: DESK_WIDTH + 14, h: 45 },
   };
+  let previewRoom = null; // the canvas previews draw the whole room on
   /** Someone at a workspace in its preview, at ease, so no bubble hides it. */
   const PREVIEW_AGENT = {
     id: 'preview', name: 'preview', state: 'idle', effort: '', agent: 'claude', model: '', tool: 'Edit', subagents: [],
@@ -5100,8 +5135,10 @@
       const crop = { ...PREVIEW_CROPS[what.workspace ? 'workspace' : 'corner'] };
       if (what.corner) Object.assign(crop, placed('corner', crop));
       const scale = Math.max(1, Math.floor(Math.min(canvas.width / crop.w, canvas.height / crop.h)));
-      const whole = canvas.ownerDocument.createElement('canvas');
-      whole.width = shape.width * scale;
+      // One canvas for the whole room, kept from one preview to the next
+      if (!previewRoom || previewRoom.ownerDocument !== canvas.ownerDocument) previewRoom = canvas.ownerDocument.createElement('canvas');
+      const whole = previewRoom;
+      whole.width = shape.width * scale; // clears it, too
       whole.height = shape.height * scale;
       drawOffice(whole.getContext('2d'), office, {
         now, hour: 12, minute: 0, month: 5, width: whole.width, height: whole.height, ratio: 1, selected: null,

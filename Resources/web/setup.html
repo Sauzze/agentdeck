@@ -831,23 +831,51 @@
   const PICTURE_STILL = 3.3;
   let moving = null; // the picture under the pointer: { canvas, what, room, start }
   let looping = false;
+  /**
+   * The stills drawn so far, for the room as it's furnished: a change to
+   * anything else on the page, or to which piece is picked, draws none again.
+   */
+  let stills = new Map();
+  let stillsFor = '';
+  let refocus = null; // the picture picked from the keyboard, to keep it focused as the page redraws
 
-  /** A picture of one of the office's choices, moving while the pointer is on `host`. */
+  /** What a picture shows of the room besides its own piece: what it's drawn in. */
+  const lookOf = (room) => JSON.stringify({ ...room, team: null, dress: null, corner: null, workspace: null, staff: null, pet: null,
+    sky: null, sound: null, mic: null });
+
+  /** A picture of one of the office's choices, moving while the pointer, or the keyboard, is on `host`. */
   function picture(kind, id, room, host = null) {
     const canvas = document.createElement('canvas');
     [canvas.width, canvas.height] = PICTURE_SIZES[kind].map((n) => n * 3);
+    if (!window.AgentOffice) return canvas; // the office's code didn't load: an empty frame, and the name under it
     const what = { [kind]: id };
-    const still = () => AgentOffice.preview(canvas, what, { room, now: PICTURE_STILL });
+    const look = lookOf(room), key = `${kind}:${id}`;
+    if (look !== stillsFor) {
+      stills = new Map();
+      stillsFor = look;
+    }
+    const still = () => {
+      const ctx = canvas.getContext('2d');
+      if (stills.has(key)) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        return ctx.drawImage(stills.get(key), 0, 0);
+      }
+      AgentOffice.preview(canvas, what, { room, now: PICTURE_STILL });
+      const kept = document.createElement('canvas');
+      [kept.width, kept.height] = [canvas.width, canvas.height];
+      kept.getContext('2d').drawImage(canvas, 0, 0);
+      if (stillsFor === look) stills.set(key, kept);
+    };
     still();
     const over = host || canvas;
-    over.onpointerenter = () => {
+    over.onpointerenter = over.onfocus = () => {
       moving = { canvas, what, room, start: performance.now() / 1000 - PICTURE_STILL };
       if (!looping) {
         looping = true;
         requestAnimationFrame(move);
       }
     };
-    over.onpointerleave = () => {
+    over.onpointerleave = over.onblur = () => {
       if (moving && moving.canvas === canvas) moving = null;
       still();
     };
@@ -855,7 +883,8 @@
   }
 
   function move(time) {
-    if (!moving || !moving.canvas.isConnected) {
+    // Gone from the page, or out of sight, it stops.
+    if (!moving || !moving.canvas.isConnected || document.hidden) {
       looping = false;
       return;
     }
@@ -868,10 +897,15 @@
     const b = document.createElement('button');
     b.className = 'tile' + (on ? ' on' : '');
     b.setAttribute('aria-pressed', String(on));
+    b.dataset.pick = `${kind}:${id}`;
     const name = document.createElement('span');
     name.textContent = label;
     b.append(picture(kind, id, room, b), name);
-    b.onclick = onclick;
+    b.onclick = () => {
+      // Picked with the keyboard, the redrawn tile keeps the focus.
+      refocus = b.matches(':focus-visible') ? b.dataset.pick : null;
+      onclick();
+    };
     return b;
   }
 
@@ -1105,6 +1139,11 @@
     for (const part of ['corner', 'workspace']) {
       $(`room-${part}`).replaceChildren(...ROOM_CHOICES[part].map(([id, label]) =>
         tile(part, id, label, (room[part] || STANDARD_ROOM[part]) === id, () => furnish(() => { room[part] = id; }), room)));
+    }
+    if (refocus) {
+      const picked = document.querySelector(`.tile[data-pick="${refocus}"]`);
+      refocus = null;
+      if (picked) picked.focus();
     }
     drawTeam(room);
     drawDress(room);
