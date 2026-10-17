@@ -271,6 +271,8 @@ func (d *Deck) snapshot() []byte {
 	}
 	state, _ := json.Marshal(map[string]any{
 		"keys": entries, "overflow": len(overflow), "theme": currentTheme(d.config), "scroll": d.config.ScrollEnabled,
+		// What the office's held desks offer: firing here; hiring is the Mac app's for now.
+		"hiring": map[string]bool{"fire": d.config.HiringEnabled, "hire": false},
 		"layout": d.config.Layout,
 	})
 	return state
@@ -423,12 +425,23 @@ func (d *Deck) inTab(name string, op func(Tab) error) (int, string) {
 	return http.StatusNoContent, ""
 }
 
+const hiringOff = "Hiring and firing are off. Turn them on in setup, on your computer."
+
 // Perform runs one of the phone's controls on a session.
 func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 	// Releasing the mic stops recording where it started, whatever is
 	// selected now — and even if that session has since gone.
 	if action == "mic" && query.Get("phase") != "down" {
 		return d.releaseMic()
+	}
+	d.mu.Lock()
+	hiring := d.config.HiringEnabled
+	d.mu.Unlock()
+	if action == "hire" {
+		if !hiring {
+			return http.StatusForbidden, hiringOff
+		}
+		return http.StatusNotImplemented, "Hiring from the office needs the Mac app, for now."
 	}
 	d.mu.Lock()
 	session := d.sessions.Get(id)
@@ -473,6 +486,11 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 			return http.StatusBadRequest, agent.Name() + " has no voice input"
 		}
 		return d.pressMic(tab)
+	case "fire":
+		if !hiring {
+			return http.StatusForbidden, hiringOff
+		}
+		return d.inTab(tab, func(t Tab) error { return t.Close() })
 	case "clear":
 		if busy {
 			return http.StatusConflict, "Busy — clear it when " + agent.Name() + " is done"

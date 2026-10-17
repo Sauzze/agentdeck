@@ -280,8 +280,23 @@ the room works like the keys:
 | A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
-| A Claude Code desk, or its person, held | Puts paint chips along the desk's front, from white for low to red for max: tap one to set its effort, like the dial, and they go away. Max is the red button's. Wherever the dial is out of sight: in full screen, on `/office` and in the pop-out window. |
+| A desk, or its person, held | On a Claude Code desk, puts paint chips along its front, from white for low to red for max: tap one to set its effort, like the dial, and they go away. Max is the red button's. With hiring and firing on, also **YOU'RE FIRED**, and **HIRE** on an empty desk (see below). Wherever the dial is out of sight: in full screen, on `/office` and in the pop-out window. |
 | ▲ ▼ ✓ ✕, over an agent waiting on you | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk wherever the deck's controls are out of sight: in full screen, on `/office` and in the pop-out window. |
+
+**Hire and fire**, once you turn on **Let the office hire and fire** on the
+setup page (it's off until you do):
+
+- **Hold an agent's desk**, and a red **YOU'RE FIRED** comes out above its
+  chips. Tap it, confirm, and its work stops and its Terminal tab closes. The
+  agent packs a box and walks out. Claude Code keeps the conversation, so
+  `claude --resume` can bring it back.
+- **Hold an empty desk**, and **HIRE** comes out. Tap it, and a new Terminal
+  window opens in the folder you chose on the setup page, with the agent you
+  chose at work in it. The new hire walks in through the door.
+
+On Windows and Linux, firing closes the agent's pane in tmux, kitty and
+WezTerm, and stops an agent started with `sauzzedeck run`. Hiring needs the
+Mac app, for now.
 
 **Full screen:** tap **⛶** above the room, and the dial and buttons step aside
 for it. The desks, the red button and the microphone work as above, and the
@@ -336,8 +351,10 @@ hears it.
   running processes. It works only from your computer, and only for reporting what
   an agent is doing. A phone's key can't pose as an agent, and the agents' key
   can't drive the deck.
-- **Scrolling is off until you turn it on.** Out of the box, a paired phone
-  can only use the deck's buttons, dial and choices.
+- **Scrolling, hiring and firing are off until you turn them on.** Out of the
+  box, a paired phone can only use the deck's buttons, dial and choices. Even
+  turned on, firing asks first, and hiring only starts the agent you chose,
+  in the folder you chose.
 - **The office says what your agents are doing in a few words.** They're made
   from a file's name, a web page's site or the description the agent gave a
   step, never from a command or a file's path.

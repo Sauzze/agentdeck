@@ -24,6 +24,7 @@ enum Terminal {
         case pageDown = 121
         case end = 119
         case c = 8
+        case w = 13
         case tab = 48
     }
 
@@ -127,6 +128,92 @@ enum Terminal {
     /// The View menu's Scroll to Bottom (⌘End): back to where the agent is.
     static func scrollToBottom(tty: String) -> Bool {
         press(.end, modifiers: .maskCommand, tty: tty)
+    }
+
+    /// Opens a new window in `folder`, running `command`. The folder goes
+    /// through `quoted form of`, so any name is taken as it is; the command
+    /// is one of the agents' own names.
+    static func open(_ command: String, in folder: String) -> Bool {
+        run("""
+            tell application "Terminal"
+                activate
+                do script "cd " & quoted form of (item 1 of argv) & " && " & (item 2 of argv)
+            end tell
+            return "yes"
+            """, arguments: [folder, command]) == "yes"
+    }
+
+    /// Stops what runs in the tab on `tty` and closes it. The job in the
+    /// tab's foreground is asked to end, then made to; with only the shell
+    /// left, Terminal closes it without asking. A window of one tab is
+    /// closed; a tab among others gets ⌘W, which needs Accessibility. Either
+    /// way, the agent has stopped.
+    static func close(tty: String) -> Bool {
+        stopForeground(tty: tty)
+        let outcome = run("""
+            set target to item 1 of argv
+            if application "Terminal" is not running then return "no"
+            tell application "Terminal"
+                repeat with w in windows
+                    repeat with t in tabs of w
+                        if tty of t is target then
+                            if (count of tabs of w) is 1 then
+                                close w
+                                return "closed"
+                            end if
+                            set selected of t to true
+                            set index of w to 1
+                            activate
+                            return "tab"
+                        end if
+                    end repeat
+                end repeat
+            end tell
+            return "no"
+            """, arguments: [tty])
+        switch outcome {
+        case "closed": return true
+        case "tab":
+            if waitUntilFrontmost() { post(.w, modifiers: .maskCommand, times: 1) }
+            return true
+        default: return false
+        }
+    }
+
+    /// How long a job is given to end when asked, then when made to.
+    private static let stopGrace: [(signal: Int32, wait: TimeInterval)] = [(SIGTERM, 3), (SIGKILL, 1)]
+
+    private static func stopForeground(tty: String) {
+        for (signal, wait) in stopGrace {
+            guard let job = foregroundJob(tty: tty) else { return }
+            kill(-job, signal)
+            let deadline = Date().addingTimeInterval(wait)
+            while Date() < deadline, foregroundJob(tty: tty) == job { Thread.sleep(forTimeInterval: 0.1) }
+        }
+    }
+
+    /// The process group in the foreground of the tab on `tty`, unless it's
+    /// the shell's own: Terminal starts each tab's shell under `login`.
+    private static func foregroundJob(tty: String) -> pid_t? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-t", (tty as NSString).lastPathComponent, "-o", "pid=,ppid=,pgid=,tpgid=,comm="]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let rows = String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { line -> (pid: Int32, ppid: Int32, pgid: Int32, tpgid: Int32, command: String)? in
+            let fields = line.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
+            guard fields.count == 5, let pid = Int32(fields[0]), let ppid = Int32(fields[1]), let pgid = Int32(fields[2]),
+                  let tpgid = Int32(fields[3]) else { return nil }
+            return (pid, ppid, pgid, tpgid, String(fields[4]))
+        }
+        let logins = Set(rows.filter { ($0.command as NSString).lastPathComponent == "login" }.map(\.pid))
+        guard let shell = rows.first(where: { logins.contains($0.ppid) }), let tpgid = rows.first?.tpgid,
+              tpgid > 0, tpgid != shell.pgid else { return nil }
+        return tpgid
     }
 
     /// Keys go to whichever app is in front, so they wait until that is

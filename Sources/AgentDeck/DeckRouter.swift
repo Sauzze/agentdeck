@@ -201,6 +201,24 @@ final class DeckRouter: Router {
             deck.refresh()
             respond(.json(setupState()))
 
+        case ("POST", "/setup/hiring"):
+            if let enabled = request.query["enabled"] { config.hiringEnabled = enabled == "1" }
+            if let folder = request.query["folder"] {
+                guard let checked = Deck.folder(folder) else { return respond(.status(400, "There's no folder at \(folder).")) }
+                config.hireFolder = checked
+            }
+            if let agent = request.query["agent"] {
+                guard Agent(rawValue: agent) != nil else { return respond(.status(400, "Unknown agent")) }
+                config.hireAgent = agent
+            }
+            config.save()
+            deck.refresh()
+            respond(.json(setupState()))
+
+        // The Mac's own folder picker, which a web page can't open.
+        case ("POST", "/setup/hiring/choose"):
+            deck.chooseHireFolder { [self] in respond(.json(setupState())) }
+
         case ("POST", "/setup/hooks"):
             do {
                 if request.query["remove"] == nil {
@@ -246,6 +264,7 @@ final class DeckRouter: Router {
     }
 
     private func setupState() -> [String: Any] {
+        let config = Config.shared
         let (keys, _) = deck.layout()
         var keyOf: [String: Int] = [:]
         for (index, key) in keys.enumerated() {
@@ -266,6 +285,10 @@ final class DeckRouter: Router {
                 "openAtLogin": LoginItem.isEnabled,
             ],
             "agents": Hooks.found.map { ["id": $0.rawValue, "name": $0.name, "connected": Hooks.isConnected($0)] },
+            "hiring": [
+                "enabled": config.hiringEnabled, "folder": config.hireFolder, "agent": config.hireAgent,
+                "canHire": true, "canChoose": true,
+            ],
             "pairing": pairing,
             // Times in milliseconds, as the page's Date counts them.
             "phones": deck.access.phones.all.map { phone -> [String: Any] in

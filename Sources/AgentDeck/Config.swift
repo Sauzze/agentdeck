@@ -1,8 +1,9 @@
 import Foundation
 
 /// What you set on the setup page: which project is pinned to which key, the
-/// deck's layout and colours, the profiles they're saved in, its logo and
-/// whether the stick scrolls. Saved as JSON in Application Support.
+/// deck's layout and colours, the profiles they're saved in, its logo,
+/// whether the stick scrolls, and whether the office hires and fires. Saved
+/// as JSON in Application Support.
 final class Config: Codable {
     static let shared = Config.load()
 
@@ -18,10 +19,18 @@ final class Config: Codable {
     /// Whether the stick scrolls Terminal. Off until you turn it on, so a
     /// newly paired phone can do no more than the deck's buttons do.
     var scrollEnabled = false
+    /// Whether the office may hire and fire: open a new Terminal window with
+    /// an agent in it, and stop an agent and close its tab. Off until you
+    /// turn it on, for the same reason.
+    var hiringEnabled = false
+    /// The folder new hires start in, and the agent they are.
+    var hireFolder = ""
+    var hireAgent = Agent.claude.rawValue
     var hasCompletedSetup = false
 
     private enum CodingKeys: String, CodingKey {
-        case pins, colours, layout, profiles, activeProfile, logo, scrollEnabled, hasCompletedSetup
+        case pins, colours, layout, profiles, activeProfile, logo, scrollEnabled, hiringEnabled, hireFolder, hireAgent
+        case hasCompletedSetup
     }
 
     init() {}
@@ -40,6 +49,9 @@ final class Config: Codable {
         activeProfile = (try? c.decodeIfPresent(String.self, forKey: .activeProfile)) ?? activeProfile
         logo = (try? c.decodeIfPresent(Logo.self, forKey: .logo)) ?? logo
         scrollEnabled = try c.decodeIfPresent(Bool.self, forKey: .scrollEnabled) ?? false
+        hiringEnabled = try c.decodeIfPresent(Bool.self, forKey: .hiringEnabled) ?? false
+        hireFolder = try c.decodeIfPresent(String.self, forKey: .hireFolder) ?? ""
+        hireAgent = (try c.decodeIfPresent(String.self, forKey: .hireAgent)).flatMap { Agent(rawValue: $0)?.rawValue } ?? hireAgent
         hasCompletedSetup = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
     }
 

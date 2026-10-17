@@ -949,7 +949,15 @@
     6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '001', '001', '001'], 8: ['111', '101', '111', '101', '111'],
     9: ['111', '101', '111', '001', '111'], ':': ['0', '1', '0', '1', '0'], '+': ['000', '010', '111', '010', '000'],
     m: ['000', '000', '111', '111', '101'], h: ['100', '100', '111', '101', '101'],
+    // The letters the office's buttons spell
+    D: ['110', '101', '101', '101', '110'], E: ['111', '100', '110', '100', '111'], F: ['111', '100', '110', '100', '100'],
+    H: ['101', '101', '111', '101', '101'], I: ['111', '010', '010', '010', '111'], K: ['101', '101', '110', '101', '101'],
+    O: ['010', '101', '101', '101', '010'], P: ['110', '101', '110', '100', '100'], R: ['110', '101', '110', '101', '101'],
+    U: ['101', '101', '101', '101', '111'], Y: ['101', '101', '010', '010', '010'], "'": ['1', '1', '0', '0', '0'],
+    ' ': ['00', '00', '00', '00', '00'],
   };
+  /** How wide `text` is in the pixel font. */
+  const textWidth = (text) => [...text].reduce((w, c) => w + GLYPHS[c][0].length + 1, -1);
   /** How long everyone looks up when the mic goes on, as if the boss were shouting. */
   const LOOK_UP_LENGTH = 1;
   /** The listener's nod, once the mic is let go. */
@@ -1001,6 +1009,35 @@
     const w = EFFORTS.length * CHIP.w + (EFFORTS.length - 1) * CHIP_GAP;
     const left = Math.max(1, Math.min(WIDTH - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
     return { left, top: y + 5, w, h: CHIP.h, chips: EFFORTS.map((level, i) => ({ level, x: left + i * (CHIP.w + CHIP_GAP), y: y + 5 })) };
+  }
+
+  /**
+   * With hiring and firing on, a desk held down also offers a pixel button:
+   * YOU'RE FIRED above its agent's chips, or HIRE on an empty desk. In art
+   * pixels, kept inside the room.
+   */
+  function deskButton(desk, kind) {
+    const label = kind === 'fire' ? "YOU'RE FIRED" : '+ HIRE';
+    const w = textWidth(label) + 8, h = 11;
+    const { x, y } = DESKS[desk];
+    const left = Math.max(1, Math.min(WIDTH - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
+    return { kind, label, left, top: kind === 'fire' ? y - 8 : y + 4, w, h };
+  }
+
+  /** The question before anyone is fired: a panel in the middle of the room, with its two keys. */
+  const FIRE_DIALOG = { w: 132, h: 52 };
+  const DIALOG_KEY = { w: 34, h: 13 };
+  function fireDialog() {
+    const { w, h } = FIRE_DIALOG;
+    const left = Math.round(WIDTH / 2 - w / 2), top = Math.round(HEIGHT / 2 - h / 2);
+    const y = top + h - DIALOG_KEY.h - 6;
+    return {
+      left, top, w, h,
+      keys: [
+        { action: 'keep', label: 'KEEP', x: left + 22, y, ...DIALOG_KEY },
+        { action: 'fired', label: 'FIRE', x: left + w - 22 - DIALOG_KEY.w, y, ...DIALOG_KEY },
+      ],
+    };
   }
 
   /** The choice keys for the agent at `desk`: a panel just above its head, pointing down at it, kept inside the room. */
@@ -1126,8 +1163,7 @@
     /** Where an art pixel lands on the canvas, for what's drawn at the screen's own resolution. */
     const screen = (x, y) => ({ x: ox + x * scale, y: oy + y * scale });
 
-    /** How wide `text` is in the pixel font. */
-    const pixelWidth = (text) => [...text].reduce((w, c) => w + GLYPHS[c][0].length + 1, -1);
+    const pixelWidth = textWidth;
 
     /** A few digits in art pixels, on a dark backing unless what's under them is dark already. */
     function pixelText(text, x, y, color, backing = true) {
@@ -1978,6 +2014,15 @@
         dot(x + 4, top + 12, look.skin);
       }
 
+      // Fired, they carry their things out in a box.
+      if (person.isFired && person.isLeaving) {
+        fill(x - 4, top + 8, 9, 5, 0xc49a6c);
+        fill(x - 4, top + 8, 9, 1, 0xa07a50);
+        fill(x, top + 8, 1, 5, 0xe0c890);
+        dot(x - 2, top + 7, PALETTE.leaf);
+        dot(x + 2, top + 7, PALETTE.mug);
+      }
+
       // Head: a face, or the back of it
       fill(x - 3, top + 2, 7, 5, away ? look.hair : look.skin);
       if (away) fill(x - 2, top + 6, 5, 1, look.skin);
@@ -2412,6 +2457,41 @@
       }
     }
 
+    /** A pixel key: a face over a darker edge, with its label in the pixel font. */
+    function drawPixelKey(x, y, w, h, face, label) {
+      fill(x + 1, y, w - 2, h, PALETTE.frame);
+      fill(x, y + 1, w, h - 2, PALETTE.frame);
+      fill(x + 1, y + 1, w - 2, h - 2, darker(face));
+      fill(x + 1, y + 1, w - 2, h - 4, face);
+      fill(x + 2, y + 1, w - 4, 1, WHITE, 0.3);
+      pixelText(label, x + Math.round((w - textWidth(label)) / 2), y + Math.floor((h - 4 - 5) / 2) + 1, WHITE, false);
+    }
+
+    /** YOU'RE FIRED in red, or HIRE in green, on a held desk. */
+    function drawDeskButton({ kind, label, left, top, w, h }) {
+      drawPixelKey(left, top, w, h, kind === 'fire' ? PALETTE.dome : 0x2f8f5b, label);
+    }
+
+    /** The question before firing, over a dimmed room. */
+    function drawFireDialog({ left, top, w, h, keys, name }) {
+      fill(seen.left, seen.top, seen.width, seen.height, BLACK, 0.45);
+      fill(left + 1, top, w - 2, h, PALETTE.bubbleEdge);
+      fill(left, top + 1, w, h - 2, PALETTE.bubbleEdge);
+      fill(left + 1, top + 1, w - 2, h - 2, PALETTE.bubble);
+      const size = Math.max(LABEL_SIZE * scale, LABEL_SMALLEST * ratio);
+      const font = (weight, px) => `${weight} ${px}px ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif`;
+      const middle = screen(left + w / 2, 0).x;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = css(PALETTE.bubbleEdge);
+      ctx.font = font(700, size * 1.25);
+      ctx.fillText(fitText(ctx, `Fire ${name}?`, (w - 12) * scale), middle, screen(0, top + 11).y);
+      ctx.font = font(500, size);
+      ctx.fillStyle = css(PALETTE.bubbleEdge, 0.7);
+      ctx.fillText(fitText(ctx, 'Its agent stops, and its window closes.', (w - 12) * scale), middle, screen(0, top + 21).y);
+      for (const key of keys) drawPixelKey(key.x, key.y, key.w, key.h, key.action === 'fired' ? PALETTE.dome : PALETTE.rail, key.label);
+    }
+
     /**
      * The window onto the room: rings of shadow from its edge inwards, each
      * fainter than the last, then the edge in the keys' colour.
@@ -2495,7 +2575,9 @@
     office.people.forEach(drawConfetti);
     DESKS.forEach((_, desk) => drawLabel(desk));
     if (frame.chips) drawChips();
+    if (frame.deskButton) drawDeskButton(frame.deskButton);
     if (frame.choices) drawChoices();
+    if (frame.firing) drawFireDialog(frame.firing);
 
     if (glass) {
       ctx.restore();
@@ -2714,7 +2796,10 @@
     let buttonDown = false;  // a finger on the nuclear button
     let choiceDown = null;   // the last choice key tapped: { action, at, held }
     let chipDown = null;     // the last paint chip tapped: { level, at, held }
-    let chipsFor = null;     // the session whose chips are out, after a finger held on its desk
+    // A desk held down: { kind: 'session', id } for its agent, or { kind: 'empty', desk }
+    let held = null;
+    let firing = null;       // an agent about to be fired, while the question is up: { id, name }
+    let hiring = { fire: false, hire: false }; // what the computer lets a held desk offer
     const ambience = new Ambience();
     const loudness = () => SOUND_LEVELS[decor.sound];
     let finger = null;       // the one finger on the room: { id }
@@ -2770,9 +2855,18 @@
 
     /** The paint chips, once held out on the picked desk of an agent with an effort setting, while the dial is out of sight. */
     function chips() {
-      if (framed || chipsFor === null || chipsFor !== selected) return null;
+      if (framed || !held || held.kind !== 'session' || held.id !== selected) return null;
       const desk = office.seats.findIndex((s) => s.session && s.session.id === selected);
       return desk >= 0 && office.seats[desk].session.dial ? effortChips(desk) : null;
+    }
+
+    /** The button on a held desk, if the computer allows it: fire its agent, or hire one into it. */
+    function heldButton() {
+      if (framed || !held) return null;
+      if (held.kind === 'empty') return hiring.hire ? deskButton(held.desk, 'hire') : null;
+      if (held.id !== selected || !hiring.fire) return null;
+      const desk = office.seats.findIndex((s) => s.session && s.session.id === held.id);
+      return desk >= 0 ? deskButton(desk, 'fire') : null;
     }
 
     /** The choice keys, while the picked agent waits on you and the deck's own controls are out of sight. */
@@ -2800,11 +2894,13 @@
       // picked, a tap wobbles it and asks for a desk.
       const session = selectedSession();
       mic.usable = !session || !!session.mic;
-      // A finger held on a desk, or its person, puts out its chips.
-      if (finger && !finger.held && finger.target.kind === 'session' && now - finger.at >= HOLD_FOR_CHIPS) {
+      // A finger held on a desk, or its person, puts out its chips and
+      // button; on an empty desk, the button to hire.
+      const holding = finger && !finger.held && ['session', 'pinned', 'empty'].includes(finger.target.kind);
+      if (holding && now - finger.at >= HOLD_FOR_CHIPS) {
         finger.held = true;
-        chipsFor = finger.target.id;
-        if (chips()) on.held?.();
+        held = finger.target.kind === 'session' ? { kind: 'session', id: finger.target.id } : { kind: 'empty', desk: finger.target.desk };
+        if (chips() || heldButton()) on.held?.();
       }
       office.step(now);
       ambience.follow(office, now, loudness());
@@ -2812,6 +2908,7 @@
         now, hour: date.getHours(), minute: date.getMinutes(), month: date.getMonth(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
         selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown, chips: chips(), chipDown,
+        deskButton: heldButton(), firing: firing && { ...fireDialog(), name: firing.name },
       });
     }
 
@@ -2846,6 +2943,12 @@
         if (!best || distance < best.distance || (distance === best.distance && rank < best.rank)) best = { target, distance, rank };
       };
 
+      // While the question is up, its keys are all there is; a tap anywhere else keeps them on.
+      if (firing) {
+        for (const key of fireDialog().keys) consider({ kind: key.action }, { left: key.x, right: key.x + key.w, top: key.y, bottom: key.y + key.h }, -1);
+        return best ? best.target : { kind: 'keep' };
+      }
+
       for (const person of office.people) {
         if (person.isStaff || person.isLeaving) continue;
         const px = Math.round(person.position.x), top = topOf(person, poseOf(person, now));
@@ -2855,12 +2958,21 @@
       }
       consider({ kind: 'button' }, { left: BUTTON.x - 7, right: BUTTON.x + 8, top: BUTTON.y - 1, bottom: BUTTON.y + 16 }, 1);
       consider({ kind: 'mic' }, { left: MIC.x - (decor.mic === 'megaphone' ? 9 : 5), right: MIC.x + 6, top: MIC.y - 25, bottom: MIC.y + 1 }, 1);
-      office.seats.forEach((seat, desk) => {
-        const target = seat.session ? { kind: 'session', id: seat.session.id } : seat.pin ? { kind: 'pinned', name: seat.pin } : null;
+      DESKS.forEach(({ x: dx, y: dy }, desk) => {
+        const seat = office.seats[desk] || {};
+        // An empty desk only matters when there's someone to hire into it.
+        const target = seat.session ? { kind: 'session', id: seat.session.id }
+          : seat.pin ? { kind: 'pinned', name: seat.pin, desk }
+          : hiring.hire && !framed ? { kind: 'empty', desk } : null;
         // The desk, its chair and monitor, and its label
-        const { x: dx, y: dy } = DESKS[desk];
         if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
       });
+      const button = heldButton();
+      if (button) {
+        consider({ kind: button.kind }, { left: button.left, right: button.left + button.w, top: button.top, bottom: button.top + button.h }, -1);
+        const onButton = x >= button.left - 1 && x <= button.left + button.w + 1 && y >= button.top - 1 && y <= button.top + button.h + 1;
+        if (onButton) return best && best.target.kind === button.kind ? best.target : null;
+      }
       const strip = chips();
       if (strip) {
         for (const chip of strip.chips) {
@@ -2884,8 +2996,28 @@
 
     /** Everything a key or button does on the deck, done by tapping the room. */
     function press(target) {
-      // Anything else tapped puts the chips away.
-      if (target.kind !== 'chip') chipsFor = null;
+      // Anything else tapped puts the held desk's chips and button away.
+      const holding = held;
+      if (target.kind !== 'chip') held = null;
+      if (target.kind === 'keep') {
+        firing = null;
+        return;
+      }
+      if (target.kind === 'fired') {
+        const { id } = firing;
+        firing = null;
+        const person = office.people.find((p) => !p.isStaff && p.session.id === id);
+        if (person) person.isFired = true;
+        return on.fire?.(id);
+      }
+      if (target.kind === 'fire') {
+        const seat = office.seats.find((s) => s.session && s.session.id === holding.id);
+        if (seat) firing = { id: holding.id, name: seat.session.name };
+        return on.held?.();
+      }
+      if (target.kind === 'hire') return on.hire?.();
+      // An empty or pinned desk says something on a tap, once the finger lifts: holding it is something else.
+      if (target.kind === 'empty' || target.kind === 'pinned') return;
       if (target.kind === 'choice') {
         choiceDown = { action: target.action, at: clock(), held: true };
         return on.choose?.(target.action);
@@ -2896,7 +3028,6 @@
         return target.level === 'max' ? on.max?.() : on.effort?.(target.level);
       }
       if (target.kind === 'session') return on.select?.(target.id);
-      if (target.kind === 'pinned') return on.hint?.(`Nothing running in ${target.name}`);
       const session = selectedSession();
       if (!session) {
         wobbling = { what: target.kind, at: clock() };
@@ -2916,7 +3047,13 @@
     /** The finger lifts, or is taken away: the mic must always hear about it, or it keeps listening. */
     function lift() {
       // A chip, once chosen, goes away with the rest.
-      if (finger && finger.target.kind === 'chip') chipsFor = null;
+      if (finger && finger.target.kind === 'chip') held = null;
+      if (finger && !finger.held) {
+        const { kind, name } = finger.target;
+        const hold = hiring.hire && !framed ? 'Hold the desk to hire someone' : '';
+        if (kind === 'pinned') on.hint?.(`Nothing running in ${name}${hold ? `. ${hold}` : ''}`);
+        else if (kind === 'empty') on.hint?.(hold);
+      }
       finger = null;
       buttonDown = false;
       if (choiceDown) choiceDown.held = false;
@@ -2949,6 +3086,8 @@
     return {
       show(snapshot) {
         latest = snapshot;
+        hiring = snapshot.hiring || { fire: false, hire: false };
+        if (!hiring.fire) firing = null;
         office.furnish(snapshot.layout && snapshot.layout.room);
         office.apply(seatsOf(snapshot), snapshot.theme, clock());
       },

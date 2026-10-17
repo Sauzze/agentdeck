@@ -56,6 +56,12 @@
   .step .text { flex: 1; min-width: 0; }
   .step .title { font-weight: 600; }
   .step .detail { color: var(--dim); font-size: 13px; }
+  /* Where new hires start, under the switch that lets the office hire. */
+  .hire-setup { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .hire-setup[hidden] { display: none; }
+  .hire-setup input, .hire-setup select { background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
+    padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
+  .hire-setup input { flex: 1; min-width: 160px; }
   .switch { position: relative; width: 42px; height: 24px; border-radius: 12px; background: var(--faint); border: 0; flex: none; transition: background .15s; }
   .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
   .switch.on { background: var(--unread); }
@@ -234,6 +240,19 @@
           <div class="detail" data-pending="Optional. Turns your phone's stick into a scroll wheel for the selected session's Terminal window." data-done="The stick scrolls the selected session's Terminal window."></div>
         </div>
         <button class="switch" id="scroll" aria-label="Let the stick scroll Terminal"></button>
+      </div>
+      <div class="step" id="step-hiring">
+        <div class="mark">✓</div>
+        <div class="text">
+          <div class="title">Let the office hire and fire</div>
+          <div class="detail"></div>
+          <div class="hire-setup" id="hire-setup" hidden>
+            <input type="text" id="hire-folder" spellcheck="false" placeholder="~/Projects" aria-label="The folder new hires start in">
+            <button class="btn" id="hire-choose">Choose…</button>
+            <select id="hire-agent" aria-label="The agent to hire"></select>
+          </div>
+        </div>
+        <button class="switch" id="hiring" aria-label="Let the office hire and fire"></button>
       </div>
       <div class="step" id="step-login">
         <div class="mark">✓</div>
@@ -416,6 +435,33 @@
     mark('step-login', c.openAtLogin);
     $('scroll').classList.toggle('on', c.scroll);
     $('login').classList.toggle('on', c.openAtLogin);
+    renderHiring();
+  }
+
+  /**
+   * Hiring and firing from the office: the switch, and where new hires
+   * start. Only the Mac app hires, for now; the others can fire.
+   */
+  function renderHiring() {
+    const h = state.hiring;
+    $('step-hiring').hidden = !h;
+    if (!h) return;
+    const detail = $('step-hiring').querySelector('.detail');
+    if (h.canHire) {
+      detail.dataset.pending = "Optional. Hold a desk in the office: on an empty one, hire an agent into a new Terminal window; on an agent's, fire it, which stops its work and closes its window.";
+      detail.dataset.done = h.folder ? 'New hires start in the folder below. Hold a desk in the office to hire or fire.'
+        : 'Choose the folder new hires start in.';
+    } else {
+      detail.dataset.pending = "Optional. Hold an agent's desk in the office to fire it: its work stops and its pane closes. Hiring needs the Mac app, for now.";
+      detail.dataset.done = "Hold an agent's desk in the office to fire it.";
+    }
+    mark('step-hiring', h.enabled);
+    $('hiring').classList.toggle('on', h.enabled);
+    $('hire-setup').hidden = !h.enabled || !h.canHire;
+    $('hire-choose').hidden = !h.canChoose;
+    if (document.activeElement !== $('hire-folder')) $('hire-folder').value = h.folder;
+    const agents = state.agents.length ? state.agents : [{ id: 'claude', name: 'Claude Code' }];
+    $('hire-agent').replaceChildren(...agents.map((a) => new Option(a.name, a.id, false, a.id === h.agent)));
   }
 
   /** Names the agents found on this computer, and what connecting them takes. */
@@ -464,6 +510,13 @@
   $('accessibility').onclick = () => post('/setup/accessibility');
   $('scroll').onclick = () => post(`/setup/scroll?enabled=${state.checklist.scroll ? 0 : 1}`);
   $('login').onclick = () => post(`/setup/login?enabled=${state.checklist.openAtLogin ? 0 : 1}`);
+  $('hiring').onclick = () => post(`/setup/hiring?enabled=${state.hiring.enabled ? 0 : 1}`);
+  $('hire-folder').onchange = async () => {
+    const res = await post(`/setup/hiring?folder=${encodeURIComponent($('hire-folder').value)}`);
+    if (!res.ok) alert(await res.text());
+  };
+  $('hire-choose').onclick = () => post('/setup/hiring/choose');
+  $('hire-agent').onchange = () => post(`/setup/hiring?agent=${$('hire-agent').value}`);
 
   /* ----------------------------------------------------------------- phone */
 

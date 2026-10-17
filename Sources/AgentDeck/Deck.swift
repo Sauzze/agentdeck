@@ -172,6 +172,11 @@ final class Deck {
             "overflow": overflow.count,
             "theme": Theme.current(),
             "scroll": Config.shared.scrollEnabled,
+            // What the office's held desks offer: firing, and hiring once there's a folder to hire into.
+            "hiring": [
+                "fire": Config.shared.hiringEnabled,
+                "hire": Config.shared.hiringEnabled && Deck.folder(Config.shared.hireFolder) != nil,
+            ],
             "layout": Config.shared.layout.jsonObject,
         ]
         // Keys in order: unsorted, the same layout can come out differently
@@ -216,6 +221,8 @@ final class Deck {
         // Releasing the mic stops recording where it started, whatever is
         // selected now — and even if that session has since gone.
         if action == "mic" && query["phase"] != "down" { return releaseMic(done: done) }
+        // A new hire has no session yet.
+        if action == "hire" { return hire(done: done) }
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
 
@@ -243,6 +250,9 @@ final class Deck {
         case "mic":
             guard agent.hasVoice else { return done(.status(400, "\(agent.name) has no voice input")) }
             pressMic(session, done: done)
+        case "fire":
+            guard Config.shared.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
+            onTerminal(done) { Terminal.close(tty: tty) }
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when \(agent.name) is done")) }
             onTerminal(done) { Terminal.type(agent.newConversation, tty: tty) }
@@ -273,6 +283,53 @@ final class Deck {
             done(.status(queued ? 202 : 204))
         default:
             done(.status(400, "Unknown action"))
+        }
+    }
+
+    static let hiringOff = "Hiring and firing are off. Turn them on in setup, on your Mac."
+
+    /// A new Terminal window in the folder set up for new hires, with the
+    /// agent set up for them at work in it. Its hooks bring it to the deck,
+    /// and the office, as for any session.
+    private func hire(done: @escaping (Response) -> Void) {
+        let config = Config.shared
+        guard config.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
+        guard let folder = Deck.folder(config.hireFolder) else {
+            return done(.status(409, "Choose a folder for new hires in setup, on your Mac."))
+        }
+        let agent = Agent(rawValue: config.hireAgent) ?? .claude
+        Terminal.queue.async {
+            let ok = Terminal.open(agent.rawValue, in: folder)
+            DispatchQueue.main.async { done(ok ? .status(204) : .status(500, "Terminal didn't open")) }
+        }
+    }
+
+    /// `path` as a folder that's there, with ~ for home, or nil.
+    static func folder(_ path: String) -> String? {
+        let expanded = (path.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
+        var isFolder: ObjCBool = false
+        guard expanded.hasPrefix("/"), FileManager.default.fileExists(atPath: expanded, isDirectory: &isFolder),
+              isFolder.boolValue else { return nil }
+        return (expanded as NSString).standardizingPath
+    }
+
+    /// Asks for the new hires' folder with the Mac's own panel, from the setup page.
+    func chooseHireFolder(then done: @escaping () -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "New hires from the office start their work in this folder."
+        if let current = Deck.folder(Config.shared.hireFolder) { panel.directoryURL = URL(fileURLWithPath: current) }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                Config.shared.hireFolder = url.path
+                Config.shared.save()
+                self.refresh()
+            }
+            done()
         }
     }
 

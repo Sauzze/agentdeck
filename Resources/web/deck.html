@@ -426,6 +426,15 @@
     held() {
       tick();
     },
+    // Firing, once the office has asked, and hiring into an empty desk.
+    fire(id) {
+      tick();
+      send('/act', { session: id, action: 'fire' });
+    },
+    hire() {
+      tick();
+      send('/act', { action: 'hire' });
+    },
     // The paint chips on the picked desk, as the dial.
     effort(level) {
       tick();
@@ -1136,7 +1145,9 @@
 
   /** In the preview, what a control would have done to the selected session. */
   function rehearse(params) {
-    const name = current() ? ` · ${current().project}` : '';
+    // A hire is for no session yet; firing names the one the office asked about.
+    const target = params.action === 'hire' ? null : sessions.find((s) => s.id === params.session) || current();
+    const name = target ? ` · ${target.project}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
       const does = b.text ? `types ${b.text}` : b.key ? `presses ${KEY_NAMES[b.key]}` : 'types nothing yet';
@@ -1147,6 +1158,7 @@
       clear: 'starts a fresh conversation', up: 'moves up', down: 'moves down',
       mic: params.phase === 'down' ? 'starts listening' : 'stops listening',
       effort: `sets effort to ${params.level}`, scroll: 'scrolls',
+      fire: 'fires', hire: 'hires a new agent',
     };
     return `${words[params.action] || params.action}${name}`;
   }
