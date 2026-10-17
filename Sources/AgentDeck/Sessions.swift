@@ -133,6 +133,13 @@ final class Sessions {
     /// When each ended or replaced session ended. A resumed session raises
     /// events after that time and is welcome back; a late one does not.
     private var endedAt: [String: Double] = [:]
+    /// Sessions dropped by `prune`, and when. A tab can only be judged closed
+    /// from the outside, so one heard from again was running all along, and
+    /// takes back its place, its key and what it knew.
+    private var dropped: [String: (session: Session, at: Double)] = [:]
+    /// Sessions that took another's place in its tab since the deck last
+    /// looked, new id and old: the deck gives each the key the old one had.
+    private var replacements: [(new: String, old: String)] = []
     var onChange: () -> Void = {}
 
     /// Oldest first, so a session keeps its place as others come and go.
@@ -157,8 +164,8 @@ final class Sessions {
 
         // A session the deck can't find a Terminal tab for would be a key
         // that lights up but can't be controlled.
-        guard byID[id] != nil || !tty.isEmpty else { return }
-        let session = byID[id] ?? adopt(id: id, agent: agent, folder: folder, startedIn: startedIn, tty: tty, at: time)
+        guard byID[id] != nil || dropped[id] != nil || !tty.isEmpty else { return }
+        let session = byID[id] ?? revive(id) ?? adopt(id: id, agent: agent, folder: folder, startedIn: startedIn, tty: tty, at: time)
         // Subagents come and go by id, so the order their events arrive in
         // doesn't matter.
         let tracked = trackSubagents(name, event, of: session)
@@ -188,6 +195,8 @@ final class Sessions {
     /// tab: it replaces the old session and inherits its place on the deck,
     /// and its project when the hook doesn't say.
     private func adopt(id: String, agent: Agent, folder: String, startedIn: String, tty: String, at time: Double) -> Session {
+        // A new agent in a dropped session's tab means that one really did end.
+        if !tty.isEmpty { dropped = dropped.filter { $0.value.session.tty != tty } }
         let previous = tty.isEmpty ? nil : byID.values.first(where: { $0.tty == tty })
         let project = startedIn.isEmpty ? previous?.project ?? Sessions.project(startedIn: folder)
                                         : Sessions.project(startedIn: startedIn)
@@ -197,6 +206,7 @@ final class Sessions {
             session.effort = previous.effort
             session.model = previous.model
             end(previous.id, at: time)
+            replacements.append((id, previous.id))
         }
         byID[id] = session
         return session
@@ -315,11 +325,34 @@ final class Sessions {
 
     private func end(_ id: String, at time: Double) {
         byID[id] = nil
+        dropped[id] = nil
         endedAt[id] = time
         // Stragglers arrive within seconds; an hour is plenty to remember.
-        let cutoff = time - 3_600_000
+        let cutoff = time - Sessions.remembered
         endedAt = endedAt.filter { $0.value > cutoff }
+        dropped = dropped.filter { $0.value.at > cutoff }
     }
+
+    /// How long an ended or dropped session is remembered, in ms.
+    private static let remembered: Double = 3_600_000
+
+    /// A session dropped by `prune`, back as it was.
+    private func revive(_ id: String) -> Session? {
+        guard let session = dropped.removeValue(forKey: id)?.session else { return nil }
+        byID[id] = session
+        return session
+    }
+
+    /// The sessions that have taken another's place since this was last
+    /// asked, such as after /clear, each with the id it replaced.
+    func takeReplacements() -> [(new: String, old: String)] {
+        defer { replacements = [] }
+        return replacements
+    }
+
+    /// Whether `id` was dropped by `prune` and may yet come back, so its key
+    /// is kept for it.
+    func wasDropped(_ id: String) -> Bool { dropped[id] != nil }
 
     private func transition(for name: String, event: [String: Any]) -> SessionState? {
         switch name {
@@ -368,12 +401,64 @@ final class Sessions {
     }
 
     /// Drops sessions on ttys whose tab has closed. An agent killed along
-    /// with its tab never sends SessionEnd.
+    /// with its tab never sends SessionEnd. Each is remembered for a while, in
+    /// case it's heard from again: see `revive(_:)`.
     func prune(closedTTYs: Set<String>) {
         let gone = byID.values.filter { closedTTYs.contains($0.tty) }
         guard !gone.isEmpty else { return }
         let now = Date().timeIntervalSince1970 * 1000
-        for session in gone { end(session.id, at: now) }
+        for session in gone {
+            end(session.id, at: now)
+            dropped[session.id] = (session, now)
+        }
+        onChange()
+    }
+
+    // MARK: Across a restart
+
+    /// What's kept of a session while the app restarts: no subagents or
+    /// tools, which its next events tell again.
+    struct Saved: Codable {
+        let id: String
+        let agent: String
+        let folder: String
+        let project: String
+        let tty: String
+        let state: String
+        let effort: String
+        let model: String
+        let transcript: String
+        let startedAt: Double
+        let lastEventAt: Double
+        let turnStartedAt: Double?
+    }
+
+    var saved: [Saved] {
+        all.map {
+            Saved(id: $0.id, agent: $0.agent.rawValue, folder: $0.folder, project: $0.project, tty: $0.tty, state: $0.state.rawValue,
+                  effort: $0.effort, model: $0.model, transcript: $0.transcript, startedAt: $0.startedAt, lastEventAt: $0.lastEventAt,
+                  turnStartedAt: $0.turnStartedAt)
+        }
+    }
+
+    /// Sessions from before a restart, still running. Saved `fresh`ly, each is
+    /// as it was; any older, a turn may have ended unheard, so each is shown
+    /// at rest until it's heard from.
+    func restore(_ saved: [Saved], fresh: Bool) {
+        for entry in saved where byID[entry.id] == nil && endedAt[entry.id] == nil {
+            guard let agent = Agent(rawValue: entry.agent) else { continue }
+            let session = Session(id: entry.id, agent: agent, folder: entry.folder, project: entry.project, startedAt: entry.startedAt)
+            session.tty = entry.tty
+            session.effort = entry.effort
+            session.model = entry.model
+            session.transcript = entry.transcript
+            session.lastEventAt = entry.lastEventAt
+            if fresh, let state = SessionState(rawValue: entry.state) {
+                session.state = state
+                if session.isBusy { session.turnStartedAt = entry.turnStartedAt }
+            }
+            byID[entry.id] = session
+        }
         onChange()
     }
 }

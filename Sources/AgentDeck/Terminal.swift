@@ -50,22 +50,41 @@ enum Terminal {
     private static var lastScroll: (tty: String, at: Date)?
 
     /// The ttys of every open tab: none if Terminal isn't running, nil if it
-    /// could not be asked.
+    /// could not be asked. Asked for all at once: windows walked one by one
+    /// shift under the walk as one opens, closes or comes to the front, and a
+    /// window skipped would look closed.
     static func openTTYs() -> Set<String>? {
         guard let output = run("""
             if application "Terminal" is not running then return ""
+            tell application "Terminal" to set byWindow to tty of every tab of every window
             set ttys to {}
-            tell application "Terminal"
-                repeat with w in windows
-                    repeat with t in tabs of w
-                        set end of ttys to tty of t
-                    end repeat
+            repeat with tabsOfWindow in byWindow
+                repeat with t in tabsOfWindow
+                    set end of ttys to contents of t
                 end repeat
-            end tell
+            end repeat
             set AppleScript's text item delimiters to linefeed
             return ttys as text
             """) else { return nil }
         return Set(output.split(separator: "\n").map(String.init))
+    }
+
+    /// Whether a process called `name` is running on `tty`, in any terminal
+    /// app: nil if that couldn't be looked at. A tab that has closed takes its
+    /// processes with it.
+    static func isRunning(_ name: String, on tty: String) -> Bool? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-t", (tty as NSString).lastPathComponent, "-o", "comm="]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        // No such tty any more is an answer too: nothing runs on it.
+        return String(decoding: data, as: UTF8.self).split(separator: "\n")
+            .contains { ($0.trimmingCharacters(in: .whitespaces) as NSString).lastPathComponent == name }
     }
 
     /// The tab you are looking at, if Terminal is the active app.
