@@ -2340,7 +2340,16 @@
       if (!session || !session.turnStartedAt || (session.state !== 'thinking' && session.state !== 'asking')) return;
       const seconds = Math.max(0, Math.floor((Date.now() - session.turnStartedAt) / 1000));
       const text = turnLength(seconds);
-      pixelText(text, x + 13 - Math.floor(pixelWidth(text) / 2), y - 8, PALETTE.bubble, false);
+      // The screen is eleven pixels across, from x + 7: the colon goes
+      // without the gaps round it, so m:ss fits inside it.
+      const gap = (c, next) => (c === ':' || next === ':' ? 0 : 1);
+      const chars = [...text];
+      const width = chars.reduce((w, c, i) => w + GLYPHS[c][0].length + (i < chars.length - 1 ? gap(c, chars[i + 1]) : 0), 0);
+      let at = x + 7 + Math.floor((11 - width) / 2);
+      chars.forEach((c, i) => {
+        GLYPHS[c].forEach((row, r) => [...row].forEach((on, column) => { if (on === '1') dot(at + column, y - 8 + r, PALETTE.bubble); }));
+        at += GLYPHS[c][0].length + gap(c, chars[i + 1]);
+      });
 
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
       if (seconds < LONG_TURN || !occupant) return;
