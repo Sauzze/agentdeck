@@ -313,7 +313,17 @@ corner. The office moves into a small window that stays above everything else,
 and can still be clicked. Other browsers, and the address your phone uses,
 don't offer it.
 
-In full screen, on a spare screen and in the pop-out window, the office fills
+**As your Mac's screen saver:** click the SauzzeDeck Pro icon in the menu bar
+and choose **Install Screen Saver…**. System Settings opens at Screen Saver:
+choose **SauzzeDeck Office**, click **Options…**, and enter a code from
+**Pair a Phone…**. It's listed under Paired phones as **Screen saver**. While
+your Mac is idle, each display shows the office, just to watch: a key or a click
+ends the screen saver as usual. When SauzzeDeck Pro isn't running, or the screen
+saver was unpaired, it says what to do instead. After updating SauzzeDeck Pro,
+choose **Install Screen Saver…** again.
+
+In full screen, on a spare screen, in the pop-out window and in the screen
+saver, the office fills
 a rounded window, and its edge glows while an agent is waiting on you.
 
 ## Voice
@@ -408,6 +418,11 @@ using that port. Quit it and open SauzzeDeck Pro again.
 2. Quit SauzzeDeck Pro from the menu bar.
 3. Delete **SauzzeDeck Pro** from Applications, and the folder
    `~/Library/Application Support/AgentDeck`. It kept the app's original name.
+4. If you installed the screen saver, choose another one in System Settings →
+   Screen Saver, then delete **SauzzeDeck Office.saver** from
+   `~/Library/Screen Savers`, and the files starting with
+   `io.github.sauzze.agentdeck.screensaver` in
+   `~/Library/Containers/com.apple.ScreenSaver.Engine.legacyScreenSaver/Data/Library/Preferences/ByHost`.
 
 On Windows and Linux, disconnect and turn off **Open at login** the same way,
 quit SauzzeDeck Pro from its tray menu, then delete:
@@ -451,6 +466,7 @@ a single web page, shared by both.
 
 ```
 Sources/AgentDeck/   the Mac app
+ScreenSaver/         the Mac's screen saver, which shows the office
 desktop/             the Windows and Linux app, file for file where they match
 cmd/sauzzedeck/      its command: the app, the launcher and the hook
 Resources/web/       the phone page, the office, the pairing page and the setup page, shared

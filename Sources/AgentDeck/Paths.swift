@@ -26,9 +26,12 @@ enum Paths {
     static let grokHooks = home.appendingPathComponent(".grok/hooks/sauzzedeck-pro.json")
     static let openCodePlugin = home.appendingPathComponent(".config/opencode/plugins/sauzzedeck-pro.js")
     static let launchAgent = home.appendingPathComponent("Library/LaunchAgents/\(LoginItem.label).plist")
+    /// Where macOS finds screen savers installed for you alone.
+    static let installedScreenSaver = home.appendingPathComponent("Library/Screen Savers/SauzzeDeck Office.saver")
 
     /// The phone and setup pages, bundled inside the app.
     static let web = Bundle.main.resourceURL!.appendingPathComponent("web", isDirectory: true)
     static let bundledHookScript = Bundle.main.resourceURL!.appendingPathComponent("report.sh")
     static let bundledOpenCodePlugin = Bundle.main.resourceURL!.appendingPathComponent("opencode-plugin.js")
+    static let bundledScreenSaver = Bundle.main.resourceURL!.appendingPathComponent("SauzzeDeck Office.saver")
 }
