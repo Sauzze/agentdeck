@@ -462,7 +462,7 @@
 
     if (action === 'max') {
       el.querySelector('.dome').animate({ filter: ['brightness(1.7) drop-shadow(0 0 14px #ff2a1a)', 'none'] }, { duration: 700, easing: 'ease-out' });
-      setEffort('max');
+      setEffort('max', 'max');
     } else if (action === 'button') {
       send('/act', { session: selected, action, button: el.dataset.button });
     } else {
@@ -470,10 +470,11 @@
     }
   }
 
-  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it. */
-  function setEffort(level) {
+  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it.
+   *  ☢ Max names itself as the source, so the office can tell a press from the dial. */
+  function setEffort(level, source) {
     if (!selected) return;
-    send('/act', { session: selected, action: 'effort', level });
+    send('/act', { session: selected, action: 'effort', level, ...(source && { source }) });
   }
 
   let armed = null; // the button waiting for its second tap
@@ -713,12 +714,12 @@
       else { delete el.dataset.state; delete el.dataset.session; }
       // A pinned project with nothing running keeps its name on its key.
       // Claude Code's keys show its effort; every other agent's, its name.
-      el.querySelector('.name').textContent = s ? s.name : k.pin || '—';
+      el.querySelector('.name').textContent = s ? s.project : k.pin || '—';
       el.querySelector('.effort').textContent = s ? (s.dial ? s.effort : s.agentName) : k.pin ? 'not running' : '';
     });
 
     $('target').innerHTML = sel ? `→ <b></b>` : 'no session selected';
-    if (sel) $('target').querySelector('b').textContent = sel.name;
+    if (sel) $('target').querySelector('b').textContent = sel.project;
     $('target-state').textContent = !sel ? ''
       : sel.pending ? `${STATE_WORDS[sel.state] || sel.state} · effort queued`
       : STATE_WORDS[sel.state] || sel.state;
@@ -814,7 +815,7 @@
 
   /** In the preview, what a control would have done to the selected session. */
   function rehearse(params) {
-    const name = current() ? ` · ${current().name}` : '';
+    const name = current() ? ` · ${current().project}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
       const does = b.text ? `types ${b.text}` : b.key ? `presses ${KEY_NAMES[b.key]}` : 'types nothing yet';

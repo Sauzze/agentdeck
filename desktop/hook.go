@@ -15,8 +15,9 @@ import (
 // of a session: the counterpart of the Mac app's report.sh, built in because
 // Windows has no bash or curl. The event JSON arrives on stdin and is passed
 // on as it is, with headers for the agent, the time the event was raised,
-// and the session's tab: see Tab. The key is read from its file, so it never
-// appears on a command line.
+// the session's tab (see Tab), and the folder the agent was started in, where
+// the agent says: the event's cwd follows the agent into subfolders. The key
+// is read from its file, so it never appears on a command line.
 //
 // It never blocks or fails the session. If the app isn't running, the event
 // is simply dropped.
@@ -48,11 +49,21 @@ func RunHook(args []string) int {
 	request.Header.Set("X-AgentDeck-Agent", agent)
 	request.Header.Set("X-AgentDeck-At", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	request.Header.Set("X-AgentDeck-Tab", tabFromEnvironment(Agent(agent)))
+	request.Header.Set("X-AgentDeck-Project", startFolderFromEnvironment())
 	client := http.Client{Timeout: hookTimeout}
 	if response, err := client.Do(request); err == nil {
 		response.Body.Close()
 	}
 	return 0
+}
+
+// startFolderFromEnvironment is the folder the agent was started in, from the
+// variable the agent sets for its hooks, or "".
+func startFolderFromEnvironment() string {
+	if folder := os.Getenv("CLAUDE_PROJECT_DIR"); folder != "" {
+		return folder
+	}
+	return os.Getenv("GEMINI_PROJECT_DIR")
 }
 
 // tabFromEnvironment names the session's tab from the variables the launcher

@@ -197,6 +197,10 @@ func (p *Phones) orEmpty() []PairedPhone {
 // there is to go on, and a broad name is all it can honestly give.
 func phoneName(userAgent string) string {
 	switch {
+	// Agent Office pairs like a phone. Its app is named with a space, so the
+	// system may write it either way.
+	case strings.Contains(userAgent, "AgentOffice"), strings.Contains(userAgent, "Agent%20Office"):
+		return "Agent Office"
 	case strings.Contains(userAgent, "iPhone"):
 		return "iPhone"
 	case strings.Contains(userAgent, "iPad"):

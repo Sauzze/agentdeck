@@ -76,6 +76,7 @@ func entriesFor(agent Agent) *hookEntries {
 		return &hookEntries{file: filepath.Join(agentFolder(Claude), "settings.json"), events: []string{
 			"SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse",
 			"PostToolUseFailure", "Notification", "Stop", "StopFailure", "SessionEnd",
+			"SubagentStart", "SubagentStop", "PreCompact", "PostCompact",
 		}, handler: map[string]any{"type": "command", "command": command, "async": true}}
 	case Codex:
 		return &hookEntries{file: filepath.Join(agentFolder(Codex), "hooks.json"), events: []string{
@@ -220,13 +221,34 @@ func disconnectAgents() error {
 }
 
 // refreshHooks rewrites the entries of the agents already connected, so they
-// point at this copy of the program wherever it has been moved or updated to.
+// point at this copy of the program wherever it has been moved or updated to,
+// and follow every event this version does, even those an earlier version
+// didn't.
 func refreshHooks() {
 	for _, agent := range foundAgents() {
-		if isConnected(agent) {
+		if hasEntries(agent) {
 			_ = connect(agent)
 		}
 	}
+}
+
+// hasEntries: the deck is in agent's hooks for at least one event.
+func hasEntries(agent Agent) bool {
+	entries := entriesFor(agent)
+	if entries == nil {
+		return isConnected(agent)
+	}
+	settings, err := readSettings(entries.file)
+	if err != nil {
+		return false
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	for _, groups := range hooks {
+		if hasOurs(groups) {
+			return true
+		}
+	}
+	return false
 }
 
 // writePlugin writes OpenCode's plugin, which runs the hook: OpenCode has no

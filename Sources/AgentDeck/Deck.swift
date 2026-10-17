@@ -62,10 +62,11 @@ final class Deck {
 
     /// `reported` is the agent the hook script was set up for; see
     /// `Agent.of(_:reportedAs:)` for why that isn't always the sender.
-    func ingest(_ event: [String: Any], reportedAs reported: String, tty: String, at time: Double) {
+    func ingest(_ event: [String: Any], reportedAs reported: String, tty: String, startedIn: String, at time: Double) {
         let agent = Agent.of(event, reportedAs: reported)
         guard let event = agent.canonical(event) else { return }
-        sessions.apply(event, agent: agent, tty: tty.isEmpty ? tab(for: event, of: agent) : tty, at: time)
+        sessions.apply(event, agent: agent, tty: tty.isEmpty ? tab(for: event, of: agent) : tty,
+                       startedIn: startedIn, at: time)
     }
 
     /// Codex runs its hooks in a shared background service, so its events
@@ -116,7 +117,7 @@ final class Deck {
 
         for i in keys.indices {
             guard let pin = keys[i].pin else { continue }
-            let candidates = remaining.filter { $0.folder == pin }
+            let candidates = remaining.filter { $0.project == pin }
             if let match = candidates.first(where: { keyOf[$0.id] == i }) ?? candidates.first { place(match, at: i) }
         }
         if fixed != nil {
@@ -152,11 +153,18 @@ final class Deck {
                 var entry: [String: Any] = ["pin": key.pin.map { ($0 as NSString).lastPathComponent } ?? NSNull()]
                 if let s = key.session {
                     entry["session"] = [
-                        "id": s.id, "name": s.name, "state": s.state.rawValue,
+                        "id": s.id, "name": s.name, "project": s.projectName, "state": s.state.rawValue,
                         "effort": s.pendingEffort.isEmpty ? s.effort : s.pendingEffort,
                         "pending": !s.pendingEffort.isEmpty,
                         "agent": s.agent.rawValue, "agentName": s.agent.name,
                         "dial": s.agent.hasEffortDial, "mic": s.agent.hasVoice,
+                        "activity": s.activity ?? NSNull(),
+                        "tool": s.tool.isEmpty ? NSNull() : s.tool,
+                        "subagents": s.subagents.map { ["id": $0.id, "type": $0.type] },
+                        "maxPressedAt": s.maxPressedAt.map { Int64($0) } ?? NSNull(),
+                        "compacting": s.compacting,
+                        "turnStartedAt": s.turnStartedAt.map { Int64($0) } ?? NSNull(),
+                        "errorKind": s.errorKind.isEmpty ? NSNull() : s.errorKind,
                     ]
                 }
                 return entry
@@ -256,6 +264,9 @@ final class Deck {
         case "effort":
             guard agent.hasEffortDial else { return done(.status(400, "\(agent.name) has no effort setting")) }
             guard let level = query["level"], Deck.effortLevels.contains(level) else { return done(.status(400, "Unknown level")) }
+            // ☢ Max says so, where the dial reaching max doesn't: the office
+            // only sends its agent to the button for a press.
+            if query["source"] == "max" && level == "max" { session.maxPressedAt = Date().timeIntervalSince1970 * 1000 }
             session.pendingEffort = level == session.effort ? "" : level
             let queued = !session.pendingEffort.isEmpty && session.isBusy
             changed()

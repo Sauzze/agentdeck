@@ -63,7 +63,7 @@ func TestALayoutIsCheckedBeforeItsKept(t *testing.T) {
 func running(d *Deck, count int) {
 	for i := range count {
 		e := map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": fmt.Sprintf("s%d", i), "cwd": fmt.Sprintf("/work/p%d", i)}
-		d.sessions.Apply(e, Claude, fmt.Sprintf("tmux:%%%d@/tmp/tmux", i), float64(100+i))
+		d.sessions.Apply(e, Claude, fmt.Sprintf("tmux:%%%d@/tmp/tmux", i), "", float64(100+i))
 	}
 }
 
@@ -116,7 +116,7 @@ func TestAutoKeepsTheKeysInOrderWhenOneGoes(t *testing.T) {
 	d := newTestDeck(t)
 	running(d, 3)
 	d.layout()
-	d.sessions.Apply(map[string]any{"hook_event_name": "SessionEnd", "session_id": "s0"}, Claude, "tmux:%0@/tmp/tmux", 200)
+	d.sessions.Apply(map[string]any{"hook_event_name": "SessionEnd", "session_id": "s0"}, Claude, "tmux:%0@/tmp/tmux", "", 200)
 	keys, _ := d.layout()
 	if len(keys) != 2 || keys[0].session.ID != "s1" || keys[1].session.ID != "s2" {
 		t.Fatalf("after the first session ended, the keys hold %s and %s, want s1 then s2", keys[0].session.ID, keys[1].session.ID)
@@ -234,7 +234,7 @@ func madeButtonDeck(t *testing.T) (*Deck, *launcherTab) {
 	d := newTestDeck(t)
 	tab := d.launcherConnected("L1", Claude, "/work/api")
 	d.sessions.Apply(map[string]any{"hook_event_name": "SessionStart", "source": "startup", "session_id": "s1", "cwd": "/work/api"},
-		Claude, "launcher:L1", 100)
+		Claude, "launcher:L1", "", 100)
 	layout, err := parseLayout([]byte(`{"rows": [{"buttons": [
 		{"id": "custom-compact", "text": "/compact", "whenFree": true},
 		{"id": "custom-mode", "key": "shift-tab"},
@@ -276,7 +276,7 @@ func TestAMadeButtonTypesItsCommandOrPressesItsKey(t *testing.T) {
 
 func TestAMadeButtonKeepsToItsRules(t *testing.T) {
 	d, tab := madeButtonDeck(t)
-	d.sessions.Apply(map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "s1"}, Claude, "launcher:L1", 200)
+	d.sessions.Apply(map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "s1"}, Claude, "launcher:L1", "", 200)
 	for button, want := range map[string]int{
 		"custom-codex":   http.StatusBadRequest, // for Codex only, and this is Claude Code
 		"custom-empty":   http.StatusBadRequest, // types nothing yet
@@ -415,5 +415,17 @@ func TestTheSetupPageLaysOutTheDeck(t *testing.T) {
 	var state struct{ ActiveProfile string }
 	if json.Unmarshal(switched.Body.Bytes(), &state) != nil || state.ActiveProfile != defaultProfile || d.config.Layout.Keys != Auto {
 		t.Fatalf("switching to Default gave %d %s", switched.Code, switched.Body)
+	}
+}
+
+func TestOnlyMaxSaysItWasPressed(t *testing.T) {
+	d, _ := madeButtonDeck(t)
+	d.Perform("effort", "s1", url.Values{"level": {"max"}})
+	if d.sessions.Get("s1").MaxPressedAt != 0 {
+		t.Fatal("the dial reaching max counted as a press of ☢ Max")
+	}
+	d.Perform("effort", "s1", url.Values{"level": {"max"}, "source": {"max"}})
+	if d.sessions.Get("s1").MaxPressedAt == 0 {
+		t.Fatal("a press of ☢ Max wasn't kept")
 	}
 }

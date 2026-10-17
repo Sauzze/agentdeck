@@ -157,7 +157,8 @@ func (rt *router) handle(w http.ResponseWriter, r *request) {
 		if err != nil {
 			at = nowMillis()
 		}
-		d.Ingest(decodeJSON(r.Body), r.Header.Get("X-AgentDeck-Agent"), r.Header.Get("X-AgentDeck-Tab"), at)
+		d.Ingest(decodeJSON(r.Body), r.Header.Get("X-AgentDeck-Agent"), r.Header.Get("X-AgentDeck-Tab"),
+			r.Header.Get("X-AgentDeck-Project"), at)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	case r.URL.Path == "/launcher":
@@ -583,7 +584,7 @@ func (rt *router) setupState() map[string]any {
 			key = index
 		}
 		sessions = append(sessions, map[string]any{
-			"id": s.ID, "folder": s.Folder, "name": s.Name(), "agentName": s.Agent.Name(),
+			"id": s.ID, "folder": s.Project, "name": s.ProjectName(), "agentName": s.Agent.Name(),
 			"state": s.State, "key": key,
 		})
 	}
