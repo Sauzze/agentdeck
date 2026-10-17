@@ -832,12 +832,15 @@
   };
 
   /**
-   * Where the dial is out of sight, the picked Claude Code desk has paint
-   * chips along its front, one for each effort from white for low to red
-   * for max, the colours the desk is painted in: a tap sets that effort, as
-   * the dial does. Each chip, in art pixels, and the gap between them.
+   * Where the dial is out of sight, a finger held on a Claude Code desk puts
+   * paint chips along its front, one for each effort from white for low to
+   * red for max, the colours the desk is painted in: a tap on one sets that
+   * effort, as the dial does, and puts them away. Each chip, in art pixels,
+   * and the gap between them.
    */
   const CHIP = { w: 11, h: 10 };
+  /** They come out for a finger held this long on the desk or its person, in seconds: a tap only picks it. */
+  const HOLD_FOR_CHIPS = 0.45;
   const CHIP_GAP = 1;
   const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -2236,6 +2239,7 @@
     let buttonDown = false;  // a finger on the nuclear button
     let choiceDown = null;   // the last choice key tapped: { action, at, held }
     let chipDown = null;     // the last paint chip tapped: { level, at, held }
+    let chipsFor = null;     // the session whose chips are out, after a finger held on its desk
     let finger = null;       // the one finger on the room: { id }
     // The window the canvas is in, its page's or one it has moved to: the
     // room draws with that window's frames and pixels, and pauses only when
@@ -2281,9 +2285,9 @@
       return seat ? seat.session : null;
     }
 
-    /** The paint chips, on the picked desk of an agent with an effort setting, while the dial is out of sight. */
+    /** The paint chips, once held out on the picked desk of an agent with an effort setting, while the dial is out of sight. */
     function chips() {
-      if (framed) return null;
+      if (framed || chipsFor === null || chipsFor !== selected) return null;
       const desk = office.seats.findIndex((s) => s.session && s.session.id === selected);
       return desk >= 0 && office.seats[desk].session.dial ? effortChips(desk) : null;
     }
@@ -2313,6 +2317,12 @@
       // picked, a tap wobbles it and asks for a desk.
       const session = selectedSession();
       mic.usable = !session || !!session.mic;
+      // A finger held on a desk, or its person, puts out its chips.
+      if (finger && !finger.held && finger.target.kind === 'session' && now - finger.at >= HOLD_FOR_CHIPS) {
+        finger.held = true;
+        chipsFor = finger.target.id;
+        if (chips()) on.held?.();
+      }
       office.step(now);
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
@@ -2390,6 +2400,8 @@
 
     /** Everything a key or button does on the deck, done by tapping the room. */
     function press(target) {
+      // Anything else tapped puts the chips away.
+      if (target.kind !== 'chip') chipsFor = null;
       if (target.kind === 'choice') {
         choiceDown = { action: target.action, at: clock(), held: true };
         return on.choose?.(target.action);
@@ -2419,6 +2431,8 @@
 
     /** The finger lifts, or is taken away: the mic must always hear about it, or it keeps listening. */
     function lift() {
+      // A chip, once chosen, goes away with the rest.
+      if (finger && finger.target.kind === 'chip') chipsFor = null;
       finger = null;
       buttonDown = false;
       if (choiceDown) choiceDown.held = false;
@@ -2434,7 +2448,7 @@
       const target = targetAt(e.clientX, e.clientY);
       if (!target) return;
       canvas.setPointerCapture(e.pointerId);
-      finger = { id: e.pointerId };
+      finger = { id: e.pointerId, target, at: clock() };
       press(target);
     });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
