@@ -208,7 +208,7 @@ func TestSubagentsComeAndGo(t *testing.T) {
 	if s.Apply(event("SubagentStart", "agent_id", "a1", "agent_type", "Explore"), Claude, tab, "", 150) {
 		t.Fatal("a start that arrived after its stop changed the session")
 	}
-	if got := s.Get("s1").Subagents; len(got) != 1 || got[0] != (Subagent{"a2", "Plan"}) {
+	if got := s.Get("s1").Subagents; len(got) != 1 || got[0] != (Subagent{ID: "a2", Type: "Plan"}) {
 		t.Fatalf("subagents %+v, want only a2", got)
 	}
 
