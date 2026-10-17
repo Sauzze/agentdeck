@@ -118,7 +118,9 @@
     floor: ['wood', 'tiles', 'concrete', 'carpet'],
     paint: ['slate', 'sage', 'clay', 'cream'],
     lounge: ['navy', 'teal', 'plum', 'sand'],
-    corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'none'],
+    corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'dragon', 'pinball', 'jukebox', 'pool', 'piano', 'drums',
+      'telescope', 'jellyfish', 'bonsai', 'jungle', 'coffee', 'servers', 'printer', 'boxing', 'treadmill', 'hottub', 'ballpit',
+      'campfire', 'none'],
     sky: ['live', 'day'],
     pet: ['none', 'cat', 'dog', 'lizard', 'monkey'],
     season: ['calendar', 'off'],
@@ -220,6 +222,13 @@
     return room;
   }
 
+  /**
+   * Whether someone at a spot of this pose has their back to the room:
+   * standing 'away', walking on the spot on a treadmill, or perched on a
+   * seat that faces away, as at a piano. 'sit' and 'stand' face the room.
+   */
+  const facesAway = (pose) => pose === 'away' || pose === 'walk' || pose === 'perch';
+
   /** Where idle people go round the lounge's corner piece: to play, to buy a snack, to watch the fish. */
   const CORNER_SPOTS = {
     arcade: [{ x: 272, y: 93, pose: 'away' }],
@@ -227,6 +236,24 @@
     foosball: [{ x: 272, y: 76, pose: 'stand' }, { x: 272, y: 97, pose: 'away' }],
     fishtank: [{ x: 272, y: 93, pose: 'away' }],
     books: [{ x: 274, y: 94, pose: 'sit' }],
+    dragon: [{ x: 306, y: 96, pose: 'stand' }],
+    pinball: [{ x: 274, y: 95, pose: 'away' }],
+    jukebox: [{ x: 274, y: 94, pose: 'away' }],
+    pool: [{ x: 245, y: 86, pose: 'stand' }, { x: 306, y: 86, pose: 'stand' }],
+    piano: [{ x: 276, y: 90, pose: 'perch' }],
+    drums: [{ x: 276, y: 84, pose: 'sit' }],
+    telescope: [{ x: 270, y: 94, pose: 'away' }],
+    jellyfish: [{ x: 275, y: 95, pose: 'away' }],
+    bonsai: [{ x: 258, y: 94, pose: 'away' }],
+    jungle: [],
+    coffee: [{ x: 274, y: 77, pose: 'stand' }, { x: 262, y: 98, pose: 'away' }],
+    servers: [{ x: 268, y: 95, pose: 'away' }],
+    printer: [{ x: 272, y: 95, pose: 'away' }],
+    boxing: [{ x: 266, y: 90, pose: 'stand' }],
+    treadmill: [{ x: 274, y: 89, pose: 'walk' }],
+    hottub: [{ x: 266, y: 88, pose: 'sit' }, { x: 287, y: 88, pose: 'sit' }],
+    ballpit: [{ x: 277, y: 88, pose: 'sit' }],
+    campfire: [{ x: 255, y: 92, pose: 'sit' }, { x: 297, y: 92, pose: 'sit' }],
     none: [],
   };
 
@@ -758,7 +785,7 @@
         walker.path = [];
         walker.position = pointOf(walker.place);
         const spot = spotOf(walker.place);
-        if (spot !== null) walker.isFacingAway = spots[spot].pose === 'away';
+        if (spot !== null) walker.isFacingAway = facesAway(spots[spot].pose);
       }
       if (this.pet) this.pet = new Pet(this.pet.kind);
     }
@@ -816,7 +843,7 @@
           const member = this.hireStaff();
           member.place = spotPlace(spot);
           member.position = { x: spots[spot].x, y: spots[spot].y };
-          member.isFacingAway = spots[spot].pose === 'away';
+          member.isFacingAway = facesAway(spots[spot].pose);
           member.arrivedAt = now - random(0, 20);
           member.nextMove = now + random(5, 25);
         }
@@ -936,7 +963,18 @@
       const worker = this.hardestWorker();
       const desk = worker && DESKS[worker.desk];
       const taken = (spot) => this.people.some((p) => p.place === spotPlace(spot) && !p.isLeaving);
-      const tops = { arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 } };
+      /** On top of the corner piece, where there's a top to sit on, drawn after it. */
+      const tops = {
+        arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 },
+        pinball: { x: 274, y: 51, depth: 90.5 }, jukebox: { x: 274, y: 56, depth: 88.5 }, piano: { x: 268, y: 58 },
+        jellyfish: { x: 276, y: 51, depth: 91.5 }, servers: { x: 283, y: 50, depth: 89.5 }, printer: { x: 270, y: 56, depth: 91.5 },
+        coffee: { x: 289, y: 63, depth: 93.5 },
+      };
+      /** Beside the corner piece, where the cat likes to be: watching the fish, warm by the fire, on the dragon's gold. */
+      const watches = {
+        fishtank: { x: 262, y: 95, pose: 'sit' }, jellyfish: { x: 262, y: 95, pose: 'sit' },
+        campfire: { x: 276, y: 99, pose: 'sleep' }, dragon: { x: 284, y: 97, pose: 'sleep' },
+      };
       switch (pet.kind) {
         case 'cat':
           [3, 4, 5].forEach((spot) => { if (!taken(spot)) places.push(placed('couch', { x: LOUNGE_SPOTS[spot].x, y: 113, pose: 'sleep' })); });
@@ -948,7 +986,7 @@
             places.push({ x: x + 36 + dx, y: y + 2 + dy, depth: y + 5.6 + dy, pose: 'sit' });
           }
           if (desk) places.push({ x: desk.x - 5, y: desk.y + 15, pose: 'sit' });
-          if (decor.corner === 'fishtank') places.push(placed('corner', { x: 262, y: 95, pose: 'sit' }));
+          if (watches[decor.corner]) places.push(placed('corner', watches[decor.corner]));
           places.push(placed('wall', { x: 252, y: 33, depth: 47, pose: 'sit' }));
           break;
         case 'dog': {
@@ -969,7 +1007,7 @@
         case 'monkey':
           places.push(placed('wall', { x: 308, y: 18, depth: 50.5, pose: 'sit' }), { x: CORRIDOR_X, y: 13, depth: 41.5, pose: 'sit' },
             placed('couch', { x: 270, y: 102, depth: 110.5, pose: 'sit' }), placed('wall', { x: 247, y: 33, depth: 47, pose: 'sit', grab: true }));
-          if (tops[decor.corner]) places.push(placed('corner', { ...tops[decor.corner], depth: 86.5, pose: 'sit' }));
+          if (tops[decor.corner]) places.push(placed('corner', { depth: 86.5, ...tops[decor.corner], pose: 'sit' }));
           break;
       }
       return places;
@@ -1207,7 +1245,7 @@
       person.arrivedAt = now;
       const spot = spotOf(person.place);
       if (spot !== null) {
-        person.isFacingAway = spots[spot].pose === 'away';
+        person.isFacingAway = facesAway(spots[spot].pose);
         person.nextMove = now + random(12, 30);
       } else {
         person.isFacingAway = person.place.startsWith('board:');
@@ -1412,7 +1450,11 @@
       return { kind: WORKSPACES[workspaceOf(person.session)].stands ? 'stand' : 'sit' };
     }
     const spot = spotOf(person.place);
-    if (spot !== null) return { kind: spots[spot].pose === 'sit' ? 'sit' : 'stand' };
+    if (spot !== null) {
+      const { pose } = spots[spot];
+      if (pose === 'walk') return { kind: 'walk', step: Math.floor(now * 6) % 2 };
+      return { kind: pose === 'sit' || pose === 'perch' ? 'sit' : 'stand' };
+    }
     return { kind: 'stand' };
   }
 
@@ -2648,6 +2690,663 @@
       fill(265, 97, 18, 1, SHADOW);
     }
 
+    /**
+     * A dragon asleep on its hoard: its breath lifts its back, smoke curls
+     * from its nose, and the gold glints. Someone come to look wakes one eye.
+     */
+    function drawDragon() {
+      const scale = 0x3f8a5a, dark = 0x2c6a44, belly = 0xe8c87a, gold = 0xf2c94c, deep = 0xc9952a;
+      const watched = atCorner(0), breath = Math.sin(now * 1.3) > 0.2 ? 1 : 0;
+      // The hoard, a mound of coins
+      fill(253, 96, 50, 1, SHADOW);
+      for (let row = 84; row <= 95; row++) {
+        const half = Math.round(24 * Math.sqrt((row - 83) / 12));
+        fill(278 - half, row, half * 2, 1, gold);
+        for (let k = (row % 3) * 2; k < half * 2; k += 5) dot(278 - half + k, row, deep);
+      }
+      fill(256, 93, 5, 3, PALETTE.brass);
+      dot(258, 92, 0xd4140b);
+      fill(296, 91, 4, 2, 0x8fc0e8);
+      // The tail, round the front of the hoard to its tip
+      for (const [tx, ty] of [[292, 86], [295, 88], [297, 90], [298, 92], [296, 93], [293, 94]]) fill(tx, ty, 3, 2, scale);
+      fill(290, 94, 3, 2, dark);
+      dot(289, 93, dark);
+      // The body, curled on top, rising as it breathes, and the wings folded on it
+      fill(267, 77 - breath, 26, 10 + breath, scale);
+      fill(265, 79 - breath, 2, 7 + breath, scale);
+      fill(293, 79 - breath, 2, 7, scale);
+      fill(268, 84, 22, 3, belly);
+      for (let k = 0; k < 5; k++) dot(270 + k * 4, 85, deep);
+      fill(271, 72 - breath, 14, 5, dark);
+      fill(273, 70 - breath, 8, 2, dark);
+      fill(276, 69 - breath, 3, 1, dark);
+      for (let k = 0; k < 6; k++) dot(268 + k * 4, 76 - breath, 0xd96a5a);
+      // The neck down to the head, resting on the gold, nose to the left
+      fill(259, 80, 9, 5, scale);
+      fill(250, 81, 11, 6, scale);
+      fill(248, 83, 3, 4, scale);
+      fill(250, 86, 11, 1, belly);
+      dot(249, 83, PALETTE.frame);
+      fill(256, 78, 1, 3, belly);
+      fill(259, 77, 1, 3, belly);
+      if (watched) {
+        fill(253, 82, 3, 2, 0xf2d35b);
+        dot(254, 82, PALETTE.frame);
+        dot(254, 83, PALETTE.frame);
+      } else {
+        fill(253, 83, 3, 1, dark);
+      }
+      // Smoke from its nose, puff after puff, quicker when it's awake
+      const puffs = watched ? 3 : 2;
+      for (let k = 0; k < puffs; k++) {
+        const rise = (now * (watched ? 0.5 : 0.3) + k / puffs) % 1;
+        const size = 1 + Math.round(rise * 2);
+        fill(247 - Math.round(rise * 5), 82 - Math.round(rise * 14), size, size, PALETTE.smoke, 0.7 * (1 - rise));
+      }
+      // Coins catching the light, one after another
+      for (let k = 0; k < 4; k++) {
+        const glint = (now * 0.7 + k * 0.27) % 1;
+        if (glint < 0.12) dot([262, 284, 272, 291][k], [90, 88, 93, 92][k], WHITE);
+      }
+    }
+
+    /** A pinball table, its playfield lit: the flippers flick and the ball flies while someone plays. */
+    function drawPinball() {
+      const playing = atCorner(0), cabinet = 0x2b2350, trim = 0x8a5cf0;
+      fill(261, 90, 27, 1, SHADOW);
+      fill(263, 82, 2, 8, PALETTE.machine);
+      fill(284, 82, 2, 8, PALETTE.machine);
+      // The backbox, its lights chasing round the score
+      fill(262, 51, 25, 13, cabinet);
+      fill(262, 51, 25, 1, trim);
+      fill(264, 53, 21, 7, PALETTE.doorway);
+      for (let k = 0; k < 10; k++) {
+        const lit = (Math.floor(now * 6) + k) % 4 === 0;
+        dot(264 + k * 2, 61, lit ? 0xffd36b : 0x4a3a80);
+      }
+      for (let k = 0; k < 5; k++) fill(266 + k * 4, 55, 3, 3, playing ? 0xff8a3d : 0x6a3f2a);
+      fill(273, 64, 3, 2, PALETTE.machine);
+      // The playfield, seen from the end it's played at
+      fill(261, 66, 27, 17, cabinet);
+      fill(263, 67, 23, 14, 0x1d3a7a);
+      fill(261, 66, 1, 17, trim);
+      fill(287, 66, 1, 17, trim);
+      const bumpers = [[267, 69, 0xd96a5a], [276, 68, 0xf2d35b], [281, 72, 0x6fd36f]];
+      bumpers.forEach(([bx, by, colour], i) => {
+        const hit = playing && (Math.floor(now * 3) + i) % 3 === 0;
+        fill(bx, by, 3, 3, hit ? WHITE : colour);
+      });
+      fill(264, 75, 3, 1, 0x8fc0e8);
+      fill(282, 75, 3, 1, 0x8fc0e8);
+      const flick = playing && Math.floor(now * 2.5) % 2 === 0 ? 1 : 0;
+      fill(268, 79 - flick, 4, 1, WHITE);
+      fill(277, 79 - flick, 4, 1, WHITE);
+      if (playing) {
+        const bx = 274 + Math.round(Math.sin(now * 2.3) * 9), by = 73 + Math.round(Math.cos(now * 3.1) * 5);
+        dot(bx, by, 0xe0e0e8);
+      } else {
+        dot(286, 79, 0xe0e0e8);
+      }
+      fill(261, 82, 27, 2, cabinet);
+      dot(268, 82, 0xd4140b);
+      dot(281, 82, 0xd4140b);
+    }
+
+    /** A jukebox, its arch of light running round the colours: while someone picks a record, it spins and notes rise. */
+    function drawJukebox() {
+      const playing = atCorner(0), wood = 0x7a3b2a;
+      fill(263, 88, 23, 1, SHADOW);
+      fill(266, 56, 17, 1, wood);
+      fill(264, 57, 21, 2, wood);
+      fill(263, 59, 23, 29, wood);
+      // The arch of light, its colours moving round
+      for (let k = 0; k < 30; k++) {
+        const [ax, ay] = k < 10 ? [264, 86 - k * 2.6] : k < 20 ? [266 + (k - 10) * 1.7, 59 - Math.round(Math.sin(((k - 10) / 9) * Math.PI) * 2)] : [284, 60 + (k - 20) * 2.6];
+        fill(Math.round(ax), Math.round(ay), 1, 2, rainbow((k / 30 + now * 0.3) % 1));
+      }
+      // The records behind glass, one turning
+      fill(267, 62, 15, 9, PALETTE.doorway);
+      fill(267, 62, 15, 1, WHITE, 0.25);
+      const spin = playing ? Math.floor(now * 8) % 2 : 0;
+      fill(271, 65, 7, 4, 0x1a1a1f);
+      dot(274, 66, 0xd96a5a);
+      dot(272 + spin * 4, 65 + spin * 3, 0x5a5a66);
+      // The buttons, the grille and the coin slot
+      for (let k = 0; k < 6; k++) dot(267 + k * 3, 73, playing && k === 2 ? 0x6fd36f : PALETTE.paper);
+      for (let row = 76; row < 84; row += 2) fill(267, row, 15, 1, 0x4a2a1e);
+      fill(266, 85, 17, 3, 0x5a2a1e);
+      if (!playing) return;
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.45 + k / 3) % 1;
+        const nx = 268 + k * 6 + Math.round(Math.sin(rise * 6 + k) * 2), ny = 57 - Math.round(rise * 5);
+        const colour = [0xf2d35b, 0x8fc0e8, 0xf28fb0][k];
+        fill(nx, ny, 2, 1, colour, 1 - rise);
+        fill(nx + 1, ny - 3, 1, 3, colour, 1 - rise);
+      }
+    }
+
+    /** A pool table: while someone's at it, the cue goes in, the white runs up the table and the rack breaks. */
+    function drawPool() {
+      const rail = 0x6b3a22, felt = 0x2f7a4a;
+      const left = atCorner(0), right = atCorner(1);
+      fill(250, 92, 52, 1, SHADOW);
+      for (const lx of [252, 298]) fill(lx, 86, 3, 6, rail);
+      fill(250, 72, 52, 14, rail);
+      fill(253, 74, 46, 10, felt);
+      fill(253, 74, 46, 1, shaded(felt, 0.7));
+      fill(250, 86, 52, 2, shaded(rail, 0.7));
+      for (const [px, py] of [[252, 73], [275, 73], [298, 73], [252, 84], [275, 84], [298, 84]]) fill(px, py, 2, 1, PALETTE.frame);
+      // The balls: racked at one end, the white at the other
+      const shot = left || right ? (now % 4) / 4 : 0;
+      const toward = right && !left ? -1 : 1;
+      const rack = [[285, 79], [287, 78], [287, 80], [289, 77], [289, 79], [289, 81]];
+      const colours = [0xf2d35b, 0xd4140b, 0x4c8bf5, 0x1a1a1f, 0x9a6ad0, 0xe08a3a];
+      const spread = shot > 0.5 ? Math.min(1, (shot - 0.5) * 3) : 0;
+      rack.forEach(([bx, by], i) => {
+        const sx = toward > 0 ? bx : 545 - bx;
+        dot(sx + Math.round(spread * toward * ((i % 3) + 1)), by + Math.round(spread * (by - 79) * 1.5), colours[i]);
+      });
+      const run = shot < 0.25 ? 0 : Math.min(1, (shot - 0.25) * 4);
+      const white = toward > 0 ? 262 + Math.round(run * 20) : 290 - Math.round(run * 20);
+      dot(white, 79, WHITE);
+      if (!left && !right) return;
+      // The cue, drawn back, then in
+      const back = shot < 0.2 ? Math.round((shot / 0.2) * 4) : shot < 0.25 ? 0 : 2;
+      for (let k = 0; k < 14; k++) {
+        const cx = toward > 0 ? white - 2 - back - k : white + 2 + back + k;
+        dot(cx, 79 + Math.round(k / 5), k < 2 ? 0xeae6dc : 0xc49a6c);
+      }
+    }
+
+    /** An upright piano and its bench: whoever plays has their back to the room, keys going down and notes rising. */
+    function drawPiano() {
+      const playing = atCorner(0), body = 0x1d1f25, shine = 0x3a3d47;
+      fill(261, 82, 31, 1, SHADOW);
+      fill(262, 58, 29, 2, shine);
+      fill(262, 60, 29, 22, body);
+      fill(263, 60, 1, 22, shine);
+      // The music on its stand, and the candles
+      fill(270, 62, 13, 6, PALETTE.paper);
+      for (const row of [63, 65]) fill(271, row, 11, 1, 0x8a8f9c);
+      fill(265, 57, 1, 3, 0xf2efe9);
+      fill(287, 57, 1, 3, 0xf2efe9);
+      dot(265, 56, 0xffd36b, 0.6 + 0.4 * Math.sin(now * 9));
+      dot(287, 56, 0xffd36b, 0.6 + 0.4 * Math.sin(now * 7 + 1));
+      // The keys, some pressed while it's played
+      fill(263, 71, 27, 3, 0xf4f1ea);
+      for (let k = 0; k < 9; k++) dot(264 + k * 3, 71, PALETTE.frame);
+      if (playing) {
+        for (let k = 0; k < 3; k++) {
+          const key = (Math.floor(now * 5) * (k + 2) + k * 7) % 26;
+          dot(264 + key, 73, 0xb8b3a8);
+        }
+      }
+      fill(263, 74, 27, 1, shine);
+      fill(265, 79, 3, 2, PALETTE.brass);
+      fill(285, 79, 3, 2, PALETTE.brass);
+      if (!playing) return;
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.5 + k / 3) % 1;
+        const nx = 266 + k * 9 + Math.round(Math.sin(rise * 5 + k) * 2), ny = 57 - Math.round(rise * 5);
+        fill(nx, ny, 2, 1, PALETTE.paper, 1 - rise);
+        fill(nx + 1, ny - 3, 1, 3, PALETTE.paper, 1 - rise);
+      }
+    }
+
+    /** The piano's bench, in front of whoever sits at it. */
+    function drawPianoBench() {
+      fill(268, 86, 17, 2, 0x3a3d47);
+      fill(268, 88, 17, 1, 0x1d1f25);
+      fill(269, 89, 2, 2, 0x1d1f25);
+      fill(282, 89, 2, 2, 0x1d1f25);
+      fill(267, 91, 19, 1, SHADOW);
+    }
+
+    /** A drum kit, the drummer behind it: while they play, the sticks come down and the cymbals shake. */
+    function drawDrums() {
+      const playing = atCorner(0), shell = 0x2f5aa8, chrome = 0xc9c3b8, brass = 0xe0b84a;
+      const beat = playing ? Math.floor(now * 6) % 2 : 0;
+      fill(250, 93, 54, 1, SHADOW);
+      // Cymbals on their stands, shaking when hit
+      for (const [cx, top, hit] of [[256, 72, beat], [298, 68, 1 - beat]]) {
+        fill(cx, top + 1, 1, 93 - top - 1, chrome);
+        fill(cx - 2, 92, 5, 1, chrome);
+        const tilt = playing && hit ? 1 : 0;
+        fill(cx - 4, top - tilt, 4, 1, brass);
+        fill(cx + 1, top + tilt, 4, 1, brass);
+        dot(cx, top, brass);
+      }
+      // The toms over the bass drum, the floor tom and the snare
+      fill(260, 82, 9, 3, chrome);
+      fill(260, 85, 9, 2, shell);
+      fill(291, 81, 9, 3, chrome);
+      fill(291, 84, 9, 7, shell);
+      fill(292, 91, 1, 2, chrome);
+      fill(298, 91, 1, 2, chrome);
+      fill(266, 76, 8, 2, chrome);
+      fill(266, 78, 8, 3, shell);
+      fill(279, 76, 8, 2, chrome);
+      fill(279, 78, 8, 3, shell);
+      // The bass drum, its front head marked, thumping
+      const thump = playing && beat ? 1 : 0;
+      fill(268, 81 + thump, 17, 12 - thump, shell);
+      fill(270, 82 + thump, 13, 10 - thump, 0xf2efe9);
+      fill(274, 85 + thump, 5, 4, 0xd96a5a);
+      fill(268, 81 + thump, 17, 1, chrome);
+      if (!playing) return;
+      // The sticks, coming down in turn
+      const lift = [beat ? 3 : 0, beat ? 0 : 3];
+      [[270, 268], [282, 286]].forEach(([hand, tip], i) => {
+        for (let k = 0; k < 5; k++) dot(hand + Math.round(((tip - hand) * k) / 4), 81 - lift[i] - k + (k > 2 ? 1 : 0), 0xe9d3a0);
+      });
+    }
+
+    /** A brass telescope on its tripod, aimed at the sky: it drifts while no one looks, and stars twinkle where it points. */
+    function drawTelescope() {
+      const looking = atCorner(0), tube = 0xe8e4da, leg = 0x6b4e37;
+      fill(266, 92, 24, 1, SHADOW);
+      for (const [fx, fy] of [[267, 91], [287, 91], [279, 88]]) {
+        for (let k = 0; k <= 16; k++) dot(Math.round(278 + ((fx - 278) * k) / 16), Math.round(74 + ((fy - 74) * k) / 16), leg);
+      }
+      fill(276, 72, 5, 3, PALETTE.brass);
+      // The tube, from the eyepiece up to its lens, swinging a little while no one's at it
+      const drift = looking ? 0 : Math.round(Math.sin(now * 0.4) * 2);
+      const from = { x: 271, y: 79 }, to = { x: 292, y: 60 + drift };
+      for (let k = 0; k <= 20; k++) {
+        const tx = Math.round(from.x + ((to.x - from.x) * k) / 20), ty = Math.round(from.y + ((to.y - from.y) * k) / 20);
+        const band = k === 7 || k === 15;
+        fill(tx - 1, ty - 1, 3, 3, band ? PALETTE.brass : tube);
+        dot(tx + 1, ty + 1, 0xb8b3a8);
+      }
+      fill(to.x - 1, to.y - 2, 4, 4, PALETTE.brass);
+      fill(to.x, to.y - 1, 2, 2, 0x1d3a7a);
+      fill(from.x - 2, from.y, 3, 2, PALETTE.frame);
+      // A star chart on a stand beside it
+      fill(296, 80, 1, 12, leg);
+      fill(292, 78, 10, 7, 0x1d3a7a);
+      for (const [sx, sy] of [[294, 80], [297, 79], [299, 82], [295, 83]]) dot(sx, sy, PALETTE.paper);
+      // Stars, out where it points
+      for (let k = 0; k < 3; k++) {
+        const t = (now * 0.6 + k * 0.33) % 1;
+        if (t < 0.4) dot(to.x + 4 + k * 3, to.y - 5 - k * 2, 0xfff0b0, 1 - t / 0.4);
+      }
+    }
+
+    /** A tall tank of jellyfish, glowing as they pulse up and drift down, bubbles rising past them. */
+    function drawJellyfish() {
+      const metal = 0x5a5f6c;
+      fill(260, 91, 31, 1, SHADOW);
+      fill(261, 84, 29, 7, PALETTE.counter);
+      fill(263, 86, 25, 4, PALETTE.doorPanel);
+      fill(262, 51, 27, 2, metal);
+      fill(262, 82, 27, 2, metal);
+      // The water, darker at the bottom, and the glass's shine
+      for (let row = 53; row < 82; row++) fill(262, row, 27, 1, row < 64 ? 0x1a4a7a : row < 74 ? 0x153d68 : 0x0e2a4a);
+      fill(263, 54, 1, 26, WHITE, 0.2);
+      fill(286, 54, 1, 26, WHITE, 0.1);
+      for (const [speed, phase, jx, colour] of [[0.5, 0, 268, 0xf28fb0], [0.4, 2.1, 280, 0xb88af0], [0.6, 4.2, 274, 0x8fe0f0]]) {
+        const bob = Math.sin(now * speed + phase), pulse = Math.floor(now * 2 + phase) % 2;
+        const y = 66 + Math.round(bob * 8), x = jx + Math.round(Math.sin(now * 0.3 + phase) * 2);
+        fill(x - 3, y - 3, 7, 7, colour, 0.15);
+        fill(x - 1, y - 1, 4 - pulse, 1, colour);
+        fill(x - 2 + pulse, y, 6 - pulse * 2, 2, colour);
+        for (let k = 0; k < 3; k++) {
+          const sway = Math.round(Math.sin(now * 3 + phase + k) * 0.6);
+          fill(x - 1 + k * 2 + sway, y + 2, 1, 3 + (k % 2), colour, 0.7);
+        }
+      }
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.4 + k / 2) % 1;
+        dot(284 - k * 17, 80 - Math.round(rise * 26), WHITE, 0.6 * (1 - rise));
+      }
+    }
+
+    /** A bonsai on a low stand, a stone lantern beside it: a leaf falls now and then, and a trimmer's snips glint. */
+    function drawBonsai() {
+      const wood = 0x5a3b25;
+      fill(260, 91, 34, 1, SHADOW);
+      fill(261, 80, 32, 2, 0x8c6744);
+      fill(261, 82, 32, 2, wood);
+      fill(263, 84, 2, 7, wood);
+      fill(289, 84, 2, 7, wood);
+      // The pot, the trunk twisting up, and the pads of leaves
+      fill(267, 76, 18, 4, 0x4a6a8a);
+      fill(266, 76, 20, 1, 0x5a7a9a);
+      fill(268, 75, 16, 1, 0x3b5a3a);
+      for (const [tx, ty] of [[276, 74], [276, 72], [275, 70], [274, 68], [275, 66], [277, 64]]) fill(tx, ty, 2, 2, 0x6e4a2e);
+      fill(270, 69, 5, 1, 0x6e4a2e);
+      fill(278, 67, 5, 1, 0x6e4a2e);
+      for (const [px, py, w] of [[264, 66, 10], [279, 64, 10], [271, 60, 11]]) {
+        fill(px + 1, py, w - 2, 1, PALETTE.leaf);
+        fill(px, py + 1, w, 3, PALETTE.leaf);
+        fill(px + 1, py + 3, w - 2, 1, PALETTE.leafDark);
+        dot(px + 2, py + 1, 0x6fba6a);
+      }
+      // The stone lantern
+      fill(288, 74, 3, 6, 0x8a8f9c);
+      fill(286, 73, 7, 1, 0x9aa0a6);
+      dot(289, 76, 0xffd36b, 0.8);
+      // A leaf falling to the stand
+      const fall = (now * 0.25) % 1;
+      if (fall < 0.6) dot(283 + Math.round(Math.sin(fall * 12)), 68 + Math.round((fall / 0.6) * 11), PALETTE.leaf);
+      if (atCorner(0) && Math.floor(now * 2) % 3 === 0) dot(266, 65, WHITE);
+    }
+
+    /** A jungle of plants: a palm, a monstera and a fern, their leaves stirring, and a parrot that bobs and flaps. */
+    function drawJungle() {
+      const leaf = PALETTE.leaf, dark = PALETTE.leafDark, light = 0x6fba6a, deep = 0x2f6a3a;
+      fill(246, 93, 60, 1, SHADOW);
+      const sway = (phase) => Math.round(Math.sin(now * 0.9 + phase) * 0.8);
+      // The monstera, to the left, its broad leaves split
+      fill(250, 86, 10, 7, PALETTE.pot);
+      fill(249, 86, 12, 1, 0x8a4f32);
+      for (const [lx, ly, phase] of [[244, 72, 0.5], [252, 64, 1.5], [257, 75, 2.5], [246, 80, 3.5]]) {
+        const s = sway(phase);
+        [3, 6, 8, 8, 7, 4].forEach((w, r) => fill(lx + s + Math.floor((8 - w) / 2), ly + r, w, 1, r < 3 ? deep : 0x285a32));
+        for (let r = 1; r < 5; r++) dot(lx + s + 1 + r, ly + r, 0x3f8a4a);
+        dot(lx + s + 1, ly + 2, PALETTE.wood);
+        dot(lx + s + 6, ly + 3, PALETTE.wood);
+        // Its stem, down to the pot
+        for (let k = 0; k <= 8; k++) {
+          const sy = ly + 6 + Math.round(((86 - ly - 6) * k) / 8);
+          if (sy < 86) dot(Math.round(lx + 4 + s + ((255 - lx - 4 - s) * k) / 8), sy, deep);
+        }
+      }
+      // The palm, in the middle, its fronds arching over the rest
+      fill(272, 86, 9, 7, PALETTE.pot);
+      fill(271, 86, 11, 1, 0x8a4f32);
+      for (let k = 0; k < 8; k++) fill(275 + (k > 4 ? 1 : 0), 62 + k * 3, 3, 3, k % 2 ? 0x8a6a42 : 0x6e5233);
+      for (const [dir, length, lift, phase] of [[-1, 14, 3, 0], [1, 14, 3, 1], [-1, 9, 0, 2], [1, 9, 0, 3], [-1, 6, 5, 4], [1, 6, 5, 5]]) {
+        for (let k = 1; k <= length; k++) {
+          const fx = 277 + dir * k, fy = 61 - lift + Math.round((k * k) / (length + 2)) + (k > length / 2 ? sway(phase) : 0);
+          dot(fx, fy, leaf);
+          dot(fx, fy + 1, k % 2 ? dark : leaf);
+          if (k > 2 && k % 2 === 0) dot(fx, fy + 2, dark);
+        }
+      }
+      fill(275, 59, 5, 3, leaf);
+      dot(277, 58, light);
+      // The fern, to the right, its fronds arching out of the pot
+      fill(292, 87, 9, 6, PALETTE.pot);
+      fill(291, 87, 11, 1, 0x8a4f32);
+      for (let f = 0; f < 7; f++) {
+        const angle = Math.PI * (1.12 + f * 0.13), s = sway(f);
+        for (let k = 1; k <= 9; k++) {
+          const fx = 296 + Math.round(Math.cos(angle) * k * 1.1) + (k > 5 ? s : 0);
+          const fy = 86 + Math.round(Math.sin(angle) * k) + Math.round((k * k) / 22);
+          dot(fx, fy, k % 3 ? leaf : light);
+          if (k > 1 && k < 8) dot(fx + (k % 2 ? 1 : -1), fy + 1, dark);
+        }
+      }
+      // The parrot on the palm, bobbing, and now and then flapping
+      const px = 284, py = 63, bob = Math.floor(now * 2) % 2, flap = (now % 5) < 0.6 ? Math.floor(now * 10) % 2 : -1;
+      fill(px, py - 4 + bob, 3, 3, 0xd4140b);
+      dot(px + 3, py - 3 + bob, 0xf2d35b);
+      dot(px + 1, py - 3 + bob, WHITE);
+      fill(px, py - 1, 3, 4, 0xd4140b);
+      fill(px - 1, py + 3, 2, 3, 0x4c8bf5);
+      if (flap >= 0) fill(px + 3, py - 2 + flap * 2, 3, 2, 0x4c8bf5);
+      else fill(px - 1, py, 2, 3, 0x4c8bf5);
+      dot(px + 1, py + 3, 0xf2d35b);
+    }
+
+    /** A coffee bar, a chalkboard in front: steam from the machine, and a cup filling while the barista's in. */
+    function drawCoffeeBar() {
+      const wood = 0x5a3b25;
+      fill(252, 93, 50, 1, SHADOW);
+      // The espresso machine, chrome, on the bar
+      fill(282, 63, 14, 10, 0xc9c3b8);
+      fill(282, 63, 14, 1, WHITE);
+      fill(284, 65, 10, 3, PALETTE.machine);
+      dot(286, 66, 0x6fd36f);
+      dot(291, 66, 0xd96a5a);
+      fill(286, 69, 2, 2, PALETTE.machine);
+      fill(291, 69, 2, 2, PALETTE.machine);
+      const brewing = atCorner(0), fillUp = brewing ? (now * 0.25) % 1 : 0;
+      fill(286, 72, 3, 1, PALETTE.mug);
+      if (fillUp > 0) fill(286, 72, 3, 1, 0x5a3a24);
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.5 + k / 2) % 1;
+        dot(292 + Math.round(Math.sin(rise * 6 + k)), 61 - Math.round(rise * 8), WHITE, 0.6 * (1 - rise));
+      }
+      // Cups stacked, and the bar itself
+      for (let k = 0; k < 3; k++) fill(256, 70 - k * 2, 4, 2, k % 2 ? 0xe9e6df : PALETTE.mug);
+      fill(262, 71, 3, 2, 0x8a5a2b);
+      fill(254, 73, 46, 3, 0x8c6744);
+      fill(254, 73, 46, 1, 0xa87a56);
+      fill(254, 76, 46, 16, wood);
+      for (let k = 0; k < 5; k++) fill(257 + k * 9, 78, 1, 13, shaded(wood, 0.8));
+      fill(254, 76, 46, 1, shaded(wood, 0.7));
+      // The chalkboard, standing on the floor
+      fill(244, 82, 9, 10, PALETTE.counter);
+      fill(245, 83, 7, 7, 0x2a2e2a);
+      for (const [cx, cy, w] of [[246, 84, 5], [246, 86, 4], [246, 88, 5]]) fill(cx, cy, w, 1, PALETTE.paper, 0.75);
+      fill(244, 92, 9, 1, SHADOW);
+    }
+
+    /** Two racks of servers, their lights blinking, a cable bundle over them, a red light now and then. */
+    function drawServers() {
+      fill(258, 89, 35, 1, SHADOW);
+      const lights = [0x6fd36f, 0x6fd36f, 0xf2d35b, 0x4c8bf5];
+      for (const [rx, seed] of [[259, 0], [276, 7]]) {
+        fill(rx, 52, 16, 37, 0x1d1f25);
+        fill(rx, 52, 16, 1, 0x3a3f4a);
+        fill(rx, 52, 1, 37, 0x3a3f4a);
+        fill(rx + 15, 52, 1, 37, 0x3a3f4a);
+        for (let u = 0; u < 11; u++) {
+          const uy = 54 + u * 3;
+          fill(rx + 2, uy, 12, 2, 0x2a2e36);
+          fill(rx + 9, uy, 4, 1, 0x14161b);
+          for (let k = 0; k < 3; k++) {
+            const on = (Math.floor(now * (3 + ((u + k + seed) % 4))) + u * 3 + k + seed) % 3 !== 0;
+            dot(rx + 3 + k * 2, uy, lights[(u + k + seed) % lights.length], on ? 1 : 0.2);
+          }
+        }
+      }
+      if (Math.floor(now * 1.2) % 7 === 0) dot(288, 63, PALETTE.alarm);
+      // A tray of cables along the tops, dropping into each rack
+      fill(259, 50, 33, 2, 0x5a5f6c);
+      [0x4c8bf5, 0xf2d35b, 0xd96a5a].forEach((colour, k) => {
+        fill(261 + k * 2, 50, 1, 3, colour);
+        fill(278 + k * 2, 50, 1, 3, colour);
+        dot(266 + k * 6, 50, colour);
+      });
+    }
+
+    /** A 3D printer on a table, its head running back and forth as the print grows layer by layer, its spool turning. */
+    function drawPrinter() {
+      const frame = 0x3a3f4a, rail = 0x8a93a3, filament = 0x4c8bf5;
+      fill(257, 91, 42, 1, SHADOW);
+      fill(258, 78, 40, 2, 0x8c6744);
+      fill(258, 80, 40, 2, PALETTE.counter);
+      fill(260, 82, 2, 9, PALETTE.counter);
+      fill(294, 82, 2, 9, PALETTE.counter);
+      // The frame and its bed
+      fill(265, 56, 2, 22, frame);
+      fill(286, 56, 2, 22, frame);
+      fill(265, 56, 23, 2, frame);
+      fill(267, 75, 19, 2, 0x2a2e36);
+      // The print, growing, then taken off for the next
+      const progress = (now / 30) % 1, layers = Math.min(12, Math.floor(progress * 14));
+      for (let k = 0; k < layers; k++) {
+        const w = k < 4 ? 9 : k < 8 ? 7 : 5;
+        fill(276 - Math.floor(w / 2), 74 - k, w, 1, k % 2 ? filament : shaded(filament, 0.85));
+      }
+      // The gantry, at the layer it's on, and the head running along it
+      const gy = 72 - layers;
+      fill(267, gy, 19, 1, rail);
+      const run = layers < 12 ? Math.round(Math.sin(now * 4) * 4) : 0;
+      fill(274 + run, gy - 2, 5, 3, PALETTE.machine);
+      dot(276 + run, gy + 1, layers < 12 ? 0xff8a3d : PALETTE.machine);
+      // The spool, turning while it prints, and its little screen
+      fill(290, 62, 7, 7, filament);
+      fill(292, 64, 3, 3, PALETTE.paper);
+      const spoke = layers < 12 ? Math.floor(now * 3) % 2 : 0;
+      dot(293 + (spoke ? 1 : -1), 65, 0x9aa0a6);
+      for (let k = 0; k < 6; k++) dot(289 - Math.round(k * 0.5), 66 + k, filament);
+      fill(268, 79, 6, 1, PALETTE.frame);
+      fill(268, 79, Math.round(progress * 6), 1, 0x6fd36f);
+    }
+
+    /** A heavy bag on its stand: it swings when it's hit, a star where the punch lands. */
+    function drawBoxing() {
+      const post = 0x3a3f4a, bag = 0xb8322a;
+      fill(268, 93, 36, 1, SHADOW);
+      fill(296, 53, 3, 39, post);
+      fill(278, 53, 21, 2, post);
+      fill(293, 91, 9, 2, post);
+      // The bag, hung from its chain, swinging out from the top
+      const hitting = atCorner(0), swing = hitting ? Math.sin(now * 5) : Math.sin(now * 0.8) * 0.15;
+      fill(281, 55, 1, 5, 0x9aa0a6);
+      for (let row = 0; row < 22; row++) {
+        const sx = Math.round(swing * row * 0.15);
+        const w = row === 0 || row === 21 ? 7 : 9;
+        fill(282 - Math.ceil(w / 2) + sx, 60 + row, w, 1, row === 4 || row === 16 ? 0x2a2e36 : bag);
+        if (row > 0 && row < 21) dot(282 - 4 + sx, 60 + row, lighter(bag));
+      }
+      if (hitting && swing > 0.85) {
+        const sx = Math.round(swing * 10 * 0.15);
+        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) dot(276 + sx + dx, 70 + dy, 0xffd36b);
+      }
+      // A pair of dumbbells, and a towel over the stand
+      fill(301, 90, 7, 1, 0x5a5f6c);
+      fill(300, 89, 2, 3, PALETTE.machine);
+      fill(307, 89, 2, 3, PALETTE.machine);
+      fill(299, 56, 3, 7, 0xe9e6df);
+    }
+
+    /** The treadmill's console and handrails, beyond whoever walks on it. */
+    function drawTreadmillConsole() {
+      const grey = 0x5a5f6c;
+      fill(264, 68, 2, 14, grey);
+      fill(286, 68, 2, 14, grey);
+      fill(262, 63, 28, 7, 0x2a2e36);
+      fill(262, 63, 28, 1, grey);
+      fill(265, 65, 10, 3, 0x1a3a2a);
+      const running = atCorner(0);
+      for (let k = 0; k < 4; k++) {
+        const level = running ? 1 + ((Math.floor(now * 2) + k * 2) % 3) : 1;
+        fill(266 + k * 2, 68 - level, 1, level, 0x6fd36f);
+      }
+      dot(279, 65, running ? 0x6fd36f : 0x5a5f6c);
+      dot(282, 65, 0xd96a5a);
+      dot(285, 65, 0x4c8bf5);
+    }
+
+    /** The treadmill's belt, running under whoever walks on it. */
+    function drawTreadmillBelt() {
+      fill(260, 93, 32, 1, SHADOW);
+      fill(261, 79, 30, 4, 0x3a3f4a);
+      fill(263, 83, 26, 9, 0x23252c);
+      fill(261, 83, 2, 9, 0x8a93a3);
+      fill(289, 83, 2, 9, 0x8a93a3);
+      fill(261, 92, 30, 1, 0x5a5f6c);
+      const shift = atCorner(0) ? Math.floor(now * 8) % 3 : 0;
+      for (let row = 83 + shift; row < 92; row += 3) fill(263, row, 26, 1, 0x34373f);
+    }
+
+    /** A hot tub's back rim, behind whoever is in it. */
+    function drawHotTubBack() {
+      fill(254, 76, 46, 2, 0xa87a56);
+      fill(255, 78, 44, 3, 0x7a5232);
+      for (let k = 0; k < 8; k++) fill(257 + k * 6, 78, 1, 3, 0x5a3b25);
+    }
+
+    /** The hot tub's water, up to the shoulders of whoever sits in it, bubbling and steaming, a duck afloat, and the tub's front. */
+    function drawHotTubFront() {
+      fill(253, 96, 48, 1, SHADOW);
+      fill(255, 81, 44, 6, 0x3fa0c0);
+      fill(255, 81, 44, 1, 0x8fd6ea);
+      for (let k = 0; k < 6; k++) {
+        const t = (now * 0.9 + k * 0.37) % 1;
+        dot(258 + ((k * 13) % 40), 82 + (k % 3), WHITE, t < 0.5 ? 0.8 : 0.2);
+      }
+      const bob = Math.round(Math.sin(now * 2));
+      fill(292, 80 + bob, 4, 2, DESK_THINGS.duck);
+      fill(294, 78 + bob, 2, 2, DESK_THINGS.duck);
+      dot(296, 79 + bob, DESK_THINGS.beak);
+      fill(253, 86, 48, 2, 0xa87a56);
+      fill(254, 88, 46, 8, 0x7a5232);
+      for (let k = 0; k < 8; k++) fill(256 + k * 6, 88, 1, 8, 0x5a3b25);
+      fill(254, 90, 46, 1, 0x3a3a40);
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.35 + k / 3) % 1;
+        fill(262 + k * 14 + Math.round(Math.sin(rise * 5 + k) * 2), 78 - Math.round(rise * 18), 2 + Math.round(rise * 2), 1, WHITE, 0.35 * (1 - rise));
+      }
+    }
+
+    /** A ball pit's back wall, padded. */
+    function drawBallPitBack() {
+      fill(254, 75, 46, 2, 0x5a8ad0);
+      fill(254, 77, 46, 7, 0x3f6aa8);
+      for (let k = 0; k < 5; k++) fill(256 + k * 9, 77, 1, 7, 0x2f5a8a);
+    }
+
+    /** The balls, up to the shoulders of whoever's in, one bouncing up now and then, and the pit's front wall. */
+    function drawBallPitFront() {
+      const colours = [0xd4140b, 0xf2d35b, 0x4c8bf5, 0x6fd36f, 0xf28fb0, 0xe08a3a];
+      fill(253, 96, 48, 1, SHADOW);
+      for (let row = 0; row < 4; row++) {
+        for (let k = 0; k < 22; k++) fill(255 + k * 2 + (row % 2), 81 + row * 2, 2, 2, colours[(k * 7 + row * 5) % colours.length]);
+      }
+      const hop = (now * 0.8) % 1;
+      if (hop < 0.5) {
+        const h = Math.round(Math.sin(hop * 2 * Math.PI) * 6);
+        fill(266 + Math.floor(now * 0.8) % 4 * 7, 80 - h, 2, 2, colours[Math.floor(now * 0.8) % colours.length]);
+      }
+      fill(253, 88, 48, 2, 0xd96a5a);
+      fill(254, 90, 46, 6, 0xb8322a);
+      for (let k = 0; k < 5; k++) fill(256 + k * 9, 90, 1, 6, 0x8a2a24);
+    }
+
+    /** A campfire in a ring of stones, flames flickering, sparks and smoke rising, a glow on the floor. */
+    function drawCampfire() {
+      const cx = 276;
+      fill(cx - 16, 88, 33, 8, 0xff8a3d, 0.08);
+      fill(cx - 10, 86, 21, 10, 0xff8a3d, 0.08);
+      for (const [sx, sy] of [[266, 91], [270, 93], [276, 94], [282, 93], [286, 91], [269, 89], [283, 89]]) {
+        fill(sx - 1, sy, 3, 2, 0x8a8f9c);
+        dot(sx - 1, sy, 0xa8adb6);
+      }
+      fill(269, 90, 14, 2, 0x5a3b25);
+      fill(271, 89, 10, 1, 0x6e4a2e);
+      // The flames, each column its own height, red to yellow
+      for (let k = 0; k < 9; k++) {
+        const h = 4 + Math.round(4 * Math.abs(Math.sin(now * (5 + k) + k * 1.7))) - Math.abs(k - 4);
+        if (h <= 0) continue;
+        const fx = cx - 4 + k;
+        fill(fx, 89 - h, 1, h, 0xd4140b);
+        if (h > 2) fill(fx, 89 - h + 1, 1, h - 1, 0xff8a3d);
+        if (h > 4) fill(fx, 89 - h + 3, 1, h - 3, 0xf2d35b);
+      }
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.8 + k / 3) % 1;
+        dot(cx - 2 + k * 2 + Math.round(Math.sin(rise * 7 + k) * 2), 82 - Math.round(rise * 14), 0xffd36b, 1 - rise);
+      }
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.25 + k / 2) % 1;
+        fill(cx - 1 + Math.round(Math.sin(rise * 4 + k) * 3), 76 - Math.round(rise * 20), 2 + Math.round(rise * 2), 2, PALETTE.smoke, 0.35 * (1 - rise));
+      }
+      // Marshmallows toasting on sticks, held out by whoever sits by it
+      [[0, 259, 269], [1, 293, 283]].forEach(([i, hand, tip]) => {
+        if (!atCorner(i)) return;
+        for (let k = 0; k <= 8; k++) dot(Math.round(hand + ((tip - hand) * k) / 8), 85 - Math.round(k * 0.4), 0x8a6a42);
+        const toast = (now * 0.1 + i * 0.5) % 1;
+        fill(tip + (i ? -1 : 0), 81, 2, 2, toast < 0.5 ? 0xf4f1ea : 0xd9b26a);
+      });
+    }
+
+    /** The logs either side of the fire, in front of whoever sits on them. */
+    function drawCampfireLogs() {
+      for (const lx of [248, 290]) {
+        fill(lx, 90, 15, 4, 0x6e4a2e);
+        fill(lx, 90, 15, 1, 0x8a6a42);
+        fill(lx, 90, 2, 4, 0xc9a06a);
+        dot(lx + 1, 91, 0x8a6a42);
+        fill(lx, 94, 15, 1, SHADOW);
+      }
+    }
+
     /* The pet */
 
     /**
@@ -2760,7 +3459,14 @@
     /** What the lounge's corner piece is made of, each part at the depth it stands at. */
     const CORNER_PARTS = {
       arcade: [[86, drawArcade]], vending: [[86, drawVending]], foosball: [[89, drawFoosball]], fishtank: [[86, drawFishTank]],
-      books: [[86, drawBookcase], [90, drawBeanbagBack], [94.5, drawBeanbagFront]], none: [],
+      books: [[86, drawBookcase], [90, drawBeanbagBack], [94.5, drawBeanbagFront]],
+      dragon: [[96, drawDragon]], pinball: [[90, drawPinball]], jukebox: [[88, drawJukebox]], pool: [[92, drawPool]],
+      piano: [[82, drawPiano], [91, drawPianoBench]], drums: [[93, drawDrums]], telescope: [[92, drawTelescope]],
+      jellyfish: [[91, drawJellyfish]], bonsai: [[91, drawBonsai]], jungle: [[93, drawJungle]], coffee: [[93, drawCoffeeBar]],
+      servers: [[89, drawServers]], printer: [[91, drawPrinter]], boxing: [[93, drawBoxing]],
+      treadmill: [[80, drawTreadmillConsole], [88, drawTreadmillBelt]], hottub: [[80, drawHotTubBack], [89, drawHotTubFront]],
+      ballpit: [[80, drawBallPitBack], [89, drawBallPitFront]], campfire: [[92.5, drawCampfire], [93, drawCampfireLogs]],
+      none: [],
     };
 
     /** A rally starts whenever both ends of the table are taken. */
@@ -4357,8 +5063,63 @@
     };
   }
 
+  /** What a preview shows of the room, in the wide room's art pixels: round the corner piece, or round the first desk. */
+  const PREVIEW_CROPS = {
+    corner: { x: 238, y: 49, w: 80, h: 51 },
+    workspace: { x: DESKS[0].x - 6, y: DESKS[0].y - 27, w: DESK_WIDTH + 14, h: 45 },
+  };
+  /** Someone at a workspace in its preview, at ease, so no bubble hides it. */
+  const PREVIEW_AGENT = {
+    id: 'preview', name: 'preview', state: 'idle', effort: '', agent: 'claude', model: '', tool: 'Edit', subagents: [],
+    maxPressedAt: null, turnStartedAt: null, dial: false, mic: false,
+  };
+
+  /**
+   * One of the room's choices on its own, for the setup page to show it by:
+   * `what` is { corner } with someone at each of its places, or
+   * { workspace } with an agent at work at it. It's drawn by the room's own
+   * code, `now` seconds in, and cut to the piece, as big as fits `canvas`
+   * in whole pixels. `tall` shows it where the room held upright has it.
+   */
+  function preview(canvas, what, now = 0, tall = false) {
+    const kept = { decor, spots, boardSpots, shape };
+    try {
+      shape = tall ? TALL : WIDE;
+      decor = roomOf({ corner: what.corner || 'none', workspace: what.workspace || 'desk', staff: 'none', sky: 'day' });
+      spots = spotsOf(decor);
+      boardSpots = boardSpotsOf(decor);
+      const office = new Office();
+      office.apply(what.workspace ? [{ pin: null, session: PREVIEW_AGENT }] : [], {}, now);
+      CORNER_SPOTS[decor.corner].forEach((_, i) => {
+        const spot = LOUNGE_SPOTS.length + i, member = office.hireStaff();
+        member.place = spotPlace(spot);
+        member.position = { x: spots[spot].x, y: spots[spot].y };
+        member.isFacingAway = facesAway(spots[spot].pose);
+      });
+      const crop = { ...PREVIEW_CROPS[what.workspace ? 'workspace' : 'corner'] };
+      if (what.corner) Object.assign(crop, placed('corner', crop));
+      const scale = Math.max(1, Math.floor(Math.min(canvas.width / crop.w, canvas.height / crop.h)));
+      const room = canvas.ownerDocument.createElement('canvas');
+      room.width = shape.width * scale;
+      room.height = shape.height * scale;
+      const roomCtx = room.getContext('2d');
+      drawOffice(roomCtx, office, {
+        now, hour: 12, minute: 0, month: 5, width: room.width, height: room.height, ratio: 1, selected: null,
+        mic: { held: false, heldAt: null, releasedAt: null, listener: null, usable: true }, framed: false, floating: null,
+      });
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = crop.w * scale, h = crop.h * scale;
+      ctx.drawImage(room, crop.x * scale, crop.y * scale, w, h,
+        Math.floor((canvas.width - w) / 2), Math.floor((canvas.height - h) / 2), w, h);
+    } finally {
+      ({ decor, spots, boardSpots, shape } = kept);
+    }
+  }
+
   /** The pop-out window's size, in CSS pixels: two to each of the room's, and the margin round it. */
   const popOutSize = { width: WIDTH * 2 + FLOAT_MARGINS.window * 2, height: HEIGHT * 2 + FLOAT_MARGINS.window * 2 };
 
-  window.AgentOffice = { create, popOutSize };
+  window.AgentOffice = { create, popOutSize, preview };
 })();
