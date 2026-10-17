@@ -85,7 +85,8 @@ final class OfficeSaverView: ScreenSaverView {
     /// Shows the office if SauzzeDeck Pro is running and still knows the
     /// key, and otherwise says why not.
     private func check() {
-        guard checking == nil else { return }
+        // macOS may start a view twice: one office each is enough.
+        guard checking == nil, office == nil else { return }
         guard let key = Pairing.key else { return notice.show(.notPaired) }
         checking = Task { [weak self] in
             let answer = await Pairing.check(key)
@@ -113,6 +114,7 @@ final class OfficeSaverView: ScreenSaverView {
         content.add(WeakMessageHandler(self), name: OfficeSaverView.messageName)
 
         let web = WKWebView(frame: bounds, configuration: configuration)
+        OfficeSaverView.ignoreOcclusion(of: web)
         web.autoresizingMask = [.width, .height]
         web.navigationDelegate = self
         // Out of sight until the room is drawn, so nothing flashes white first.
@@ -120,6 +122,17 @@ final class OfficeSaverView: ScreenSaverView {
         addSubview(web)
         web.load(URLRequest(url: Pairing.officeURL(key)))
         office = web
+    }
+
+    /// Full screen, the screen saver's window lives in another process, so
+    /// WebKit takes this one's for covered and tells the page it's hidden,
+    /// and the office stops drawing. Its own switch for that has no public
+    /// name: without it, as in a future macOS, the page is as WebKit says.
+    private static func ignoreOcclusion(of web: WKWebView) {
+        let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+        guard web.responds(to: selector) else { return }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(web.method(for: selector), to: Setter.self)(web, selector, false)
     }
 
     /// Lets the page go, and the processes WebKit started for it.
