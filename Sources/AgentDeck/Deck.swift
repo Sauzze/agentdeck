@@ -173,6 +173,9 @@ final class Deck {
                 return entry
             },
             "overflow": overflow.count,
+            // The Mac's clock, so the office can count turns on the phone's,
+            // whichever of the two is right.
+            "now": Int64(Date().timeIntervalSince1970 * 1000),
             "theme": Theme.current(),
             "scroll": Config.shared.scrollEnabled,
             // What the office's held desks offer: firing, and hiring once there's a folder to hire into.
