@@ -141,6 +141,16 @@
   .field.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
   .wall { display: flex; gap: 6px; }
   .wall select { flex: 1; min-width: 0; max-width: none; padding: 5px 4px; }
+  /* Your team: a card for each project, its choices in a grid. */
+  .team { display: grid; gap: 10px; }
+  .member { border: 1px solid var(--edge); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+  .member .top { display: flex; align-items: center; gap: 10px; }
+  .member .top b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .member .looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; }
+  .member .looks label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
+  .member input, .member select { min-width: 0; background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
+    padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
+  .team .empty { color: var(--dim); font-size: 13px; }
   .rows { display: grid; gap: 8px; }
   .line { display: flex; gap: 10px; align-items: center; }
   .chips { flex: 1; min-width: 0; display: flex; gap: 6px; }
@@ -334,6 +344,9 @@
         <div class="field"><span>Pet</span><div class="choices" id="room-pet"></div></div>
         <div class="field"><span>Sound</span><div class="choices" id="room-sound"></div></div>
         <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Sound starts with your first tap. The preview shows the office while you change it.</p>
+        <h3>Your team</h3>
+        <div class="team" id="room-team"></div>
+        <p class="hint">Each project's agent, your way. Anything on Auto is as the project's name picks it. Clothes on Auto follow Claude Code's model: Haiku dresses casual, Sonnet wears a shirt, Opus a jacket, and Fable a suit and tie. Interns dress for their own model.</p>
         <h3>Buttons</h3>
         <div class="rows" id="rows"></div>
         <p class="note" id="stick-note" hidden>Without the stick, add ▲ and ▼ to answer your agents' questions.</p>
@@ -688,12 +701,13 @@
   /** Who the preview shows on its keys, as many as you choose under it. */
   const SAMPLES = [
     { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true,
-      activity: 'Waiting for you: Bash' },
+      activity: 'Waiting for you: Bash', model: 'claude-opus-5-5' },
     { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking', tool: 'Bash', activity: 'Run the tests' },
     { name: 'docs', agent: 'gemini', agentName: 'Gemini CLI', state: 'unread' },
     { name: 'infra', agent: 'opencode', agentName: 'OpenCode', state: 'idle' },
     { name: 'mobile', agent: 'grok', agentName: 'Grok', state: 'thinking' },
-    { name: 'billing', agent: 'claude', agentName: 'Claude Code', state: 'idle', effort: 'medium', dial: true, mic: true },
+    { name: 'billing', agent: 'claude', agentName: 'Claude Code', state: 'idle', effort: 'medium', dial: true, mic: true,
+      model: 'claude-haiku-5-5' },
     { name: 'landing', agent: 'codex', agentName: 'Codex', state: 'unread' },
     { name: 'search', agent: 'gemini', agentName: 'Gemini CLI', state: 'error' },
     { name: 'data', agent: 'opencode', agentName: 'OpenCode', state: 'thinking' },
@@ -714,7 +728,11 @@
     if (!state.layout) return;
     const typing = document.activeElement && document.activeElement.matches('#layout input, #layout select');
     if (layout && (unsaved || sending || typing)) return;
-    if (layout && JSON.stringify(state.layout) === JSON.stringify(layout)) return;
+    if (layout && JSON.stringify(state.layout) === JSON.stringify(layout)) {
+      // A session started, or a project pinned, joins the team's cards.
+      if (teamProjects().join('\n') !== teamShown) drawRoom();
+      return;
+    }
     layout = structuredClone(state.layout);
     drawLayout();
   }
@@ -798,6 +816,83 @@
     lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off' };
   let peekOffice = false; // the preview shows the office while it's being furnished
 
+  /* Your team: how each project's agent looks, the choices office.js draws
+     and the apps keep. The first of each is Auto. */
+  const TEAM_CHOICES = {
+    skin: ['Skin', [['auto', 'Auto'], ['porcelain', 'Porcelain'], ['fair', 'Fair'], ['light', 'Light'], ['tan', 'Tan'],
+      ['olive', 'Olive'], ['brown', 'Brown'], ['deep', 'Deep'], ['ebony', 'Ebony']]],
+    hair: ['Hair', [['auto', 'Auto'], ['black', 'Black'], ['espresso', 'Espresso'], ['brown', 'Brown'], ['chestnut', 'Chestnut'],
+      ['auburn', 'Auburn'], ['ginger', 'Ginger'], ['blond', 'Blond'], ['platinum', 'Platinum'], ['grey', 'Grey'], ['white', 'White'],
+      ['pink', 'Pink'], ['blue', 'Blue'], ['green', 'Green'], ['purple', 'Purple']]],
+    hairstyle: ['Hairstyle', [['auto', 'Auto'], ['short', 'Short'], ['long', 'Long'], ['spiky', 'Spiky'], ['bun', 'Bun'],
+      ['curly', 'Curly'], ['ponytail', 'Ponytail'], ['afro', 'Afro'], ['mohawk', 'Mohawk'], ['buzz', 'Buzz cut'], ['bald', 'Bald']]],
+    extra: ['Extra', [['none', 'Nothing'], ['glasses', 'Glasses'], ['sunglasses', 'Sunglasses'], ['headphones', 'Headphones'],
+      ['cap', 'A cap'], ['beanie', 'A beanie'], ['beard', 'A beard'], ['moustache', 'A moustache'], ['bow', 'A bow']]],
+    outfit: ['Outfit', [['auto', 'For the model'], ['tee', 'T-shirt and jeans'], ['hoodie', 'Hoodie'], ['collar', 'Shirt'],
+      ['sweater', 'Sweater'], ['jacket', 'Jacket'], ['suit', 'Suit and tie'], ['labcoat', 'Lab coat']]],
+    colour: ['Colour', [['auto', 'Auto'], ['orange', 'Orange'], ['red', 'Red'], ['pink', 'Pink'], ['purple', 'Purple'], ['blue', 'Blue'],
+      ['teal', 'Teal'], ['green', 'Green'], ['yellow', 'Yellow'], ['grey', 'Grey'], ['black', 'Black'], ['white', 'White']]],
+  };
+  const NICKNAME_LIMIT = 16;
+  let teamShown = ''; // the projects the team's cards were drawn for
+
+  /** The projects a team can have: those running, those pinned to a key, and those already dressed. */
+  function teamProjects() {
+    const names = [...state.sessions.map((s) => s.name), ...state.pins.filter(Boolean).map((p) => p.name),
+      ...Object.keys((layout.room && layout.room.team) || {})];
+    return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  }
+
+  /** A card for each project, with its looks and a nickname. Left all on Auto, a project leaves the team. */
+  function drawTeam(room) {
+    const projects = teamProjects();
+    teamShown = projects.join('\n');
+    if (!projects.length) {
+      $('room-team').innerHTML = '<div class="empty"></div>';
+      $('room-team').firstChild.textContent = 'Your projects show here once an agent is running in one, or one is pinned to a key.';
+      return;
+    }
+    const blank = () => ({ ...Object.fromEntries(Object.entries(TEAM_CHOICES).map(([part, [, options]]) => [part, options[0][0]])), name: '' });
+    const dress = (project, edit) => change(() => {
+      const team = room.team || (room.team = {});
+      const member = { ...blank(), ...team[project] };
+      edit(member);
+      if (JSON.stringify(member) === JSON.stringify(blank())) delete team[project];
+      else team[project] = member;
+    }, true);
+    $('room-team').replaceChildren(...projects.map((project) => {
+      const member = { ...blank(), ...(room.team && room.team[project]) };
+      const card = document.createElement('div');
+      card.className = 'member';
+      const top = document.createElement('div');
+      top.className = 'top';
+      const title = document.createElement('b');
+      title.textContent = project;
+      const nickname = document.createElement('input');
+      nickname.type = 'text';
+      nickname.maxLength = NICKNAME_LIMIT;
+      nickname.spellcheck = false;
+      nickname.placeholder = 'Nickname';
+      nickname.value = member.name;
+      nickname.setAttribute('aria-label', `A nickname for ${project}'s desk`);
+      // Kept when you're done typing: a change redraws the cards.
+      nickname.onchange = () => dress(project, (m) => { m.name = nickname.value.trim(); });
+      const reset = tool('Reset', `Put ${project} back to Auto`, () => dress(project, (m) => Object.assign(m, blank())),
+        JSON.stringify(member) === JSON.stringify(blank()));
+      top.append(title, nickname, reset);
+      const looks = document.createElement('div');
+      looks.className = 'looks';
+      for (const [part, [label, options]] of Object.entries(TEAM_CHOICES)) {
+        const field = document.createElement('label');
+        field.textContent = label;
+        field.append(select(options, member[part], (value) => dress(project, (m) => { m[part] = value; })));
+        looks.append(field);
+      }
+      card.append(top, looks);
+      return card;
+    }));
+  }
+
   function select(options, value, onchange) {
     const el = document.createElement('select');
     for (const [id, label] of options) el.add(new Option(label, id, false, id === value));
@@ -820,6 +915,7 @@
     const corner = $('room-corner');
     corner.replaceChildren(...ROOM_CHOICES.corner.map(([id, label]) => new Option(label, id, false, id === room.corner)));
     corner.onchange = () => furnish(() => { room.corner = corner.value; });
+    drawTeam(room);
   }
 
   /** Each row as the phone draws it, with its own tools. */
@@ -1015,8 +1111,10 @@
     const page = $('preview-page').contentWindow;
     if (!page || !layout || !colours) return;
     const count = layout.keys === 'auto' ? Math.max(1, samples) : layout.keys;
+    // The samples take your projects' names, so they're dressed as your team.
+    const projects = teamProjects();
     const keys = Array.from({ length: count }, (_, i) => {
-      const s = i < samples && SAMPLES[i];
+      const s = i < samples && { ...SAMPLES[i], name: projects[i] || SAMPLES[i].name };
       return { pin: null, session: s && { id: s.name, project: s.name, dial: false, mic: false, effort: '', ...s } };
     });
     page.postMessage({

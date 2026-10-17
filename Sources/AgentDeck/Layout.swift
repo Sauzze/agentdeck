@@ -84,9 +84,9 @@ struct Layout: Codable, Equatable {
 /// the back wall's five places holds, the floor, the walls' paint, the
 /// lounge's carpet and the piece in its corner, whether the sky keeps the
 /// computer's time or it's always day, its pet, whether the windows follow
-/// the seasons, and how loud it is. office.js draws it, with the same
-/// choices. Anything unknown, or of the wrong kind, is as standard: it only
-/// changes how the room looks.
+/// the seasons, how loud it is, and your team. office.js draws it, with the
+/// same choices. Anything unknown, or of the wrong kind, is as standard: it
+/// only changes how the room looks.
 struct Room: Codable, Equatable {
     var mic = "mic"
     var wall = Room.standardWall
@@ -98,6 +98,11 @@ struct Room: Codable, Equatable {
     var pet = "none"
     var season = "calendar"
     var sound = "off"
+    /// How each project's agent looks, by the project's name.
+    var team: [String: TeamMember] = [:]
+
+    /// The most projects a team remembers.
+    static let teamLimit = 50
 
     /// Each part's choices; the first is the standard one.
     static let choices = [
@@ -135,12 +140,57 @@ struct Room: Codable, Equatable {
         wall = Room.standardWall.enumerated().map { i, standard in
             i < given.count ? given[i].text.flatMap { Room.wallChoices.contains($0) ? $0 : nil } ?? standard : standard
         }
+        let members = ((try? c?.decodeIfPresent([String: TeamMember].self, forKey: .team)) ?? nil) ?? [:]
+        team = Dictionary(uniqueKeysWithValues: members.filter { !$0.key.isEmpty }.sorted { $0.key < $1.key }
+            .prefix(Room.teamLimit).map { ($0.key, $0.value) })
     }
 
     /// One of the wall's places as given: text, or nothing for any other kind of value.
     private struct Loose: Decodable {
         let text: String?
         init(from decoder: Decoder) throws { text = try? decoder.singleValueContainer().decode(String.self) }
+    }
+}
+
+/// How one project's agent looks in the office: skin, hair, a hairstyle,
+/// something extra such as glasses or a cap, an outfit and its colour, and a
+/// nickname for its desk. "auto" is as the project's name picks it, and the
+/// clothes as its model's. office.js draws it, with the same choices.
+struct TeamMember: Codable, Equatable {
+    var skin = "auto"
+    var hair = "auto"
+    var hairstyle = "auto"
+    var extra = "none"
+    var outfit = "auto"
+    var colour = "auto"
+    var name = ""
+
+    /// Each part's choices; the first is the standard one.
+    static let choices = [
+        "skin": ["auto", "porcelain", "fair", "light", "tan", "olive", "brown", "deep", "ebony"],
+        "hair": ["auto", "black", "espresso", "brown", "chestnut", "auburn", "ginger", "blond", "platinum", "grey", "white",
+                 "pink", "blue", "green", "purple"],
+        "hairstyle": ["auto", "short", "long", "spiky", "bun", "curly", "ponytail", "afro", "mohawk", "buzz", "bald"],
+        "extra": ["none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"],
+        "outfit": ["auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat"],
+        "colour": ["auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"],
+    ]
+    /// The most a nickname can be, in characters.
+    static let nicknameLimit = 16
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        func choice(_ key: CodingKeys) -> String? {
+            let given = (try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil
+            return given.flatMap { TeamMember.choices[key.stringValue]?.contains($0) == true ? $0 : nil }
+        }
+        skin = choice(.skin) ?? skin
+        hair = choice(.hair) ?? hair
+        hairstyle = choice(.hairstyle) ?? hairstyle
+        extra = choice(.extra) ?? extra
+        outfit = choice(.outfit) ?? outfit
+        colour = choice(.colour) ?? colour
+        name = (((try? c?.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? "").oneLine(TeamMember.nicknameLimit)
     }
 }
 

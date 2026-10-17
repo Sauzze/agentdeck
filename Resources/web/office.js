@@ -136,6 +136,7 @@
     const room = {};
     for (const [part, choices] of Object.entries(ROOM_CHOICES)) room[part] = choices.includes(raw[part]) ? raw[part] : choices[0];
     room.wall = STANDARD_WALL.map((standard, i) => (Array.isArray(raw.wall) && WALL_CHOICES.includes(raw.wall[i]) ? raw.wall[i] : standard));
+    room.team = teamOf(raw.team);
     return room;
   }
 
@@ -278,18 +279,35 @@
    * collared shirt, Opus in a jacket, Fable in a suit and tie. Other agents,
    * and a model not known yet, wear their agent's colour.
    */
+  /** Each outfit, and what goes with it: jeans and trainers with a T-shirt, a dark suit and an orange tie. */
+  const OUTFITS = {
+    tee: { style: 'tee', pants: 0x46679a, shoes: 0xe9e6df },
+    hoodie: { style: 'hoodie' },
+    collar: { style: 'collar' },
+    sweater: { style: 'sweater' },
+    jacket: { style: 'jacket' },
+    suit: { style: 'suit', shirt: 0x2c2f3a, pants: 0x23252d, tie: 0xd97757 },
+    labcoat: { style: 'labcoat', shirt: 0xeeeae2 },
+  };
   const MODEL_OUTFITS = {
-    haiku: { style: 'tee', shirt: 0xf59a3e, pants: 0x46679a, shoes: 0xe9e6df },
-    sonnet: { style: 'collar', shirt: 0xd97757 },
-    opus: { style: 'jacket', shirt: 0xa94a2c },
-    fable: { style: 'suit', shirt: 0x2c2f3a, pants: 0x23252d, tie: 0xd97757 },
+    haiku: { ...OUTFITS.tee, shirt: 0xf59a3e },
+    sonnet: { ...OUTFITS.collar, shirt: 0xd97757 },
+    opus: { ...OUTFITS.jacket, shirt: 0xa94a2c },
+    fable: OUTFITS.suit,
   };
 
-  /** What an agent running `model` wears: a style, and its colours. */
-  function outfitOf(agent, model) {
+  /**
+   * What an agent running `model` wears: a style, and its colours. A team
+   * `member` can pick another outfit, or another colour for it.
+   */
+  function outfitOf(agent, model, member) {
     const family = (/haiku|sonnet|opus|fable/.exec(model || '') || [''])[0];
     const dressed = agent === 'claude' ? MODEL_OUTFITS[family] : null;
-    return { style: 'plain', shirt: SHIRTS[agent] ?? SHIRTS.claude, pants: PALETTE.pants, shoes: PALETTE.shoes, ...dressed };
+    const plain = { style: 'plain', shirt: SHIRTS[agent] ?? SHIRTS.claude, pants: PALETTE.pants, shoes: PALETTE.shoes };
+    const chosen = member && member.outfit !== 'auto' ? OUTFITS[member.outfit] : dressed;
+    const outfit = { ...plain, ...chosen };
+    if (member && member.colour !== 'auto') outfit.shirt = SHIRT_COLOURS[member.colour];
+    return outfit;
   }
   /** Staff wear plain colours, none of them an agent's. */
   const STAFF_SHIRTS = [0x8a8f9c, 0x3e4a66, 0xd8d4c8, 0xb08a3a, 0x6b7f5a];
@@ -310,6 +328,15 @@
     return part(16) | part(8) | part(0);
   }
 
+  /** A colour a third of the way to white, for a knitted band or a highlight. */
+  function lighter(hex) {
+    const part = (shift) => Math.round((((hex >> shift) & 0xff) * 2 + 255) / 3) << shift;
+    return part(16) | part(8) | part(0);
+  }
+
+  /** What people wear besides their clothes: dark lenses, headphones, a bow, glasses, a lab coat's shirt and pen. */
+  const SHADES = 0x15161a, HEADPHONES = 0x6a7080, BOW = 0xe0507a, GLASS = 0xcfe3ef, LAB_SHIRT = 0x8fb3d9, LAB_PEN = 0x3f6fc4;
+
   /** A colour as the deck's theme writes it, `#rrggbb`, as a number. */
   function fromCss(text) {
     return /^#[0-9a-f]{6}$/i.test(text || '') ? parseInt(text.slice(1), 16) : null;
@@ -318,6 +345,56 @@
   const SKINS = [0xf6d3b3, 0xe8b48a, 0xc98e5f, 0x9b6a43, 0x6e4a2e];
   const HAIRS = [0x2a1d16, 0x4a3022, 0x8a5a2b, 0xd9b26a, 0x1a1a1a, 0x9a9aa0, 0xa8432a];
   const HAIR_STYLES = ['short', 'long', 'spiky', 'bun'];
+
+  /**
+   * Your team: each project's agent as you'd like them, by the project's
+   * name. Anything left on 'auto' is as the project's name picks it, and
+   * clothes on 'auto' are the model's. The apps' Layout.swift and layout.go
+   * keep the same choices.
+   */
+  const TEAM_CHOICES = {
+    skin: ['auto', 'porcelain', 'fair', 'light', 'tan', 'olive', 'brown', 'deep', 'ebony'],
+    hair: ['auto', 'black', 'espresso', 'brown', 'chestnut', 'auburn', 'ginger', 'blond', 'platinum', 'grey', 'white',
+      'pink', 'blue', 'green', 'purple'],
+    hairstyle: ['auto', 'short', 'long', 'spiky', 'bun', 'curly', 'ponytail', 'afro', 'mohawk', 'buzz', 'bald'],
+    extra: ['none', 'glasses', 'sunglasses', 'headphones', 'cap', 'beanie', 'beard', 'moustache', 'bow'],
+    outfit: ['auto', 'tee', 'hoodie', 'collar', 'sweater', 'jacket', 'suit', 'labcoat'],
+    colour: ['auto', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'yellow', 'grey', 'black', 'white'],
+  };
+  /** The most a nickname can be, in characters, and the most projects a team remembers. */
+  const NICKNAME_LIMIT = 16;
+  const TEAM_LIMIT = 50;
+  const SKIN_TONES = {
+    porcelain: 0xfbe3cf, fair: 0xf6d3b3, light: 0xe8b48a, tan: 0xd59b6a, olive: 0xb8875a, brown: 0x9b6a43, deep: 0x6e4a2e,
+    ebony: 0x4a3020,
+  };
+  const HAIR_COLOURS = {
+    black: 0x1a1a1a, espresso: 0x2a1d16, brown: 0x4a3022, chestnut: 0x8a5a2b, auburn: 0xa8432a, ginger: 0xd4722f,
+    blond: 0xd9b26a, platinum: 0xece0b8, grey: 0x9a9aa0, white: 0xe8e8e8, pink: 0xe878a8, blue: 0x4a7fd8,
+    green: 0x4fae6a, purple: 0x8a5ac8,
+  };
+  const SHIRT_COLOURS = {
+    orange: 0xd97757, red: 0xc9443a, pink: 0xe07aa0, purple: 0x7d5ab8, blue: 0x3f6fc4, teal: 0x2f9a92, green: 0x4f9a5a,
+    yellow: 0xe8c04a, grey: 0x8a8f9c, black: 0x2c2f3a, white: 0xeeeae2,
+  };
+
+  /** A team as given, with anything unknown left out or as 'auto'. */
+  function teamOf(given) {
+    const team = {};
+    if (!given || typeof given !== 'object' || Array.isArray(given)) return team;
+    // The first projects by name, as many as a team remembers, as the apps keep them.
+    const projects = Object.entries(given).filter(([project]) => project).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const [project, raw] of projects.slice(0, TEAM_LIMIT)) {
+      const member = {};
+      const parts = raw && typeof raw === 'object' ? raw : {};
+      for (const [part, choices] of Object.entries(TEAM_CHOICES)) member[part] = choices.includes(parts[part]) ? parts[part] : choices[0];
+      // On one line, as the apps keep it.
+      const name = typeof parts.name === 'string' ? parts.name.replace(/[\u0000-\u001f\u007f]/g, '').trim() : '';
+      member.name = [...name].slice(0, NICKNAME_LIMIT).join('');
+      team[project] = member;
+    }
+    return team;
+  }
 
   /**
    * How a person looks, the same every time for the same project: the
@@ -333,6 +410,22 @@
       hair: HAIRS[Number((hash / 5n) % 7n)],
       hairStyle: HAIR_STYLES[Number((hash / 35n) % 4n)],
       phase: Number((hash / 140n) % 1000n) / 1000,
+    };
+  }
+
+  /** A session's place on your team, if you've made one for its project. */
+  const memberOf = (session) => (session && decor.team[session.name]) || null;
+
+  /** How a person looks: as their project's name picks it, with your choices for them over the top. */
+  function lookFor(person) {
+    const member = person.isStaff ? null : memberOf(person.session);
+    if (!member) return { ...person.look, extra: 'none' };
+    return {
+      ...person.look,
+      skin: SKIN_TONES[member.skin] ?? person.look.skin,
+      hair: HAIR_COLOURS[member.hair] ?? person.look.hair,
+      hairStyle: member.hairstyle === 'auto' ? person.look.hairStyle : member.hairstyle,
+      extra: member.extra,
     };
   }
 
@@ -1650,7 +1743,7 @@
 
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
       if (!occupant) return;
-      const skin = occupant.look.skin;
+      const skin = lookFor(occupant).skin;
       const tool = occupant.session.state === 'thinking' ? toolKind(occupant.session.tool) : null;
       if (tool === 'web') {
         // A little globe at the end of the desk, turning
@@ -2091,10 +2184,10 @@
       const since = mic.releasedAt === null ? Infinity : now - mic.releasedAt;
       const nod = isListener(person) && since < NOD_LENGTH && Math.floor((since / NOD_LENGTH) * 4) % 2 === 0 ? 1 : 0;
       const top = topOf(person, pose) + nod;
-      const { look } = person, away = person.isFacingAway;
+      const look = lookFor(person), away = person.isFacingAway;
       const outfit = person.isStaff
         ? { ...outfitOf(null), shirt: STAFF_SHIRTS[Math.floor(look.phase * STAFF_SHIRTS.length) % STAFF_SHIRTS.length] }
-        : outfitOf(person.session.agent, person.session.model);
+        : outfitOf(person.session.agent, person.session.model, memberOf(person.session));
       const shirtColour = outfit.shirt;
       const sleeve = (px, py, w, h) => {
         ctx.fillStyle = css(shirtColour, 1, 0.78);
@@ -2174,13 +2267,20 @@
         dot(x + 2, top + 7, PALETTE.mug);
       }
 
-      // Head: a face, or the back of it
-      fill(x - 3, top + 2, 7, 5, away ? look.hair : look.skin);
+      // Head: a face, or the back of it, and the hair. A shaved head shows
+      // skin where the hair would be, a buzz cut a thin layer of it.
+      const shaved = look.hairStyle === 'bald' || look.hairStyle === 'mohawk';
+      const cropped = shaved || look.hairStyle === 'buzz';
+      fill(x - 3, top + 2, 7, 5, away && !shaved ? look.hair : look.skin);
       if (away) fill(x - 2, top + 6, 5, 1, look.skin);
-      fill(x - 2, top, 5, 1, look.hair);
-      fill(x - 3, top + 1, 7, 1, look.hair);
-      dot(x - 3, top + 2, look.hair);
-      dot(x + 3, top + 2, look.hair);
+      if (cropped) {
+        fill(x - 2, top + 1, 5, 1, shaved ? look.skin : look.hair);
+      } else {
+        fill(x - 2, top, 5, 1, look.hair);
+        fill(x - 3, top + 1, 7, 1, look.hair);
+        dot(x - 3, top + 2, look.hair);
+        dot(x + 3, top + 2, look.hair);
+      }
       if (look.hairStyle === 'long') {
         fill(x - 3, top + 2, 1, 7, look.hair);
         fill(x + 3, top + 2, 1, 7, look.hair);
@@ -2188,9 +2288,23 @@
         for (const dx of [-2, 0, 2]) dot(x + dx, top - 1, look.hair);
       } else if (look.hairStyle === 'bun') {
         fill(x - 1, top - 2, 3, 2, look.hair);
+      } else if (look.hairStyle === 'curly') {
+        for (const dx of [-3, -1, 1, 3]) dot(x + dx, top - 1, look.hair);
+        dot(x - 4, top + 2, look.hair);
+        dot(x + 4, top + 2, look.hair);
+      } else if (look.hairStyle === 'ponytail') {
+        fill(x + 4, top + 1, 1, 5, look.hair);
+      } else if (look.hairStyle === 'afro') {
+        fill(x - 4, top - 2, 9, 3, look.hair);
+        fill(x - 4, top + 1, 1, 4, look.hair);
+        fill(x + 4, top + 1, 1, 4, look.hair);
+      } else if (look.hairStyle === 'mohawk') {
+        fill(x, top - 2, 1, 3, look.hair);
       }
+      drawHeadwear(x, top, look.extra, outfit.shirt, away);
 
       if (away) return;
+      drawFace(x, top, look);
       const blinking = (now + look.phase * 5) % 4.5 < 0.15;
       // While the mic is held its listener looks toward it, and when it goes
       // on, everyone looks up for a moment.
@@ -2213,6 +2327,45 @@
       } else if (!blinking) {
         dot(x - 2, top + 4, PALETTE.eye);
         dot(x + 2, top + 4, PALETTE.eye);
+      }
+      // Sunglasses stay on, whatever the eyes behind them do.
+      if (look.extra === 'sunglasses') fill(x - 3, top + 4, 7, 1, SHADES);
+    }
+
+    /** What's worn on the head, seen from in front or behind: headphones, a cap, a beanie or a bow. */
+    function drawHeadwear(x, top, extra, colour, away) {
+      if (extra === 'headphones') {
+        fill(x - 3, top - 1, 7, 1, HEADPHONES);
+        fill(x - 4, top, 1, 2, HEADPHONES);
+        fill(x + 4, top, 1, 2, HEADPHONES);
+        fill(x - 4, top + 2, 1, 3, HEADPHONES);
+        fill(x + 4, top + 2, 1, 3, HEADPHONES);
+      } else if (extra === 'cap') {
+        fill(x - 3, top - 1, 7, 2, colour);
+        if (!away) fill(x - 4, top + 1, 9, 1, darker(colour));
+      } else if (extra === 'beanie') {
+        fill(x - 3, top - 1, 7, 2, colour);
+        fill(x - 3, top + 1, 7, 1, darker(colour));
+        dot(x, top - 2, PALETTE.paper);
+      } else if (extra === 'bow') {
+        dot(x + 1, top - 1, BOW);
+        dot(x + 3, top - 1, BOW);
+        dot(x + 2, top - 1, darker(BOW));
+      }
+    }
+
+    /** What's on the face, under the eyes drawn over it: glasses, a beard or a moustache. */
+    function drawFace(x, top, look) {
+      if (look.extra === 'glasses') {
+        fill(x - 3, top + 3, 3, 1, PALETTE.eye);
+        fill(x + 1, top + 3, 3, 1, PALETTE.eye);
+        for (const dx of [-3, -1, 1, 3]) dot(x + dx, top + 4, GLASS);
+      } else if (look.extra === 'beard') {
+        fill(x - 3, top + 4, 1, 3, look.hair);
+        fill(x + 3, top + 4, 1, 3, look.hair);
+        fill(x - 2, top + 6, 5, 1, look.hair);
+      } else if (look.extra === 'moustache') {
+        fill(x - 1, top + 5, 3, 1, look.hair);
       }
     }
 
@@ -2384,7 +2537,9 @@
     function drawLabel(desk) {
       if (desk >= office.seats.length) return;
       const s = office.seats[desk];
-      const name = s.session ? s.session.name : s.pin;
+      // A nickname you've given their agent, or their project's name.
+      const member = memberOf(s.session);
+      const name = s.session ? (member && member.name) || s.session.name : s.pin;
       if (!name) return;
 
       const roomy = LABEL_SIZE * scale >= LABEL_SMALLEST * ratio;
@@ -2457,6 +2612,21 @@
       const white = PALETTE.paper;
       if (outfit.style === 'tee') {
         fill(x - half, y + 2, half * 2 + 1, 1, white);
+      } else if (outfit.style === 'hoodie') {
+        // The hood round the neck, its strings, and the pocket
+        dot(x - 2, y, darker(outfit.shirt));
+        dot(x + 2, y, darker(outfit.shirt));
+        dot(x - 1, y + 2, white);
+        dot(x + 1, y + 2, white);
+        fill(x - half + 1, y + rows - 2, half * 2 - 1, 1, darker(outfit.shirt));
+      } else if (outfit.style === 'sweater') {
+        // A knitted band across the chest, and the ribbing at the hem
+        fill(x - half, y + 2, half * 2 + 1, 1, lighter(outfit.shirt));
+        fill(x - half, y + rows - 1, half * 2 + 1, 1, darker(outfit.shirt));
+      } else if (outfit.style === 'labcoat') {
+        // Open over a blue shirt, a pen in the pocket
+        fill(x, y, 1, rows - 1, LAB_SHIRT);
+        dot(x - 2, y + 2, LAB_PEN);
       } else if (outfit.style === 'collar') {
         dot(x - 2, y, white);
         dot(x + 2, y, white);

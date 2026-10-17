@@ -57,9 +57,9 @@ func (k *KeyCount) UnmarshalJSON(data []byte) error {
 // each of the back wall's five places holds, the floor, the walls' paint, the
 // lounge's carpet and the piece in its corner, whether the sky keeps the
 // computer's time or it's always day, its pet, whether the windows follow the
-// seasons, and how loud it is, as the Mac app's Room. office.js draws it, with
-// the same choices. Anything unknown, or of the wrong kind, is as
-// standard: it only changes how the room looks.
+// seasons, how loud it is, and your team, as the Mac app's Room. office.js
+// draws it, with the same choices. Anything unknown, or of the wrong kind, is
+// as standard: it only changes how the room looks.
 type Room struct {
 	Mic    string   `json:"mic"`
 	Wall   []string `json:"wall"`
@@ -71,6 +71,54 @@ type Room struct {
 	Pet    string   `json:"pet"`
 	Season string   `json:"season"`
 	Sound  string   `json:"sound"`
+	// How each project's agent looks, by the project's name.
+	Team map[string]TeamMember `json:"team"`
+}
+
+// TeamMember is how one project's agent looks in the office: skin, hair, a
+// hairstyle, something extra such as glasses or a cap, an outfit and its
+// colour, and a nickname for its desk. "auto" is as the project's name picks
+// it, and the clothes as its model's, as the Mac app's TeamMember.
+type TeamMember struct {
+	Skin      string `json:"skin"`
+	Hair      string `json:"hair"`
+	Hairstyle string `json:"hairstyle"`
+	Extra     string `json:"extra"`
+	Outfit    string `json:"outfit"`
+	Colour    string `json:"colour"`
+	Name      string `json:"name"`
+}
+
+const (
+	// The most projects a team remembers, and the most a nickname can be, in
+	// characters.
+	teamLimit     = 50
+	nicknameLimit = 16
+)
+
+// Each part of a team member's choices; the first is the standard one.
+var teamChoices = map[string][]string{
+	"skin": {"auto", "porcelain", "fair", "light", "tan", "olive", "brown", "deep", "ebony"},
+	"hair": {"auto", "black", "espresso", "brown", "chestnut", "auburn", "ginger", "blond", "platinum", "grey", "white",
+		"pink", "blue", "green", "purple"},
+	"hairstyle": {"auto", "short", "long", "spiky", "bun", "curly", "ponytail", "afro", "mohawk", "buzz", "bald"},
+	"extra":     {"none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"},
+	"outfit":    {"auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat"},
+	"colour":    {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
+}
+
+// checked is the member with anything unknown as standard, and the nickname
+// on one line, cut to its limit.
+func (m TeamMember) checked() TeamMember {
+	choose := func(part, given string) string {
+		if slices.Contains(teamChoices[part], given) {
+			return given
+		}
+		return teamChoices[part][0]
+	}
+	return TeamMember{Skin: choose("skin", m.Skin), Hair: choose("hair", m.Hair), Hairstyle: choose("hairstyle", m.Hairstyle),
+		Extra: choose("extra", m.Extra), Outfit: choose("outfit", m.Outfit), Colour: choose("colour", m.Colour),
+		Name: oneLine(m.Name, nicknameLimit)}
 }
 
 var (
@@ -106,6 +154,15 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 	for _, place := range wall {
 		r.Wall = append(r.Wall, text(place))
 	}
+	var team map[string]json.RawMessage
+	json.Unmarshal(raw["team"], &team)
+	r.Team = map[string]TeamMember{}
+	for project, given := range team {
+		var parts map[string]json.RawMessage
+		json.Unmarshal(given, &parts)
+		r.Team[project] = TeamMember{Skin: text(parts["skin"]), Hair: text(parts["hair"]), Hairstyle: text(parts["hairstyle"]),
+			Extra: text(parts["extra"]), Outfit: text(parts["outfit"]), Colour: text(parts["colour"]), Name: text(parts["name"])}
+	}
 	*r = r.checked()
 	return nil
 }
@@ -133,6 +190,18 @@ func (r Room) checked() Room {
 		if i < len(r.Wall) && slices.Contains(wallChoices, r.Wall[i]) {
 			checked.Wall[i] = r.Wall[i]
 		}
+	}
+	// The first projects by name, as many as a team remembers.
+	checked.Team = map[string]TeamMember{}
+	projects := make([]string, 0, len(r.Team))
+	for project := range r.Team {
+		if project != "" {
+			projects = append(projects, project)
+		}
+	}
+	slices.Sort(projects)
+	for _, project := range projects[:min(len(projects), teamLimit)] {
+		checked.Team[project] = r.Team[project].checked()
 	}
 	return checked
 }
