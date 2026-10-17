@@ -80,11 +80,6 @@ final class OfficeSaverView: ScreenSaverView {
         if office == nil { check() }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        NoticeView.body.setFill()
-        dirtyRect.fill()
-    }
-
     @objc private func screenSaverWillStop() { stopAnimation() }
 
     /// Shows the office if SauzzeDeck Pro is running and still knows the
@@ -131,9 +126,10 @@ final class OfficeSaverView: ScreenSaverView {
     private func closeOffice() {
         guard let web = office else { return }
         office = nil
-        web.stopLoading()
+        // Deaf to the page first, so stopping it can't start anything again.
         web.navigationDelegate = nil
         web.configuration.userContentController.removeAllScriptMessageHandlers()
+        web.stopLoading()
         web.removeFromSuperview()
         notice.show(nil)
         notice.isHidden = false
@@ -160,13 +156,17 @@ extension OfficeSaverView: WKNavigationDelegate {
         notice.isHidden = true
     }
 
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { lost() }
+    // A page that won't load or keeps crashing is tried again at the next
+    // tick, not straight away, so it can't go round and round.
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        lost()
+        closeOffice()
+        notice.show(.appClosed)
     }
 
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { lost() }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { closeOffice() }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { closeOffice() }
 }
 
 extension OfficeSaverView: WKScriptMessageHandler {

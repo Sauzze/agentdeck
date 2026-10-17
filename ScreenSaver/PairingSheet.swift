@@ -14,6 +14,8 @@ final class PairingSheet: NSObject, NSTextFieldDelegate {
     private let status = NSTextField(wrappingLabelWithString: "")
     private let pairButton = NSButton(title: "Pair", target: nil, action: nil)
     private var pairing: Task<Void, Never>?
+    /// Whether the key from before still works, asked as the sheet opens.
+    private var checking: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -54,9 +56,12 @@ final class PairingSheet: NSObject, NSTextFieldDelegate {
         code.stringValue = ""
         pairButton.isEnabled = false
         status.stringValue = ""
+        checking?.cancel()
         if let key = Pairing.key {
-            Task {
-                switch await Pairing.check(key) {
+            checking = Task {
+                let answer = await Pairing.check(key)
+                guard !Task.isCancelled else { return }
+                switch answer {
                 case .paired: status.stringValue = "Paired. Your office shows while the screen saver runs."
                 case .unpaired: status.stringValue = "Unpaired on the setup page. Pair again with a new code."
                 case .unreachable: status.stringValue = "Paired. Open SauzzeDeck Pro to see your office."
@@ -76,6 +81,8 @@ final class PairingSheet: NSObject, NSTextFieldDelegate {
 
     @objc private func pair() {
         guard pairing == nil else { return }
+        // Its answer is about the key this replaces.
+        checking?.cancel()
         pairButton.isEnabled = false
         let attempt = code.stringValue
         pairing = Task {

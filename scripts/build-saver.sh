@@ -22,7 +22,7 @@ rm -rf "$SAVER" "$WORK"
 mkdir -p "$SAVER/Contents/MacOS" "$WORK"
 SLICES=()
 for ARCH in "${ARCHS[@]}"; do
-  swiftc -O -parse-as-library -module-name "$EXECUTABLE" -target "$ARCH-apple-macos$MIN_MACOS" \
+  swiftc -O -swift-version 5 -parse-as-library -module-name "$EXECUTABLE" -target "$ARCH-apple-macos$MIN_MACOS" \
     -Xlinker -bundle -o "$WORK/$ARCH" ScreenSaver/*.swift
   SLICES+=("$WORK/$ARCH")
 done
