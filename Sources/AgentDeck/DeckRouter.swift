@@ -60,10 +60,18 @@ final class DeckRouter: Router {
             return respond(.json(["key": key]))
         }
 
+        // The office's drawing, shared by the deck and the pages that show it.
+        // It holds nothing of yours, so it needs no key.
+        if request.method == "GET" && request.path == "/office.js" {
+            return respond(.file(Paths.web.appendingPathComponent("office.js")))
+        }
+
         let phone = deck.access.phones.phone(withKey: request.query["t"] ?? request.headers["x-agentdeck-token"])
         if let phone { deck.access.phones.markSeen(phone.id) }
 
-        if request.method == "GET" && request.path == "/" {
+        // The deck, or the office on a screen of its own: the same page, and
+        // the same pairing first.
+        if request.method == "GET" && (request.path == "/" || request.path == "/office") {
             return respond(.file(Paths.web.appendingPathComponent(phone == nil ? "pair.html" : "deck.html")))
         }
         guard let phone else { return respond(.status(401)) }

@@ -9,14 +9,17 @@ import (
 )
 
 // Layout is how the phone's deck is laid out, as set up on the setup page: how
-// many session keys, whether the dial and stick show, and the rows of buttons
-// under them, as the Mac app's Layout.swift. It is checked before it's kept:
+// many session keys, whether the office shows in their place, whether the dial
+// and stick show, and the rows of buttons under them, as the Mac app's
+// Layout.swift. It is checked before it's kept:
 // the phone draws it, and its buttons type into sessions.
 type Layout struct {
-	Keys  KeyCount    `json:"keys"`
-	Dial  bool        `json:"dial"`
-	Stick bool        `json:"stick"`
-	Rows  []ButtonRow `json:"rows"`
+	Keys KeyCount `json:"keys"`
+	// The Agent Office in place of the keys: a desk for each, in the same order.
+	Office bool        `json:"office"`
+	Dial   bool        `json:"dial"`
+	Stick  bool        `json:"stick"`
+	Rows   []ButtonRow `json:"rows"`
 }
 
 // KeyCount is how many session keys the deck shows: Auto, one for each
@@ -109,8 +112,8 @@ func standardLayout() Layout {
 }
 
 // parseLayout reads a layout sent by the setup page or found in a profile's
-// file. What it leaves out is the default: Auto keys, the dial and the stick
-// showing, no buttons.
+// file. What it leaves out is the default: Auto keys, no office, the dial and
+// the stick showing, no buttons.
 func parseLayout(data []byte) (Layout, error) {
 	layout := Layout{Keys: Auto, Dial: true, Stick: true}
 	if err := json.Unmarshal(data, &layout); err != nil {
@@ -122,7 +125,7 @@ func parseLayout(data []byte) (Layout, error) {
 // checked keeps what the deck can draw and press: known buttons, each of
 // the deck's own once, within the limits.
 func (l Layout) checked() Layout {
-	checked := Layout{Keys: l.Keys, Dial: l.Dial, Stick: l.Stick, Rows: []ButtonRow{}}
+	checked := Layout{Keys: l.Keys, Office: l.Office, Dial: l.Dial, Stick: l.Stick, Rows: []ButtonRow{}}
 	seen := map[string]bool{}
 	for _, row := range l.Rows[:min(len(l.Rows), maxRows)] {
 		buttons := []Button{}

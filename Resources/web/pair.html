@@ -61,8 +61,9 @@
       const res = await fetch('/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: code.value }) });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error);
-      // The key goes in the deck's URL, so Add to Home Screen keeps it.
-      location.replace(`/?t=${encodeURIComponent(body.key)}`);
+      // The key goes in the page's URL, so Add to Home Screen keeps it: the
+      // deck's, or the office's when that's what was opened.
+      location.replace(`${location.pathname}?t=${encodeURIComponent(body.key)}`);
     } catch (err) {
       error.textContent = err.message || 'Could not reach your computer. Are you on the same Wi-Fi?';
       code.value = '';

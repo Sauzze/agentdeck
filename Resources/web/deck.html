@@ -58,8 +58,9 @@
      on a grid of six columns: one key fills the space, two stack, three are
      one over two, up to a 3×3 of nine, and no cell is ever left empty.
      What's written on a key grows with it. */
+  .view { position: relative; height: 44dvh; flex: none; min-height: 0; }
   .keys { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
-    gap: var(--gap); height: 44dvh; flex: none; }
+    gap: var(--gap); height: 100%; }
   .key { grid-column: span var(--span, 2); min-width: 0; min-height: 0; display: flex; flex-direction: column;
     justify-content: space-between; padding: 11px 12px; container-type: inline-size; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
@@ -80,6 +81,18 @@
   .key[data-state="unread"]   { --c: var(--unread); }
   .key[data-state="error"]    { --c: var(--error); }
   .key.selected { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  /* The office in place of the keys: the same sessions, as people at desks. */
+  /* The canvas is laid over the space, not sized by it: its own pixels would
+     otherwise feed back into its size. */
+  .office { position: relative; height: 100%; touch-action: none; }
+  .office canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .keys[hidden], .office[hidden] { display: none; }
+  /* Keys or office, flipped on this phone like the stick's legend. */
+  .view-switch { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); display: flex; gap: 14px;
+    padding: 6px 12px; background: none; border: 0; font-family: inherit; font-size: 10px; font-weight: 700; line-height: 1;
+    letter-spacing: .14em; color: var(--faint); }
+  .view-switch .on { color: var(--dim); }
 
   @keyframes pulse { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 30%, var(--cap-top)), color-mix(in srgb, var(--c) 20%, var(--cap))); } }
   @keyframes blink { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 38%, var(--cap-top)), color-mix(in srgb, var(--c) 28%, var(--cap))); } }
@@ -186,11 +199,20 @@
   .status.off { color: var(--error); }
   .status.flash { color: var(--ink); }
 
+  /* /office: the office alone, filling a screen of its own. What the status
+     line has to say floats over it, and only while it says it. */
+  .whole .deck { display: flex;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .whole .view { flex: 1; height: auto; }
+  .whole .controls, .whole .view-switch { display: none; }
+  .whole .status { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; }
+  .whole .status:not(.flash):not(.off) { visibility: hidden; }
+
   /* Sideways: keys on the left, everything else on the right. */
   @media (orientation: landscape) {
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
-    .keys { height: 100%; }
+    .view { height: 100%; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
@@ -201,7 +223,11 @@
 </head>
 <body>
 <main class="deck">
-  <section class="keys" id="keys"></section>
+  <div class="view">
+    <button class="view-switch" id="view-switch" aria-label="Switch between keys and office"><span>KEYS</span><span>OFFICE</span></button>
+    <section class="keys" id="keys"></section>
+    <section class="office" id="office" hidden><canvas id="office-canvas"></canvas></section>
+  </div>
 
   <section class="controls">
     <div class="target"><span id="target">no session selected</span><span id="target-state"></span></div>
@@ -243,6 +269,7 @@
 </div>
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
 
+<script src="/office.js"></script>
 <script>
   /** Today's controls, for a computer that sends no layout of its own. The
       keys are whatever it sends: one per session, or a fixed number. */
@@ -279,6 +306,8 @@
   // On the setup page, the deck is a preview: that page sends it what to
   // draw, and its controls say what they would do instead of doing it.
   const preview = location.pathname === '/setup/preview';
+  // /office: the office alone, for a spare screen.
+  const whole = location.pathname === '/office';
   const $ = (id) => document.getElementById(id);
 
   let keyData = [];    // the keys as the server lays them out
@@ -300,6 +329,7 @@
     $('analog').hidden = !layout.dial && !layout.stick;
     $('analog').classList.toggle('single', layout.dial !== layout.stick);
     buildButtons(layout.rows);
+    showView();
   }
 
   /**
@@ -346,6 +376,34 @@
       return el;
     }));
   }
+
+  /* ------------------------------------------------------------- office */
+
+  const office = AgentOffice.create($('office-canvas'));
+
+  /**
+   * The keys or the office, as chosen in setup's layout. The legend above
+   * them flips it on this phone, until the layout's choice changes.
+   */
+  function showView() {
+    const chosen = !!(layout && layout.office);
+    let flipped = null;
+    try { flipped = JSON.parse(localStorage.getItem('view')); } catch {}
+    const showOffice = whole || (!preview && flipped && flipped.chosen === chosen ? flipped.office : chosen);
+    $('keys').hidden = showOffice;
+    $('office').hidden = !showOffice;
+    office.setVisible(showOffice);
+    const [keys, room] = $('view-switch').children;
+    keys.classList.toggle('on', !showOffice);
+    room.classList.toggle('on', showOffice);
+  }
+
+  $('view-switch').addEventListener('click', () => {
+    const chosen = !!(layout && layout.office);
+    try { localStorage.setItem('view', JSON.stringify({ chosen, office: $('office').hidden })); } catch {}
+    tick();
+    showView();
+  });
 
   /* --------------------------------------------------------------- dial */
 
@@ -809,6 +867,7 @@
     scrollEnabled = data.scroll;
     applyTheme(data.theme);
     applyLayout(data.layout || STANDARD_LAYOUT);
+    office.show(data);
     $('status').classList.remove('off');
     render();
   }
@@ -832,7 +891,7 @@
 
   /** Unpaired on the computer: the pairing page takes over, without the old key. */
   function unpaired() {
-    location.replace('/');
+    location.replace(location.pathname);
   }
 
   // Installed, it runs standalone; in a browser it is a tab worth upgrading.
@@ -850,6 +909,10 @@
     };
   }
 
+  if (whole) {
+    document.body.classList.add('whole');
+    document.title = 'Agent Office';
+  }
   buildKeys(6);
   applyLayout(STANDARD_LAYOUT);
   if (preview) {
@@ -864,10 +927,11 @@
       // Closed for good means the computer answered, but not with the deck: it no
       // longer knows this phone. Unreachable, the stream keeps retrying.
       if (stream.readyState === EventSource.CLOSED) return unpaired();
+      office.close();
       $('status').classList.add('off');
       $('status').textContent = "Can't reach your computer. Is SauzzeDeck Pro running?";
     };
-    installHint();
+    if (!whole) installHint();
   }
   render();
 </script>

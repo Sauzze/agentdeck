@@ -197,6 +197,13 @@ func (rt *router) handle(w http.ResponseWriter, r *request) {
 		return
 	}
 
+	// The office's drawing, shared by the deck and the pages that show it. It
+	// holds nothing of yours, so it needs no key.
+	if r.Method == http.MethodGet && r.URL.Path == "/office.js" {
+		serveFile(w, "Resources/web/office.js")
+		return
+	}
+
 	key := r.URL.Query().Get("t")
 	if key == "" {
 		key = r.Header.Get(hookKeyHeader)
@@ -210,7 +217,9 @@ func (rt *router) handle(w http.ResponseWriter, r *request) {
 	}
 	d.mu.Unlock()
 
-	if r.Method == http.MethodGet && r.URL.Path == "/" {
+	// The deck, or the office on a screen of its own: the same page, and the
+	// same pairing first.
+	if r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/office") {
 		page := "deck.html"
 		if phoneID == "" {
 			page = "pair.html"
@@ -628,9 +637,12 @@ func serveFramedBy(w http.ResponseWriter, name, frameOptions, frameAncestors str
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if strings.HasSuffix(name, ".png") {
+	switch {
+	case strings.HasSuffix(name, ".png"):
 		w.Header().Set("Content-Type", "image/png")
-	} else {
+	case strings.HasSuffix(name, ".js"):
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	default:
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("X-Frame-Options", frameOptions)
 		w.Header().Set("Content-Security-Policy", "frame-ancestors "+frameAncestors)
