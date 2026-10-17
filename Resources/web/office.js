@@ -240,6 +240,12 @@
     return alpha >= 1 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${Math.max(0, alpha)})`;
   }
 
+  /** A colour at six tenths of its brightness, for the side of something lit from above. */
+  function darker(hex) {
+    const part = (shift) => Math.round(((hex >> shift) & 0xff) * 0.6) << shift;
+    return part(16) | part(8) | part(0);
+  }
+
   /** A colour as the deck's theme writes it, `#rrggbb`, as a number. */
   function fromCss(text) {
     return /^#[0-9a-f]{6}$/i.test(text || '') ? parseInt(text.slice(1), 16) : null;
@@ -824,6 +830,24 @@
     accept: ['0000011', '0000110', '1101100', '0111000', '0010000'],
     reject: ['11011', '01110', '00100', '01110', '11011'],
   };
+
+  /**
+   * Where the dial is out of sight, the picked Claude Code desk has paint
+   * chips along its front, one for each effort from white for low to red
+   * for max, the colours the desk is painted in: a tap sets that effort, as
+   * the dial does. Each chip, in art pixels, and the gap between them.
+   */
+  const CHIP = { w: 11, h: 10 };
+  const CHIP_GAP = 1;
+  const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+  /** The chips on the desk `desk`: across its front, a little wider than it, kept inside the room. */
+  function effortChips(desk) {
+    const { x, y } = DESKS[desk];
+    const w = EFFORTS.length * CHIP.w + (EFFORTS.length - 1) * CHIP_GAP;
+    const left = Math.max(1, Math.min(WIDTH - 1 - w, Math.round(x + DESK_WIDTH / 2 - w / 2)));
+    return { left, top: y + 5, w, h: CHIP.h, chips: EFFORTS.map((level, i) => ({ level, x: left + i * (CHIP.w + CHIP_GAP), y: y + 5 })) };
+  }
 
   /** The choice keys for the agent at `desk`: a panel just above its head, pointing down at it, kept inside the room. */
   function choicePanel(desk) {
@@ -2026,6 +2050,41 @@
     }
 
     /**
+     * The paint chips on the picked desk: the effort it's set to stands
+     * proud in a white outline, a tapped chip sinks, and max carries the
+     * red button's trefoil.
+     */
+    function drawChips() {
+      const { left, top, w, h, chips } = frame.chips;
+      const session = sessionAt(selectedDesk);
+      fill(left - 1, top - 1, w + 2, h + 3, PALETTE.frame);
+      fill(left - 1, top + h + 2, w + 2, 1, SHADOW);
+      const down = frame.chipDown;
+      for (const { level, x, y } of chips) {
+        const paint = EFFORT_PAINT[level];
+        const set = session && session.effort === level;
+        const sunk = down && down.level === level && (down.held || now - down.at < CHOICE_PRESS_LENGTH) ? 1 : 0;
+        // A chip is a face over a darker edge: the set one stands a pixel
+        // proud, and a tapped one sinks flat.
+        const face = y + sunk - (set && !sunk ? 1 : 0);
+        fill(x, face + h - 1, CHIP.w, y - face + 1, darker(paint));
+        fill(x, face, CHIP.w, h - 1, paint);
+        fill(x, face, CHIP.w, 1, WHITE, 0.35);
+        if (set) {
+          fill(x, face, CHIP.w, 1, WHITE);
+          fill(x, face + h - 2, CHIP.w, 1, WHITE);
+          fill(x, face, 1, h - 1, WHITE);
+          fill(x + CHIP.w - 1, face, 1, h - 1, WHITE);
+        }
+        if (level === 'max') {
+          // The trefoil, in three dots round a fourth
+          const cx = x + 5, cy = face + 4;
+          for (const [dx, dy] of [[0, -2], [-2, 1], [2, 1], [0, 0]]) dot(cx + dx, cy + dy, PALETTE.domeDark);
+        }
+      }
+    }
+
+    /**
      * The window onto the room: rings of shadow from its edge inwards, each
      * fainter than the last, then the edge in the keys' colour.
      */
@@ -2104,6 +2163,7 @@
     DESKS.forEach((_, desk) => drawTimer(desk));
     office.people.forEach(drawBubble);
     DESKS.forEach((_, desk) => drawLabel(desk));
+    if (frame.chips) drawChips();
     if (frame.choices) drawChoices();
 
     if (glass) {
@@ -2175,6 +2235,7 @@
     let wobbling = null;     // the button or the mic, tapped with no desk picked: { what, at }
     let buttonDown = false;  // a finger on the nuclear button
     let choiceDown = null;   // the last choice key tapped: { action, at, held }
+    let chipDown = null;     // the last paint chip tapped: { level, at, held }
     let finger = null;       // the one finger on the room: { id }
     // The window the canvas is in, its page's or one it has moved to: the
     // room draws with that window's frames and pixels, and pauses only when
@@ -2220,6 +2281,13 @@
       return seat ? seat.session : null;
     }
 
+    /** The paint chips, on the picked desk of an agent with an effort setting, while the dial is out of sight. */
+    function chips() {
+      if (framed) return null;
+      const desk = office.seats.findIndex((s) => s.session && s.session.id === selected);
+      return desk >= 0 && office.seats[desk].session.dial ? effortChips(desk) : null;
+    }
+
     /** The choice keys, while the picked agent waits on you and the deck's own controls are out of sight. */
     function choices() {
       if (framed) return null;
@@ -2249,7 +2317,7 @@
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
-        selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown,
+        selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown, chips: chips(), chipDown,
       });
     }
 
@@ -2299,6 +2367,15 @@
         const { x: dx, y: dy } = DESKS[desk];
         if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
       });
+      const strip = chips();
+      if (strip) {
+        for (const chip of strip.chips) {
+          consider({ kind: 'chip', level: chip.level }, { left: chip.x, right: chip.x + CHIP.w, top: chip.y, bottom: chip.y + CHIP.h }, -1);
+        }
+        // A tap on the strip goes to a chip or nowhere, never to what's under it.
+        const onStrip = x >= strip.left - 1 && x <= strip.left + strip.w + 1 && y >= strip.top - 1 && y <= strip.top + strip.h + 2;
+        if (onStrip) return best && best.target.kind === 'chip' ? best.target : null;
+      }
       const panel = choices();
       if (panel) {
         for (const key of panel.keys) {
@@ -2316,6 +2393,11 @@
       if (target.kind === 'choice') {
         choiceDown = { action: target.action, at: clock(), held: true };
         return on.choose?.(target.action);
+      }
+      // Max from a chip is the red button's: its agent runs to slam it.
+      if (target.kind === 'chip') {
+        chipDown = { level: target.level, at: clock(), held: true };
+        return target.level === 'max' ? on.max?.() : on.effort?.(target.level);
       }
       if (target.kind === 'session') return on.select?.(target.id);
       if (target.kind === 'pinned') return on.hint?.(`Nothing running in ${target.name}`);
@@ -2340,6 +2422,7 @@
       finger = null;
       buttonDown = false;
       if (choiceDown) choiceDown.held = false;
+      if (chipDown) chipDown.held = false;
       if (!mic.held) return;
       mic.held = false;
       mic.releasedAt = clock();

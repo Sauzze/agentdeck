@@ -270,6 +270,7 @@ the room works like the keys:
 | A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
+| The paint chips on a Claude Code desk | Set its effort, from white for low to red for max, like the dial; max is the red button's. They're on the selected desk wherever the dial is out of sight: in full screen, on `/office` and in the pop-out window. |
 | ▲ ▼ ✓ ✕, over an agent waiting on you | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk wherever the deck's controls are out of sight: in full screen, on `/office` and in the pop-out window. |
 
 **Full screen:** tap **⛶** above the room, and the dial and buttons step aside
