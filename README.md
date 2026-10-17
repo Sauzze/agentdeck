@@ -257,6 +257,12 @@ the room works like the keys:
 address your phone uses with `/office` at the end. It pairs like a phone, then
 shows the office alone, full screen, and can be tapped too.
 
+**On top of your other windows:** on the computer running SauzzeDeck Pro, open
+`http://localhost:7710/office` in Chrome or Edge and click **POP OUT** in its
+corner. The office moves into a small window that stays above everything else,
+and can still be clicked. Other browsers, and the address your phone uses,
+don't offer it.
+
 ## Voice
 
 The mic button uses Claude Code's own voice input (`/voice`), in *tap* mode.

@@ -7,11 +7,13 @@
  * grid of art pixels, scaled by a whole number of the screen's pixels so
  * every edge stays sharp.
  *
- *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown) }
+ *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown), moved() }
  *
  * `show` takes what the deck streams; `close` empties the office when the
  * stream drops, and whoever is there when it's back is already at work.
- * `select` marks the session the deck's controls act on.
+ * `select` marks the session the deck's controls act on. `moved` says the
+ * canvas is now in another window, such as one kept on top of the others,
+ * or back on its page: the room goes on there, sized for that window.
  *
  * The room can be tapped, and says what was tapped through `on`, for the
  * page to do what its keys and buttons would: `on.select(id)` for a desk or
@@ -1644,27 +1646,57 @@
     let wobbling = null;     // the button or the mic, tapped with no desk picked: { what, at }
     let buttonDown = false;  // a finger on the nuclear button
     let finger = null;       // the one finger on the room: { id }
+    // The window the canvas is in, its page's or one it has moved to: the
+    // room draws with that window's frames and pixels, and pauses only when
+    // it's hidden. The page can be out of sight while that window is on top.
+    let host = null;         // { window, resizing, seen }
 
     // The canvas holds the screen's own pixels, so the art can be scaled by
     // a whole number of them.
     function resize() {
-      const ratio = window.devicePixelRatio || 1;
+      const ratio = host.window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       canvas.width = Math.max(1, Math.round(rect.width * ratio));
       canvas.height = Math.max(1, Math.round(rect.height * ratio));
       ctx.imageSmoothingEnabled = false;
     }
-    new ResizeObserver(resize).observe(canvas);
+
+    /** Follows the window the canvas is in now: its size, and whether it can be seen. */
+    function bind() {
+      const win = canvas.ownerDocument.defaultView || window;
+      if (host && host.window === win) return;
+      unbind();
+      const resizing = new win.ResizeObserver(resize);
+      resizing.observe(canvas);
+      const seen = () => {
+        if (win.document.hidden && finger) lift();
+        run();
+      };
+      win.document.addEventListener('visibilitychange', seen);
+      host = { window: win, resizing, seen };
+    }
+
+    function unbind() {
+      if (!host) return;
+      if (frame !== null) host.window.cancelAnimationFrame(frame);
+      frame = null;
+      host.resizing.disconnect();
+      host.window.document.removeEventListener('visibilitychange', host.seen);
+      host = null;
+    }
 
     function selectedSession() {
       const seat = office.seats.find((s) => s.session && s.session.id === selected);
       return seat ? seat.session : null;
     }
 
-    function tick(time) {
+    function tick() {
       frame = null;
-      if (!visible || document.hidden) return;
-      frame = requestAnimationFrame(tick);
+      if (!visible || host.window.document.hidden) return;
+      frame = host.window.requestAnimationFrame(tick);
+      // The page's clock, not the frame's: each window counts its frames'
+      // time from when it opened, and the room can move between them.
+      const time = performance.now();
       if (time - last < FRAME_TIME - 1) return;
       if (last && time - last > STALE_AFTER && latest) {
         office.close();
@@ -1679,13 +1711,13 @@
       office.step(now);
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
-        width: canvas.width, height: canvas.height, ratio: window.devicePixelRatio || 1,
+        width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
         selected, mic, wobble: wobbling, buttonDown,
       });
     }
 
     function run() {
-      if (frame === null && visible && !document.hidden) frame = requestAnimationFrame(tick);
+      if (frame === null && visible && !host.window.document.hidden) frame = host.window.requestAnimationFrame(tick);
     }
 
     /**
@@ -1699,7 +1731,7 @@
       const { scale, ox, oy } = fitRoom(canvas.width, canvas.height);
       const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
       const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
-      const reach = (SMALLEST_TARGET * (window.devicePixelRatio || 1)) / scale;
+      const reach = (SMALLEST_TARGET * (host.window.devicePixelRatio || 1)) / scale;
       const now = clock();
       let best = null;
       const consider = (target, box, rank) => {
@@ -1776,10 +1808,7 @@
     canvas.addEventListener('pointermove', (e) => {
       if (e.pointerType === 'mouse' && !finger) canvas.style.cursor = targetAt(e.clientX, e.clientY) ? 'pointer' : '';
     });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && finger) lift();
-      run();
-    });
+    bind();
     resize();
     run();
 
@@ -1796,6 +1825,17 @@
       setVisible(shown) {
         visible = shown;
         if (shown) { resize(); run(); } else if (finger) lift();
+      },
+      /**
+       * The canvas is in another window now, or back on its page. Moving it
+       * takes the finger off without a word to the canvas, so the mic is let
+       * go here, however the move came about.
+       */
+      moved() {
+        if (finger) lift();
+        bind();
+        resize();
+        run();
       },
     };
   }

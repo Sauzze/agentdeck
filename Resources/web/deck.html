@@ -87,12 +87,20 @@
      otherwise feed back into its size. */
   .office { position: relative; height: 100%; touch-action: none; }
   .office canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .keys[hidden], .office[hidden] { display: none; }
+  .keys[hidden], .office[hidden], .away[hidden] { display: none; }
   /* Keys or office, flipped on this phone like the stick's legend. */
   .view-switch { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); display: flex; gap: 14px;
     padding: 6px 12px; background: none; border: 0; font-family: inherit; font-size: 10px; font-weight: 700; line-height: 1;
     letter-spacing: .14em; color: var(--faint); }
   .view-switch .on { color: var(--dim); }
+  /* /office on the computer, where the browser can: the room in a window of
+     its own, kept on top of the others. The page says where it went. */
+  .pop-out { position: absolute; top: 8px; right: 8px; padding: 6px 8px; background: none; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .14em; color: var(--dim); }
+  .pop-out:hover { color: var(--ink); }
+  .away { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; color: var(--dim); font-size: 15px; text-align: center; }
+  .away button { padding: 12px 20px; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
 
   @keyframes pulse { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 30%, var(--cap-top)), color-mix(in srgb, var(--c) 20%, var(--cap))); } }
   @keyframes blink { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 38%, var(--cap-top)), color-mix(in srgb, var(--c) 28%, var(--cap))); } }
@@ -226,7 +234,11 @@
   <div class="view">
     <button class="view-switch" id="view-switch" aria-label="Switch between keys and office"><span>KEYS</span><span>OFFICE</span></button>
     <section class="keys" id="keys"></section>
-    <section class="office" id="office" hidden><canvas id="office-canvas"></canvas></section>
+    <section class="office" id="office" hidden>
+      <canvas id="office-canvas"></canvas>
+      <button class="pop-out" id="pop-out" title="Keep the office on top of your other windows" hidden>POP OUT</button>
+      <div class="away" id="away" hidden>The office is in its own window.<button class="cap" id="bring-back">Bring it back</button></div>
+    </section>
   </div>
 
   <section class="controls">
@@ -381,7 +393,7 @@
 
   // Tapping the room does what the keys and buttons do, with the deck's tick.
   // Without its script, lost on a bad connection, the keys still work.
-  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {} } : AgentOffice.create($('office-canvas'), {
+  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {}, moved() {} } : AgentOffice.create($('office-canvas'), {
     select(id) {
       tick();
       selected = id;
@@ -425,6 +437,75 @@
     tick();
     showView();
   });
+
+  /* ------------------------------------------------------------ pop out */
+
+  /** The room's own shape, two screen pixels to each of its own: sharp, and small enough for a corner. */
+  const POP_OUT_SIZE = { width: 640, height: 360 };
+  let popped = null; // the office's own window, while the room is in it
+
+  // Chrome and Edge can keep a window of the page on top of the others, but
+  // only for a secure page, such as localhost on the computer. The button
+  // shows only where that works: never on a phone, which reaches the
+  // computer over plain http.
+  if (whole && window.documentPictureInPicture) $('pop-out').hidden = false;
+
+  $('pop-out').addEventListener('click', async () => {
+    $('pop-out').hidden = true;
+    let win;
+    try {
+      win = await documentPictureInPicture.requestWindow(POP_OUT_SIZE);
+    } catch {
+      $('pop-out').hidden = false;
+      return flash("Couldn't open the office's window");
+    }
+    popOut(win);
+  });
+
+  $('bring-back').addEventListener('click', () => popped && popped.close());
+
+  /**
+   * Moves the room into a window of its own, still drawn and tapped as on
+   * the page. The page keeps the stream; the window only shows what it has.
+   * It opens empty, so it takes the page's styles, and follows its colours
+   * and status line, to say what /office says: a hint, or that the
+   * computer can't be reached.
+   */
+  function popOut(win) {
+    popped = win;
+    const canvas = $('office-canvas');
+    const doc = win.document;
+    doc.title = document.title;
+    doc.head.append(document.querySelector('style').cloneNode(true));
+    doc.body.className = 'whole';
+    const room = doc.createElement('section');
+    room.className = 'office';
+    const status = doc.createElement('div');
+    status.className = 'status';
+    room.append(canvas);
+    doc.body.append(room, status);
+    const mirror = () => {
+      doc.documentElement.style.cssText = document.documentElement.style.cssText;
+      status.className = $('status').className;
+      status.textContent = $('status').textContent;
+    };
+    const watching = new MutationObserver(mirror);
+    watching.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    watching.observe($('status'), { attributes: true, childList: true, characterData: true, subtree: true });
+    mirror();
+    office.moved();
+    $('away').hidden = false;
+
+    // However the window closes, the room comes back to the page.
+    win.addEventListener('pagehide', () => {
+      watching.disconnect();
+      $('office').prepend(canvas);
+      office.moved();
+      popped = null;
+      $('away').hidden = true;
+      $('pop-out').hidden = false;
+    }, { once: true });
+  }
 
   /* --------------------------------------------------------------- dial */
 
