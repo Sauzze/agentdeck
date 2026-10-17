@@ -1175,9 +1175,10 @@
    * deck's background, with a soft shadow under it, and the office goes on
    * past the room to the window's edges. The margin is wider in the pop-out
    * window, which has its own edge round it, than on a whole screen, where
-   * every pixel counts. In CSS pixels.
+   * every pixel counts, and there is none as the Mac's screen saver: the
+   * office goes from edge to edge, with square corners. In CSS pixels.
    */
-  const FLOAT_MARGINS = { window: 14, screen: 6 };
+  const FLOAT_MARGINS = { window: 14, screen: 6, edge: 0 };
   /**
    * How far the office goes on past the room, at most: half the room's
    * width or height each way. Beyond that, as on a phone held upright, it
@@ -1256,9 +1257,11 @@
     // Through a window, the room stays inside it, even while it shakes.
     let glass = framed && { x: room.ox, y: room.oy, w: shape.width * scale, h: shape.height * scale, r: WINDOW_CORNER * ratio };
     if (floating) {
-      const w = Math.min(width - inset * 2, shape.width * scale * FLOAT_REACH);
-      const h = Math.min(height - inset * 2, shape.height * scale * FLOAT_REACH);
-      glass = { x: Math.round((width - w) / 2), y: Math.round((height - h) / 2), w, h, r: WINDOW_CORNER * ratio };
+      // Edge to edge, bare wall and floor beat bands of nothing.
+      const edge = floating === 'edge', reach = edge ? Infinity : FLOAT_REACH;
+      const w = Math.min(width - inset * 2, shape.width * scale * reach);
+      const h = Math.min(height - inset * 2, shape.height * scale * reach);
+      glass = { x: Math.round((width - w) / 2), y: Math.round((height - h) / 2), w, h, r: edge ? 0 : WINDOW_CORNER * ratio };
     }
     // What can be seen of the office, in art pixels: the room, and floating,
     // as much of the wall and floor round it as fills the window.
@@ -2916,7 +2919,7 @@
     const clock = () => performance.now() / 1000;
     let visible = true;
     let framed = false;  // seen through a window, beside the phone's controls
-    let floating = null;  // floating in a 'window' of its own or a whole 'screen', or not
+    let floating = null;  // floating in a 'window' of its own or a whole 'screen', from 'edge' to edge, or not
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
@@ -3244,7 +3247,7 @@
         }
       },
       setFramed(shown) { framed = shown; },
-      /** Floats the room's window in a 'window' of its own or a whole 'screen', or stops, with null. */
+      /** Floats the room's window in a 'window' of its own or a whole 'screen', fills it from 'edge' to edge, or stops, with null. */
       setFloating(how) { floating = how; },
       /**
        * The canvas is in another window now, or back on its page. Moving it

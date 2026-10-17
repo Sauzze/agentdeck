@@ -28,10 +28,10 @@ enum Pairing {
         }
     }
 
-    /// The office, on a screen of its own, with the key it needs.
+    /// The office, edge to edge as a screen saver, with the key it needs.
     static func officeURL(_ key: String) -> URL {
         var components = URLComponents(url: base.appendingPathComponent("office"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "t", value: key)]
+        components.queryItems = [URLQueryItem(name: "t", value: key), URLQueryItem(name: "saver", value: nil)]
         return components.url!
     }
 

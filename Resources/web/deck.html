@@ -332,8 +332,9 @@
   // On the setup page, the deck is a preview: that page sends it what to
   // draw, and its controls say what they would do instead of doing it.
   const preview = location.pathname === '/setup/preview';
-  // /office: the office alone, for a spare screen.
+  // /office: the office alone, for a spare screen; /office?saver, the Mac's screen saver.
   const whole = location.pathname === '/office';
+  const saver = whole && new URLSearchParams(location.search).has('saver');
   const $ = (id) => document.getElementById(id);
 
   let keyData = [];    // the keys as the server lays them out
@@ -489,9 +490,10 @@
    */
   let full = false;
   // Beside the controls, the room is seen through a window, rounded like the
-  // keys. On a screen of its own, that window floats, filling the screen.
+  // keys. On a screen of its own, that window floats, filling the screen,
+  // and as the screen saver it goes from edge to edge.
   office.setFramed(!whole);
-  if (whole) office.setFloating('screen');
+  if (whole) office.setFloating(saver ? 'edge' : 'screen');
 
   function setFull(on) {
     full = on;
