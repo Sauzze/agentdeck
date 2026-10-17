@@ -7,13 +7,15 @@
  * grid of art pixels, scaled by a whole number of the screen's pixels so
  * every edge stays sharp.
  *
- *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown), moved() }
+ *   AgentOffice.create(canvas, on) → { show(snapshot), close(), select(id), setVisible(shown), setFramed(framed), moved() }
  *
  * `show` takes what the deck streams; `close` empties the office when the
  * stream drops, and whoever is there when it's back is already at work.
- * `select` marks the session the deck's controls act on. `moved` says the
- * canvas is now in another window, such as one kept on top of the others,
- * or back on its page: the room goes on there, sized for that window.
+ * `select` marks the session the deck's controls act on. `setFramed` puts
+ * the room behind a window with rounded corners, as the phone shows it
+ * beside its controls. `moved` says the canvas is now in another window,
+ * such as one kept on top of the others, or back on its page: the room
+ * goes on there, sized for that window.
  *
  * The room can be tapped, and says what was tapped through `on`, for the
  * page to do what its keys and buttons would: `on.select(id)` for a desk or
@@ -157,6 +159,8 @@
   const BLACK = 0x000000, WHITE = 0xffffff;
   /** The deck's text colour, for a theme that leaves it out: it marks the picked desk. */
   const INK = 0xececec;
+  /** The edge of the deck's keys, for a theme that leaves it out: it rims the window onto the room. */
+  const EDGE = 0x2c2c2c;
   const SHADOW = [BLACK, 0.25];
 
   /** A desk's paint for each effort level, from white to the ☢ dome's red. */
@@ -732,12 +736,22 @@
   }
 
   /**
+   * Beside the phone's controls, the room is seen through a window: its
+   * corners rounded like the deck's keys, a shadow inside its edge, and the
+   * edge itself. In CSS pixels.
+   */
+  const WINDOW_CORNER = 16;
+  const WINDOW_SHADOW = 10;
+  /** The shadow at the window's edge, fading to nothing WINDOW_SHADOW in. */
+  const WINDOW_SHADOW_DEPTH = 0.32;
+
+  /**
    * Draws one frame of the office: the room, then everything on the floor
    * from back to front, then what floats above it: the screens' light, the
    * speech bubbles and the name on each desk.
    */
   function drawOffice(ctx, office, frame) {
-    const { now, hour, minute, width, height, ratio, selected, mic } = frame;
+    const { now, hour, minute, width, height, ratio, selected, mic, framed } = frame;
     const room = fitRoom(width, height);
     const { scale } = room;
     let { ox, oy } = room;
@@ -787,6 +801,14 @@
     const lookingUp = mic.heldAt !== null && now - mic.heldAt < LOOK_UP_LENGTH;
 
     ctx.clearRect(0, 0, width, height);
+
+    // Through a window, the room stays inside it, even while it shakes.
+    const glass = framed && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    if (glass) {
+      ctx.save();
+      roundedRect(ctx, glass.x, glass.y, glass.w, glass.h, glass.r);
+      ctx.clip();
+    }
 
     /* The room */
 
@@ -1551,6 +1573,25 @@
       }
     }
 
+    /**
+     * The window onto the room: rings of shadow from its edge inwards, each
+     * fainter than the last, then the edge in the keys' colour.
+     */
+    function drawWindowFrame({ x, y, w, h, r }) {
+      ctx.save();
+      ctx.lineWidth = ratio;
+      for (let ring = 0; ring < WINDOW_SHADOW; ring++) {
+        const inset = (ring + 0.5) * ratio;
+        ctx.strokeStyle = css(BLACK, WINDOW_SHADOW_DEPTH * (1 - ring / WINDOW_SHADOW) ** 2);
+        roundedRect(ctx, x + inset, y + inset, w - inset * 2, h - inset * 2, Math.max(0, r - inset));
+        ctx.stroke();
+      }
+      ctx.strokeStyle = css(fromCss(office.colours.edge) ?? EDGE);
+      roundedRect(ctx, x + ratio / 2, y + ratio / 2, w - ratio, h - ratio, r - ratio / 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     /* The frame, back to front */
 
     drawWall();
@@ -1583,6 +1624,11 @@
     DESKS.forEach((_, desk) => drawTimer(desk));
     office.people.forEach(drawBubble);
     DESKS.forEach((_, desk) => drawLabel(desk));
+
+    if (glass) {
+      ctx.restore();
+      drawWindowFrame(glass);
+    }
   }
 
   /** `text`, cut with an ellipsis to fit `room` pixels in the context's font. */
@@ -1636,6 +1682,7 @@
     const office = new Office();
     const clock = () => performance.now() / 1000;
     let visible = true;
+    let framed = false;  // seen through a window, beside the phone's controls
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
@@ -1712,7 +1759,7 @@
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
-        selected, mic, wobble: wobbling, buttonDown,
+        selected, mic, wobble: wobbling, buttonDown, framed,
       });
     }
 
@@ -1826,6 +1873,7 @@
         visible = shown;
         if (shown) { resize(); run(); } else if (finger) lift();
       },
+      setFramed(shown) { framed = shown; },
       /**
        * The canvas is in another window now, or back on its page. Moving it
        * takes the finger off without a word to the canvas, so the mic is let
