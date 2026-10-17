@@ -245,9 +245,12 @@ There's more to see while they work:
   feed it into a shredder.
 - **Interns**, one for each of Claude Code's subagents, gather round the desk
   while they work: up to four, then a "+n".
-- **What they wear** is Claude Code's model: Haiku dresses casual, in a striped
-  T-shirt and jeans, Sonnet wears a shirt, Opus a jacket, and Fable a suit and
-  tie. Interns dress for their own model.
+- **What they wear** is the size of their model, the bigger the smarter: small
+  models such as Haiku, GPT mini or Gemini Flash-Lite dress casual, in a
+  T-shirt and jeans; medium ones such as Sonnet wear a shirt; large ones such
+  as Opus or Gemini Pro a jacket; and the top ones, such as Fable, a suit and
+  tie. Interns dress for their own model. While an agent's model isn't known,
+  as for most agents but Claude Code, it wears its agent's colour.
 - **The desk's colour** is Claude Code's effort, from white for low to red for
   max. Press ☢ Max, and the agent runs to the big red button in the corridor
   and slams it.
@@ -283,6 +286,12 @@ sunglasses, headphones, a cap, a beanie, a beard, a moustache or a bow), an
 outfit and its colour, what's on their desk, and a nickname for their desk's
 label. Anything left on Auto stays as the office picks it, and clothes on Auto
 follow the model.
+
+**The dress code**, under the team, chooses the outfit and colour for each size
+of model, and for each agent while its model isn't known. Add your own rules
+for models the office doesn't know, such as "a model whose name contains
+`qwen-max` is large". Fourteen outfits to choose from, there and on the team
+cards, from a T-shirt to a lab coat, overalls or a Hawaiian shirt.
 
 It's all kept with the layout, so each profile can have an office of its own.
 
