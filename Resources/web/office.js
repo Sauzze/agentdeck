@@ -796,11 +796,19 @@
   const WINDOW_SHADOW_DEPTH = 0.32;
 
   /**
-   * In the pop-out window, the room's window floats: this much of the
-   * deck's background all round it, and a soft shadow under it. In CSS
-   * pixels.
+   * Floating, the room's window fills its space but for a margin of the
+   * deck's background, with a soft shadow under it, and the office goes on
+   * past the room to the window's edges. The margin is wider in the pop-out
+   * window, which has its own edge round it, than on a whole screen, where
+   * every pixel counts. In CSS pixels.
    */
-  const FLOAT_MARGIN = 14;
+  const FLOAT_MARGINS = { window: 14, screen: 6 };
+  /**
+   * How far the office goes on past the room, at most: half the room's
+   * width or height each way. Beyond that, as on a phone held upright, it
+   * would be bare wall and floor.
+   */
+  const FLOAT_REACH = 1.5;
   const FLOAT_SHADOW = 16;
   const FLOAT_DROP = 3;
   /**
@@ -818,7 +826,8 @@
    */
   function drawOffice(ctx, office, frame) {
     const { now, hour, minute, width, height, ratio, selected, mic, framed, floating } = frame;
-    const room = fitRoom(width, height, floating ? FLOAT_MARGIN * ratio : 0);
+    const inset = floating ? FLOAT_MARGINS[floating] * ratio : 0;
+    const room = fitRoom(width, height, inset);
     const { scale } = room;
     let { ox, oy } = room;
 
@@ -869,7 +878,20 @@
     ctx.clearRect(0, 0, width, height);
 
     // Through a window, the room stays inside it, even while it shakes.
-    const glass = (framed || floating) && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    let glass = framed && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    if (floating) {
+      const w = Math.min(width - inset * 2, WIDTH * scale * FLOAT_REACH);
+      const h = Math.min(height - inset * 2, HEIGHT * scale * FLOAT_REACH);
+      glass = { x: Math.round((width - w) / 2), y: Math.round((height - h) / 2), w, h, r: WINDOW_CORNER * ratio };
+    }
+    // What can be seen of the office, in art pixels: the room, and floating,
+    // as much of the wall and floor round it as fills the window.
+    const seen = floating
+      ? { left: Math.floor((glass.x - ox) / scale), top: Math.floor((glass.y - oy) / scale),
+          right: Math.ceil((glass.x + glass.w - ox) / scale), bottom: Math.ceil((glass.y + glass.h - oy) / scale) }
+      : { left: 0, top: 0, right: WIDTH, bottom: HEIGHT };
+    seen.width = seen.right - seen.left;
+    seen.height = seen.bottom - seen.top;
     // Floating, the window glows while anyone waits on you.
     const calling = floating && office.seats.some((s) => s.session && s.session.state === 'asking');
     const glow = calling ? 0.5 - 0.5 * Math.cos((now / GLOW_PERIOD) * 2 * Math.PI) : 0;
@@ -942,13 +964,14 @@
     }
 
     function drawWall() {
-      fill(0, 0, WIDTH, WALL_BOTTOM, PALETTE.wall);
-      fill(LOUNGE_LEFT, 0, WIDTH - LOUNGE_LEFT, WALL_BOTTOM, PALETTE.loungeWall);
-      fill(0, 0, WIDTH, 2, PALETTE.wallTop);
-      fill(0, 30, WIDTH, 8, PALETTE.wainscot);
-      fill(0, 30, WIDTH, 1, PALETTE.rail);
-      fill(0, 38, WIDTH, 2, PALETTE.baseboard);
-      fill(LOUNGE_LEFT, 0, 1, WALL_BOTTOM, PALETTE.wallTop);
+      const { left, top, right, width: across } = seen;
+      fill(left, top, LOUNGE_LEFT - left, WALL_BOTTOM - top, PALETTE.wall);
+      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, WALL_BOTTOM - top, PALETTE.loungeWall);
+      fill(left, top, across, 2, PALETTE.wallTop);
+      fill(left, 30, across, 8, PALETTE.wainscot);
+      fill(left, 30, across, 1, PALETTE.rail);
+      fill(left, 38, across, 2, PALETTE.baseboard);
+      fill(LOUNGE_LEFT, top, 1, WALL_BOTTOM - top, PALETTE.wallTop);
 
       for (const x of [28, 94, 160]) drawWindow(x, 6, 32, 20, false);
       drawWindow(260, 6, 30, 20, true);
@@ -986,19 +1009,23 @@
     }
 
     function drawFloor() {
-      const top = WALL_BOTTOM, depth = HEIGHT - top;
-      fill(0, top, LOUNGE_LEFT, depth, PALETTE.wood);
+      const { left, right, bottom } = seen;
+      const top = WALL_BOTTOM, depth = bottom - top, wood = LOUNGE_LEFT - left;
+      fill(left, top, wood, depth, PALETTE.wood);
       let row = 0;
-      for (let y = top + 4; y < HEIGHT; y += 5, row++) {
-        fill(0, y, LOUNGE_LEFT, 1, PALETTE.plankSeam);
-        for (let x = (row % 3) * 11; x < LOUNGE_LEFT; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
+      for (let y = top + 4; y < bottom + 4; y += 5, row++) {
+        fill(left, y, wood, 1, PALETTE.plankSeam);
+        // The planks' ends, staggered from row to row, from the room's left edge outwards
+        let x = (row % 3) * 11;
+        while (x > left) x -= 33;
+        for (; x < LOUNGE_LEFT; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
       }
-      fill(LOUNGE_LEFT, top, WIDTH - LOUNGE_LEFT, depth, PALETTE.carpet);
+      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, depth, PALETTE.carpet);
       fill(LOUNGE_LEFT, top, 1, depth, PALETTE.carpetEdge);
       fill(244, 124, 64, 20, PALETTE.rugEdge);
       fill(246, 126, 60, 16, PALETTE.rug);
       fill(207, 40, 14, 2, PALETTE.mat);
-      fill(0, top, WIDTH, 1, SHADOW);
+      fill(left, top, right - left, 1, SHADOW);
     }
 
     /* Furniture */
@@ -1358,9 +1385,10 @@
       if (alarm === null) return;
       const since = alarm;
       const fade = Math.min(1, (ALARM_LENGTH - since) / 0.5);
-      if (since < 0.08) fill(0, 0, WIDTH, HEIGHT, WHITE, 0.5);
-      if (since < FLASH_LENGTH) fill(0, 0, WIDTH, HEIGHT, PALETTE.alarm, 0.35 * (1 - since / FLASH_LENGTH));
-      fill(0, 0, WIDTH, HEIGHT, PALETTE.alarm, 0.07 * (0.5 + 0.5 * Math.sin(since * 12)) * fade);
+      const all = (color, alpha) => fill(seen.left, seen.top, seen.width, seen.height, color, alpha);
+      if (since < 0.08) all(WHITE, 0.5);
+      if (since < FLASH_LENGTH) all(PALETTE.alarm, 0.35 * (1 - since / FLASH_LENGTH));
+      all(PALETTE.alarm, 0.07 * (0.5 + 0.5 * Math.sin(since * 12)) * fade);
 
       // Two rings, flattened onto the floor
       for (const delay of [0, 0.15]) {
@@ -1747,7 +1775,7 @@
     }
     items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
 
-    if (isNight) fill(0, 0, WIDTH, HEIGHT, PALETTE.night, 0.3);
+    if (isNight) fill(seen.left, seen.top, seen.width, seen.height, PALETTE.night, 0.3);
     drawSelectionCorners();
     drawDetonation();
     drawMicWaves();
@@ -1815,7 +1843,7 @@
     const clock = () => performance.now() / 1000;
     let visible = true;
     let framed = false;  // seen through a window, beside the phone's controls
-    let floating = false; // in the pop-out window, its own window floating in it
+    let floating = null;  // floating in a 'window' of its own or a whole 'screen', or not
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
@@ -1918,7 +1946,7 @@
     function targetAt(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
       const ratio = host.window.devicePixelRatio || 1;
-      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGIN * ratio : 0);
+      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGINS[floating] * ratio : 0);
       const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
       const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
       const reach = (SMALLEST_TARGET * ratio) / scale;
@@ -2031,7 +2059,8 @@
         if (shown) { resize(); run(); } else if (finger) lift();
       },
       setFramed(shown) { framed = shown; },
-      setFloating(shown) { floating = shown; },
+      /** Floats the room's window in a 'window' of its own or a whole 'screen', or stops, with null. */
+      setFloating(how) { floating = how; },
       /**
        * The canvas is in another window now, or back on its page. Moving it
        * takes the finger off without a word to the canvas, so the mic is let
@@ -2047,7 +2076,7 @@
   }
 
   /** The pop-out window's size, in CSS pixels: two to each of the room's, and the margin round it. */
-  const popOutSize = { width: WIDTH * 2 + FLOAT_MARGIN * 2, height: HEIGHT * 2 + FLOAT_MARGIN * 2 };
+  const popOutSize = { width: WIDTH * 2 + FLOAT_MARGINS.window * 2, height: HEIGHT * 2 + FLOAT_MARGINS.window * 2 };
 
   window.AgentOffice = { create, popOutSize };
 })();

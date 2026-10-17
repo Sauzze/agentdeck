@@ -405,7 +405,7 @@
 
   // Tapping the room does what the keys and buttons do, with the deck's tick.
   // Without its script, lost on a bad connection, the keys still work.
-  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {}, setFramed() {}, moved() {} } : AgentOffice.create($('office-canvas'), {
+  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {}, setFramed() {}, setFloating() {}, moved() {} } : AgentOffice.create($('office-canvas'), {
     select(id) {
       tick();
       selected = id;
@@ -469,13 +469,15 @@
    */
   let full = false;
   // Beside the controls, the room is seen through a window, rounded like the
-  // keys; on a screen of its own, it fills it.
+  // keys. On a screen of its own, that window floats, filling the screen.
   office.setFramed(!whole);
+  if (whole) office.setFloating('screen');
 
   function setFull(on) {
     full = on;
     document.body.classList.toggle('full', on);
     office.setFramed(!on);
+    office.setFloating(on ? 'screen' : null);
     $('full-switch').setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
     const page = document.documentElement;
     if (on && page.requestFullscreen && !document.fullscreenElement) page.requestFullscreen().catch(() => {});
@@ -546,7 +548,7 @@
     watching.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
     watching.observe($('status'), { attributes: true, childList: true, characterData: true, subtree: true });
     mirror();
-    office.setFloating(true);
+    office.setFloating('window');
     office.moved();
     $('away').hidden = false;
 
@@ -554,7 +556,7 @@
     win.addEventListener('pagehide', () => {
       watching.disconnect();
       $('office').prepend(canvas);
-      office.setFloating(false);
+      office.setFloating('screen'); // back on /office, the only page that pops out
       office.moved();
       popped = null;
       $('away').hidden = true;

@@ -269,6 +269,9 @@ corner. The office moves into a small window that stays above everything else,
 and can still be clicked. Other browsers, and the address your phone uses,
 don't offer it.
 
+In full screen, on a spare screen and in the pop-out window, the office fills
+a rounded window, and its edge glows while an agent is waiting on you.
+
 ## Voice
 
 The mic button uses Claude Code's own voice input (`/voice`), in *tap* mode.
