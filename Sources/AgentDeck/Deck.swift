@@ -221,8 +221,9 @@ final class Deck {
         // Releasing the mic stops recording where it started, whatever is
         // selected now — and even if that session has since gone.
         if action == "mic" && query["phase"] != "down" { return releaseMic(done: done) }
-        // A new hire has no session yet.
+        // A new hire has no session yet, and a swap is of two desks.
         if action == "hire" { return hire(done: done) }
+        if action == "swap" { return done(swapKeys(query)) }
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
 
@@ -287,6 +288,23 @@ final class Deck {
     }
 
     static let hiringOff = "Hiring and firing are off. Turn them on in setup, on your Mac."
+
+    /// Swaps two keys' projects, for a person carried from one desk to
+    /// another in the office: each is pinned where the other was, so the
+    /// order holds the next time too, as pins made in setup do. It only
+    /// orders the keys, so any paired phone may.
+    private func swapKeys(_ query: [String: String]) -> Response {
+        let (keys, _) = layout()
+        guard let a = Int(query["from"] ?? ""), let b = Int(query["to"] ?? ""), a != b,
+              keys.indices.contains(a), keys.indices.contains(b) else { return .status(400, "Unknown desks") }
+        let project = { (i: Int) in keys[i].session?.project ?? keys[i].pin }
+        let (first, second) = (project(a), project(b))
+        guard first != nil || second != nil else { return .status(204) }
+        guard first != second else { return .status(409, "Both desks are the same project, so they stay as they are.") }
+        Config.shared.swapPins(first, at: a, with: second, at: b)
+        changed()
+        return .status(204)
+    }
 
     /// A new Terminal window in the folder set up for new hires, with the
     /// agent set up for them at work in it. Its hooks bring it to the deck,

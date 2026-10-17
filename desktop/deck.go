@@ -427,6 +427,38 @@ func (d *Deck) inTab(name string, op func(Tab) error) (int, string) {
 
 const hiringOff = "Hiring and firing are off. Turn them on in setup, on your computer."
 
+// swapKeys swaps two keys' projects, for a person carried from one desk to
+// another in the office: each is pinned where the other was, so the order
+// holds the next time too, as pins made in setup do. It only orders the keys,
+// so any paired phone may.
+func (d *Deck) swapKeys(query url.Values) (int, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	keys, _ := d.layout()
+	a, errA := strconv.Atoi(query.Get("from"))
+	b, errB := strconv.Atoi(query.Get("to"))
+	if errA != nil || errB != nil || a == b || a < 0 || b < 0 || a >= len(keys) || b >= len(keys) {
+		return http.StatusBadRequest, "Unknown desks"
+	}
+	project := func(i int) *string {
+		if s := keys[i].session; s != nil {
+			p := s.Project
+			return &p
+		}
+		return keys[i].pin
+	}
+	first, second := project(a), project(b)
+	switch {
+	case first == nil && second == nil:
+		return http.StatusNoContent, ""
+	case first != nil && second != nil && *first == *second:
+		return http.StatusConflict, "Both desks are the same project, so they stay as they are."
+	}
+	d.config.SwapPins(first, a, second, b)
+	d.changed()
+	return http.StatusNoContent, ""
+}
+
 // Perform runs one of the phone's controls on a session.
 func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 	// Releasing the mic stops recording where it started, whatever is
@@ -437,6 +469,9 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 	d.mu.Lock()
 	hiring := d.config.HiringEnabled
 	d.mu.Unlock()
+	if action == "swap" {
+		return d.swapKeys(query)
+	}
 	if action == "hire" {
 		if !hiring {
 			return http.StatusForbidden, hiringOff

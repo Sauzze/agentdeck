@@ -84,6 +84,20 @@ func (c *Config) Unpin(index int) {
 	c.save()
 }
 
+// SwapPins puts first on key b and second on key a, each taken off any other
+// key it was on: two desks swapped in the office. A nil project is an empty
+// desk, whose key is left free.
+func (c *Config) SwapPins(first *string, a int, second *string, b int) {
+	for i, pin := range c.Pins {
+		if pin != nil && ((first != nil && *pin == *first) || (second != nil && *pin == *second)) {
+			c.Pins[i] = nil
+		}
+	}
+	c.Pins[b] = first
+	c.Pins[a] = second
+	c.save()
+}
+
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if item == value {

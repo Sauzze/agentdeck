@@ -82,6 +82,16 @@ final class Config: Codable {
         pins[index] = nil
         save()
     }
+
+    /// Puts `first` on key `b` and `second` on key `a`, each taken off any
+    /// other key it was on: two desks swapped in the office. A nil project
+    /// is an empty desk, whose key is left free.
+    func swapPins(_ first: String?, at a: Int, with second: String?, at b: Int) {
+        pins = pins.map { $0 != nil && ($0 == first || $0 == second) ? nil : $0 }
+        pins[b] = first
+        pins[a] = second
+        save()
+    }
 }
 
 /// A value decoded on its own, so one that can't be read is left out rather

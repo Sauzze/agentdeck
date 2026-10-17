@@ -1063,6 +1063,11 @@
   const CHIP = { w: 11, h: 10 };
   /** They come out for a finger held this long on the desk or its person, in seconds: a tap only picks it. */
   const HOLD_FOR_CHIPS = 0.45;
+  /**
+   * Held, then moved this far, in CSS pixels, the finger picks the agent up
+   * instead: carried to another desk and let go there, the two desks swap.
+   */
+  const CARRY_AFTER = 10;
   const CHIP_GAP = 1;
   const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -2501,6 +2506,35 @@
       }
     }
 
+    /**
+     * An agent carried to another desk: lifted to just above the finger,
+     * legs dangling, their chair held over their head, and the desk they'd
+     * land at marked as the picked desk is.
+     */
+    function drawCarried({ person, x, y, over, from }) {
+      if (over !== null && over !== from) {
+        const d = DESKS[over];
+        const left = d.x - 3, right = d.x + DESK_WIDTH + 2, top = d.y - 14, bottom = d.y + 18;
+        const blink = 0.55 + 0.45 * Math.sin(now * 8);
+        for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
+          fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink, blink);
+          fill(cx, dy > 0 ? cy : cy - 3, 1, 4, ink, blink);
+        }
+      }
+      if (!person) return;
+      // Feet a little above the finger, so the finger doesn't hide them
+      const lifted = Object.create(person, {
+        position: { value: { x: Math.round(x), y: Math.round(y) - 6 } },
+        path: { value: [null] }, // walking in the air
+        place: { value: 'carried' },
+      });
+      drawPerson(lifted);
+      const top = topOf(lifted, poseOf(lifted, now));
+      fill(lifted.position.x - 4, top - 5, 9, 2, PALETTE.chairTop);
+      fill(lifted.position.x - 3, top - 3, 1, 2, PALETTE.chair);
+      fill(lifted.position.x + 3, top - 3, 1, 2, PALETTE.chair);
+    }
+
     /** Sound waves from the mic while it's held, spreading across the room. */
     function drawMicWaves() {
       if (!mic.held) return;
@@ -2692,7 +2726,9 @@
       items.push([d.y + 5, () => drawDesk(desk)]);
       items.push([d.y + 3.5, () => drawChair(desk)]); // just behind whoever sits in it
     });
-    for (const person of office.people) items.push([person.position.y, () => drawPerson(person)]);
+    // Someone being carried is drawn on top, where the finger has them, not at their desk.
+    const carried = frame.carrying && frame.carrying.person;
+    for (const person of office.people) if (person !== carried) items.push([person.position.y, () => drawPerson(person)]);
     office.seats.forEach((s, desk) => { if (s.session && s.session.compacting) items.push([DESKS[desk].y + 16, () => drawShredder(desk)]); });
     for (const intern of office.interns) {
       // One still waiting for room hasn't come in yet.
@@ -2706,6 +2742,7 @@
     drawMicWaves();
     DESKS.forEach((_, desk) => drawScreenLight(desk));
     DESKS.forEach((_, desk) => drawTimer(desk));
+    if (frame.carrying) drawCarried(frame.carrying);
     office.people.forEach(drawBubble);
     office.people.forEach(drawConfetti);
     DESKS.forEach((_, desk) => drawLabel(desk));
@@ -2934,6 +2971,7 @@
     // A desk held down: { kind: 'session', id } for its agent, or { kind: 'empty', desk }
     let held = null;
     let firing = null;       // an agent about to be fired, while the question is up: { id, name }
+    let carrying = null;     // an agent carried to another desk: { person, from, x, y, over }
     let hiring = { fire: false, hire: false }; // what the computer lets a held desk offer
     const ambience = new Ambience();
     const loudness = () => SOUND_LEVELS[decor.sound];
@@ -3046,7 +3084,7 @@
         now, hour: date.getHours(), minute: date.getMinutes(), month: date.getMonth(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
         selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown, chips: chips(), chipDown,
-        deskButton: heldButton(), firing: firing && { ...fireDialog(), name: firing.name },
+        deskButton: heldButton(), firing: firing && { ...fireDialog(), name: firing.name }, carrying,
       });
     }
 
@@ -3061,12 +3099,27 @@
      * before things, and things before desks. The choice keys' panel covers
      * what's under it: a tap on it goes to a key or nowhere.
      */
-    function targetAt(clientX, clientY) {
+    /** A point on the page, in the room's art pixels, with the scale the room is drawn at. */
+    function roomAt(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
       const ratio = host.window.devicePixelRatio || 1;
       const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGINS[floating] * ratio : 0);
-      const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
-      const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
+      return {
+        x: ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale,
+        y: ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale,
+        scale, ratio,
+      };
+    }
+
+    /** The key's desk under a point of the room, if there is one: where a carried agent would land. */
+    function deskAt(x, y) {
+      const desk = DESKS.findIndex((d, i) => i < office.seats.length
+        && x >= d.x - 2 && x <= d.x + DESK_WIDTH + 2 && y >= d.y - 14 && y <= d.y + 27);
+      return desk >= 0 ? desk : null;
+    }
+
+    function targetAt(clientX, clientY) {
+      const { x, y, scale, ratio } = roomAt(clientX, clientY);
       const reach = (SMALLEST_TARGET * ratio) / scale;
       const now = clock();
       let best = null;
@@ -3183,8 +3236,19 @@
       }
     }
 
-    /** The finger lifts, or is taken away: the mic must always hear about it, or it keeps listening. */
-    function lift() {
+    /**
+     * The finger lifts, or is taken away: the mic must always hear about it,
+     * or it keeps listening. Lifted over another desk, a carried agent swaps
+     * desks with it; taken away, they go back.
+     */
+    function lift(dropped = false) {
+      if (carrying) {
+        const { from, over } = carrying;
+        carrying = null;
+        finger = null;
+        if (dropped && over !== null && over !== from) on.swap?.(from, over);
+        return;
+      }
       // A chip, once chosen, goes away with the rest.
       if (finger && finger.target.kind === 'chip') held = null;
       if (finger && !finger.held) {
@@ -3208,16 +3272,35 @@
       const target = targetAt(e.clientX, e.clientY);
       if (!target) return;
       canvas.setPointerCapture(e.pointerId);
-      finger = { id: e.pointerId, target, at: clock() };
+      finger = { id: e.pointerId, target, at: clock(), x: e.clientX, y: e.clientY };
       press(target);
     });
     for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-      canvas.addEventListener(type, (e) => { if (finger && e.pointerId === finger.id) lift(); });
+      canvas.addEventListener(type, (e) => { if (finger && e.pointerId === finger.id) lift(type === 'pointerup'); });
     }
-    // A mouse shows what can be clicked.
     canvas.addEventListener('pointermove', (e) => {
+      if (finger && e.pointerId === finger.id) return carry(e);
+      // A mouse shows what can be clicked.
       if (e.pointerType === 'mouse' && !finger) canvas.style.cursor = targetAt(e.clientX, e.clientY) ? 'pointer' : '';
     });
+
+    /** A finger held on an agent's desk, then moved, picks the agent up and carries them. */
+    function carry(e) {
+      const { x, y } = roomAt(e.clientX, e.clientY);
+      if (!carrying) {
+        if (!finger.held || finger.target.kind !== 'session') return;
+        if (Math.hypot(e.clientX - finger.x, e.clientY - finger.y) < CARRY_AFTER) return;
+        const from = office.seats.findIndex((s) => s.session && s.session.id === finger.target.id);
+        if (from < 0) return;
+        held = null;
+        const person = office.people.find((p) => !p.isStaff && !p.isLeaving && p.session.id === finger.target.id) || null;
+        carrying = { person, from, x, y, over: from };
+        on.held?.();
+      }
+      const over = deskAt(x, y);
+      if (over !== null && over !== carrying.over && over !== carrying.from) on.held?.(); // a tick for each desk passed over
+      Object.assign(carrying, { x, y, over });
+    }
     bind();
     resize();
     run();

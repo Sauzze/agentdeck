@@ -436,6 +436,11 @@
       tick();
       send('/act', { action: 'hire' });
     },
+    // An agent carried from one desk to another: the two swap, and stay so.
+    swap(from, to) {
+      tick();
+      send('/act', { action: 'swap', from, to });
+    },
     // The paint chips on the picked desk, as the dial.
     effort(level) {
       tick();
@@ -1147,7 +1152,7 @@
   /** In the preview, what a control would have done to the selected session. */
   function rehearse(params) {
     // A hire is for no session yet; firing names the one the office asked about.
-    const target = params.action === 'hire' ? null : sessions.find((s) => s.id === params.session) || current();
+    const target = params.action === 'hire' || params.action === 'swap' ? null : sessions.find((s) => s.id === params.session) || current();
     const name = target ? ` · ${target.project}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
@@ -1159,7 +1164,7 @@
       clear: 'starts a fresh conversation', up: 'moves up', down: 'moves down',
       mic: params.phase === 'down' ? 'starts listening' : 'stops listening',
       effort: `sets effort to ${params.level}`, scroll: 'scrolls',
-      fire: 'fires', hire: 'hires a new agent',
+      fire: 'fires', hire: 'hires a new agent', swap: 'swaps two desks',
     };
     return `${words[params.action] || params.action}${name}`;
   }

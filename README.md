@@ -278,6 +278,7 @@ the room works like the keys:
 | Tap | What it does |
 |---|---|
 | A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
+| An agent's desk, held, then dragged | Picks the agent up, chair and all. Let go over another desk and the two swap. They stay that way: each project is pinned to its new key, as on the setup page's *Keys*, where you can undo it. |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
 | A desk, or its person, held | On a Claude Code desk, puts paint chips along its front, from white for low to red for max: tap one to set its effort, like the dial, and they go away. Max is the red button's. With hiring and firing on, also **YOU'RE FIRED**, and **HIRE** on an empty desk (see below). Wherever the dial is out of sight: in full screen, on `/office` and in the pop-out window. |
