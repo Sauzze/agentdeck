@@ -122,12 +122,15 @@
     floor: ['wood', 'tiles', 'concrete', 'carpet'],
     paint: ['slate', 'sage', 'clay', 'cream'],
     lounge: ['navy', 'teal', 'plum', 'sand'],
-    corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'none'],
+    corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'dragon', 'pinball', 'jukebox', 'pool', 'piano', 'drums',
+      'telescope', 'jellyfish', 'bonsai', 'jungle', 'coffee', 'servers', 'printer', 'boxing', 'treadmill', 'hottub', 'ballpit',
+      'campfire', 'none'],
     sky: ['live', 'day'],
     pet: ['none', 'cat', 'dog', 'lizard', 'monkey'],
     season: ['calendar', 'off'],
     sound: ['off', 'quiet', 'normal'],
     desk: ['wood', 'walnut', 'white', 'black'],
+    workspace: ['desk', 'standing', 'gaming', 'tent', 'box', 'beanbag', 'igloo', 'van', 'cockpit', 'ship', 'throne', 'greenhouse'],
     chair: ['teal', 'black', 'red', 'grey', 'green'],
     staff: ['some', 'none', 'many'],
   };
@@ -148,6 +151,29 @@
     green: [0x2f5a3a, 0x3f7a4c],
   };
   const STAFF_COUNTS = { none: 0, some: 4, many: 6 };
+  /**
+   * What each desk can be, besides a desk: where its screen is, from the
+   * desk's corner (the top-left of a monitor 13 × 9, whose back shows the
+   * turn's time); whether its person stands at it; whether it has the
+   * office's chair, or what's carried over their head instead when they're
+   * moved to another desk; where what's on the desk goes, moved from
+   * where a desk has it; and how far above the desk's corner it reaches, so
+   * a finger finds it there. Each is drawn in drawOffice's WORKSPACE_PARTS.
+   */
+  const WORKSPACES = {
+    desk: { screen: { dx: 6, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 }, top: -14 },
+    standing: { screen: { dx: 6, dy: -12 }, stands: true, chair: false, carry: [0x5a5f6c, 0x737987], things: { dx: 0, dy: 0 }, top: -14 },
+    gaming: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x1d1f25, 0xd4140b], things: { dx: 0, dy: 0 }, top: -15 },
+    tent: { screen: { dx: 22, dy: -3 }, stands: false, chair: false, carry: [0x6f8a4a, 0x8aa65e], things: null, top: -24 },
+    box: { screen: { dx: 6, dy: -9 }, stands: false, chair: false, carry: [0xa07a4a, 0xc9a06a], things: { dx: 0, dy: 1 }, top: -14 },
+    beanbag: { screen: { dx: 22, dy: -4 }, stands: false, chair: false, carry: [0xc0584a, 0xd96a5a], things: { dx: 4, dy: 12 }, top: -14 },
+    igloo: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xc4d2de, 0xeef4f8], things: { dx: 0, dy: 0 }, top: -22 },
+    van: { screen: { dx: 11, dy: -10 }, stands: false, chair: true, things: { dx: -1, dy: 0 }, top: -21 },
+    cockpit: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x3a3f4a, 0x8a93a3], things: { dx: 0, dy: 0 }, top: -24 },
+    ship: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0x7a5232, 0x3a3a40], things: null, top: -24 },
+    throne: { screen: { dx: 6, dy: -10 }, stands: false, chair: false, carry: [0xd6b25e, 0x9a2a3a], things: { dx: 0, dy: 0 }, top: -23 },
+    greenhouse: { screen: { dx: 4, dy: -10 }, stands: false, chair: true, things: { dx: 0, dy: 0 }, top: -23 },
+  };
   /** The colours of what can sit on a desk besides a plant, papers and a lamp. */
   const DESK_THINGS = { cactus: 0x5a9a4a, duck: 0xf2cf3a, beak: 0xe8823a, sky: 0x8fc0e8, coffee: 0x5a3a24 };
   /** What each of the back wall's five places can hold, and what it holds unless set up otherwise. */
@@ -201,6 +227,13 @@
     return room;
   }
 
+  /**
+   * Whether someone at a spot of this pose has their back to the room:
+   * standing 'away', walking on the spot on a treadmill, or perched on a
+   * seat that faces away, as at a piano. 'sit' and 'stand' face the room.
+   */
+  const facesAway = (pose) => pose === 'away' || pose === 'walk' || pose === 'perch';
+
   /** Where idle people go round the lounge's corner piece: to play, to buy a snack, to watch the fish. */
   const CORNER_SPOTS = {
     arcade: [{ x: 272, y: 93, pose: 'away' }],
@@ -208,6 +241,24 @@
     foosball: [{ x: 272, y: 76, pose: 'stand' }, { x: 272, y: 97, pose: 'away' }],
     fishtank: [{ x: 272, y: 93, pose: 'away' }],
     books: [{ x: 274, y: 94, pose: 'sit' }],
+    dragon: [{ x: 306, y: 96, pose: 'stand' }],
+    pinball: [{ x: 274, y: 95, pose: 'away' }],
+    jukebox: [{ x: 274, y: 94, pose: 'away' }],
+    pool: [{ x: 245, y: 86, pose: 'stand' }, { x: 306, y: 86, pose: 'stand' }],
+    piano: [{ x: 276, y: 90, pose: 'perch' }],
+    drums: [{ x: 276, y: 84, pose: 'sit' }],
+    telescope: [{ x: 270, y: 94, pose: 'away' }],
+    jellyfish: [{ x: 275, y: 95, pose: 'away' }],
+    bonsai: [{ x: 258, y: 94, pose: 'away' }],
+    jungle: [],
+    coffee: [{ x: 274, y: 77, pose: 'stand' }, { x: 262, y: 98, pose: 'away' }],
+    servers: [{ x: 268, y: 95, pose: 'away' }],
+    printer: [{ x: 272, y: 95, pose: 'away' }],
+    boxing: [{ x: 266, y: 90, pose: 'stand' }],
+    treadmill: [{ x: 274, y: 89, pose: 'walk' }],
+    hottub: [{ x: 266, y: 88, pose: 'sit' }, { x: 287, y: 88, pose: 'sit' }],
+    ballpit: [{ x: 277, y: 88, pose: 'sit' }],
+    campfire: [{ x: 255, y: 92, pose: 'sit' }, { x: 297, y: 92, pose: 'sit' }],
     none: [],
   };
 
@@ -430,6 +481,21 @@
     return part(16) | part(8) | part(0);
   }
 
+  /** A colour at `shade` of its brightness, as a number: below one darker, above it lighter, as far as white. */
+  function shaded(hex, shade) {
+    const part = (shift) => Math.min(255, Math.round(((hex >> shift) & 0xff) * shade)) << shift;
+    return part(16) | part(8) | part(0);
+  }
+
+  /** A bright colour round the colour wheel, `turn` of the way from red, for lights that cycle. */
+  function rainbow(turn) {
+    const part = (n) => {
+      const k = (n + turn * 12) % 12;
+      return Math.round(255 * (0.5 - 0.5 * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+    };
+    return (part(0) << 16) | (part(8) << 8) | part(4);
+  }
+
   /** What people wear besides their clothes: dark lenses, headphones, a bow, glasses, a lab coat's shirt and pen. */
   const SHADES = 0x15161a, HEADPHONES = 0x6a7080, BOW = 0xe0507a, GLASS = 0xcfe3ef, LAB_SHIRT = 0x8fb3d9, LAB_PEN = 0x3f6fc4;
   /** A Hawaiian shirt's yellow flowers, and the overalls' buttons. */
@@ -460,6 +526,7 @@
       'overalls', 'waistcoat'],
     colour: ['auto', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'yellow', 'grey', 'black', 'white'],
     desk: ['auto', 'plant', 'papers', 'lamp', 'cactus', 'duck', 'trophy', 'photo', 'mug', 'none'],
+    workspace: ['auto', ...ROOM_CHOICES.workspace],
   };
   /** The most a nickname can be, in characters, and the most projects a team remembers. */
   const NICKNAME_LIMIT = 16;
@@ -518,6 +585,12 @@
 
   /** A session's place on your team, if you've made one for its project. */
   const memberOf = (session) => (session && Object.hasOwn(decor.team, session.name) && decor.team[session.name]) || null;
+
+  /** What a session's agent works at: its own, from your team, or the office's. An empty desk is the office's. */
+  function workspaceOf(session) {
+    const member = memberOf(session);
+    return member && member.workspace !== 'auto' ? member.workspace : decor.workspace;
+  }
 
   /** How a person looks: as their project's name picks it, with your choices for them over the top. */
   function lookFor(person) {
@@ -723,7 +796,7 @@
         walker.path = [];
         walker.position = pointOf(walker.place);
         const spot = spotOf(walker.place);
-        if (spot !== null) walker.isFacingAway = spots[spot].pose === 'away';
+        if (spot !== null) walker.isFacingAway = facesAway(spots[spot].pose);
       }
       if (this.pet) this.pet = new Pet(this.pet.kind);
     }
@@ -781,7 +854,7 @@
           const member = this.hireStaff();
           member.place = spotPlace(spot);
           member.position = { x: spots[spot].x, y: spots[spot].y };
-          member.isFacingAway = spots[spot].pose === 'away';
+          member.isFacingAway = facesAway(spots[spot].pose);
           member.arrivedAt = now - random(0, 20);
           member.nextMove = now + random(5, 25);
         }
@@ -901,15 +974,30 @@
       const worker = this.hardestWorker();
       const desk = worker && DESKS[worker.desk];
       const taken = (spot) => this.people.some((p) => p.place === spotPlace(spot) && !p.isLeaving);
-      const tops = { arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 } };
+      /** On top of the corner piece, where there's a top to sit on, drawn after it. */
+      const tops = {
+        arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 },
+        pinball: { x: 274, y: 51, depth: 90.5 }, jukebox: { x: 274, y: 56, depth: 88.5 }, piano: { x: 268, y: 58 },
+        jellyfish: { x: 276, y: 51, depth: 91.5 }, servers: { x: 283, y: 50, depth: 89.5 }, printer: { x: 270, y: 56, depth: 91.5 },
+        coffee: { x: 289, y: 63, depth: 93.5 },
+      };
+      /** Beside the corner piece, where the cat likes to be: watching the fish, warm by the fire, on the dragon's gold. */
+      const watches = {
+        fishtank: { x: 262, y: 95, pose: 'sit' }, jellyfish: { x: 262, y: 95, pose: 'sit' },
+        campfire: { x: 276, y: 99, pose: 'sleep' }, dragon: { x: 284, y: 97, pose: 'sleep' },
+      };
       switch (pet.kind) {
         case 'cat':
           [3, 4, 5].forEach((spot) => { if (!taken(spot)) places.push(placed('couch', { x: LOUNGE_SPOTS[spot].x, y: 113, pose: 'sleep' })); });
           for (const p of this.people) {
-            if (!p.isStaff && p.isAtDesk) places.push({ x: DESKS[p.desk].x + 36, y: DESKS[p.desk].y + 2, depth: DESKS[p.desk].y + 5.6, pose: 'sit' });
+            if (p.isStaff || !p.isAtDesk) continue;
+            // Where what's on the desk is, or on a desk with nowhere for it, its end.
+            const { dx, dy } = WORKSPACES[workspaceOf(p.session)].things || { dx: 0, dy: 0 };
+            const { x, y } = DESKS[p.desk];
+            places.push({ x: x + 36 + dx, y: y + 2 + dy, depth: y + 5.6 + dy, pose: 'sit' });
           }
           if (desk) places.push({ x: desk.x - 5, y: desk.y + 15, pose: 'sit' });
-          if (decor.corner === 'fishtank') places.push(placed('corner', { x: 262, y: 95, pose: 'sit' }));
+          if (watches[decor.corner]) places.push(placed('corner', watches[decor.corner]));
           places.push(placed('wall', { x: 252, y: 33, depth: 47, pose: 'sit' }));
           break;
         case 'dog': {
@@ -922,12 +1010,15 @@
         case 'lizard':
           decor.wall.forEach((piece, slot) => { if (piece === 'window') places.push({ x: WALL_SLOTS[slot] + 19, y: 22, depth: 41.5, pose: 'still' }); });
           places.push(placed('wall', { x: 296, y: 24, depth: 41.5, pose: 'still' }), placed('corner', { x: 276, y: 58, pose: 'still' }));
-          if (desk) places.push({ x: desk.x + 12, y: desk.y - 10, depth: desk.y + 5.6, pose: 'still' });
+          if (desk) {
+            const { screen } = WORKSPACES[workspaceOf(worker.session)];
+            places.push({ x: desk.x + screen.dx + 6, y: desk.y + screen.dy, depth: desk.y + 5.6, pose: 'still' });
+          }
           break;
         case 'monkey':
           places.push(placed('wall', { x: 308, y: 18, depth: 50.5, pose: 'sit' }), { x: CORRIDOR_X, y: 13, depth: 41.5, pose: 'sit' },
             placed('couch', { x: 270, y: 102, depth: 110.5, pose: 'sit' }), placed('wall', { x: 247, y: 33, depth: 47, pose: 'sit', grab: true }));
-          if (tops[decor.corner]) places.push(placed('corner', { ...tops[decor.corner], depth: 86.5, pose: 'sit' }));
+          if (tops[decor.corner]) places.push(placed('corner', { depth: 86.5, ...tops[decor.corner], pose: 'sit' }));
           break;
       }
       return places;
@@ -1165,7 +1256,7 @@
       person.arrivedAt = now;
       const spot = spotOf(person.place);
       if (spot !== null) {
-        person.isFacingAway = spots[spot].pose === 'away';
+        person.isFacingAway = facesAway(spots[spot].pose);
         person.nextMove = now + random(12, 30);
       } else {
         person.isFacingAway = person.place.startsWith('board:');
@@ -1367,10 +1458,14 @@
         return { kind: 'wave', frame: Math.floor(now * (4 + 8 * agitation)) % 2, hop: agitation ? Math.floor(now * (3 + 5 * agitation)) % 2 : 0 };
       }
       if (person.session.state === 'error') return { kind: 'slump' };
-      return { kind: 'sit' };
+      return { kind: WORKSPACES[workspaceOf(person.session)].stands ? 'stand' : 'sit' };
     }
     const spot = spotOf(person.place);
-    if (spot !== null) return { kind: spots[spot].pose === 'sit' ? 'sit' : 'stand' };
+    if (spot !== null) {
+      const { pose } = spots[spot];
+      if (pose === 'walk') return { kind: 'walk', step: Math.floor(now * 6) % 2 };
+      return { kind: pose === 'sit' || pose === 'perch' ? 'sit' : 'stand' };
+    }
     return { kind: 'stand' };
   }
 
@@ -1479,6 +1574,12 @@
     const colour = (state) => fromCss(office.colours[state]) ?? fromCss(STANDARD_STATES[state]);
     const ink = fromCss(office.colours.ink) ?? INK;
     const sessionAt = (desk) => (desk < office.seats.length ? office.seats[desk].session : null);
+    /** How far above its corner a desk's workspace reaches, in art pixels: a negative number. */
+    const reachOf = (desk) => WORKSPACES[workspaceOf(sessionAt(desk))].top;
+    // Someone being carried is drawn where the finger has them, so nothing of them stays at their desk.
+    const carried = frame.carrying && frame.carrying.person;
+    /** Who is at a desk now, if anyone. */
+    const occupantOf = (desk) => office.people.find((p) => p.desk === desk && p.isAtDesk && p !== carried) || null;
     const selectedDesk = office.seats.findIndex((s) => s.session && s.session.id === selected);
     /** How far a wobbling thing is pushed sideways, in art pixels. */
     const wobble = (what) => (frame.wobble && frame.wobble.what === what && now - frame.wobble.at < WOBBLE_LENGTH
@@ -1810,39 +1911,538 @@
 
     /* Furniture */
 
-    function drawDesk(desk) {
-      const { x, y } = DESKS[desk], s = seat(desk);
+    /* Desks, and what else an agent can work at */
 
-      // The monitor, from behind: its screen faces whoever sits here.
-      fill(x + 6, y - 10, 13, 9, PALETTE.monitor);
-      fill(x + 7, y - 9, 11, 7, PALETTE.monitorPanel);
-      fill(x + 11, y - 1, 3, 2, PALETTE.monitorStand);
+    /** A monitor from behind, its top-left at `x`, `y`: its screen faces whoever sits at it. */
+    function drawMonitor(x, y) {
+      fill(x, y, 13, 9, PALETTE.monitor);
+      fill(x + 1, y + 1, 11, 7, PALETTE.monitorPanel);
+      fill(x + 5, y + 9, 3, 2, PALETTE.monitorStand);
+    }
 
-      // Painted for its session's effort, from white for low to red for max;
-      // plain wood when there's none. It flashes as the button goes down.
-      let paint = EFFORT_PAINT[office.deskEffort(desk)] ?? null;
-      if (blast && blast.desk === desk && sinceBlast >= 0 && sinceBlast < 1.2 && Math.floor(sinceBlast * 6) % 2 === 0) paint = WHITE;
-      const wood = (plain, shade) => (paint === null ? css(plain) : css(paint, 1, shade));
-      const paintFill = (px, py, w, h, plain, shade) => {
-        ctx.fillStyle = wood(plain, shade);
-        ctx.fillRect(ox + px * scale, oy + py * scale, w * scale, h * scale);
-      };
+    /** A laptop from behind, the top-left of its lid at `x`, `y`, its base seen edge on below it. */
+    function drawLaptop(x, y) {
+      fill(x, y, 13, 8, PALETTE.monitor);
+      fill(x + 1, y + 1, 11, 6, PALETTE.monitorPanel);
+      fill(x - 1, y + 8, 15, 1, PALETTE.keys);
+    }
 
-      const finish = DESK_FINISHES[decor.desk];
-      paintFill(x, y, DESK_WIDTH, 1, finish.edge, 1);
-      paintFill(x, y + 1, DESK_WIDTH, 4, finish.top, 0.9);
+    /** A keyboard on the desk in front of whoever sits at `s`, `top` its row. */
+    function drawKeyboard(s, top) {
+      fill(s.x - 5, top, 10, 2, PALETTE.keyboard);
+      fill(s.x - 4, top, 8, 1, PALETTE.keys);
+    }
+
+    /** The standard desk's top and front, in its finish or its effort's paint. */
+    function drawDeskBody({ x, y, s, tint, finish }) {
+      fill(x, y, DESK_WIDTH, 1, tint(finish.edge, 1));
+      fill(x, y + 1, DESK_WIDTH, 4, tint(finish.top, 0.9));
       fill(x + 9, y + 1, 7, 1, PALETTE.monitorStand);
-      paintFill(x, y + 5, DESK_WIDTH, 11, finish.front, 0.72);
-      paintFill(x, y + 5, DESK_WIDTH, 1, finish.lip, 0.62);
-      paintFill(x + 30, y + 8, 10, 6, finish.drawer, 0.82);
+      fill(x, y + 5, DESK_WIDTH, 11, tint(finish.front, 0.72));
+      fill(x, y + 5, DESK_WIDTH, 1, tint(finish.lip, 0.62));
+      fill(x + 30, y + 8, 10, 6, tint(finish.drawer, 0.82));
       fill(x + 34, y + 10, 2, 1, PALETTE.handle);
       fill(x + 1, y + 16, DESK_WIDTH - 2, 1, SHADOW);
-      fill(s.x - 5, y + 2, 10, 2, PALETTE.keyboard);
-      fill(s.x - 4, y + 2, 8, 1, PALETTE.keys);
+      drawKeyboard(s, y + 2);
+    }
 
-      // Something different on each desk, or what you've put on it
-      const member = memberOf(sessionAt(desk));
-      const thing = member && member.desk !== 'auto' ? member.desk : ['plant', 'papers', 'lamp'][desk % 3];
+    /**
+     * Each workspace's parts: its back, drawn behind whoever is at it, and
+     * its front, drawn over them. Each takes the desk's corner `x`, `y`, the
+     * seat `s`, `tint` for its colours (its effort's paint over them, if
+     * any), the office's desk `finish`, and `occupant`, who is at it now.
+     */
+    const WORKSPACE_PARTS = {
+      desk: {
+        front(d) {
+          drawMonitor(d.x + 6, d.y - 10);
+          drawDeskBody(d);
+        },
+      },
+
+      /** A desk raised on legs, its monitor on an arm, worked at standing up. */
+      standing: {
+        front({ x, y, s, tint, finish }) {
+          drawMonitor(x + 6, y - 12);
+          fill(x + 11, y - 1, 3, 1, PALETTE.monitorStand);
+          const steel = 0x5a5f6c, foot = 0x3c404a;
+          fill(x + 3, y + 5, 2, 10, steel);
+          fill(x + 39, y + 5, 2, 10, steel);
+          fill(x + 5, y + 9, 34, 1, foot);
+          fill(x + 1, y + 15, 6, 1, foot);
+          fill(x + 37, y + 15, 6, 1, foot);
+          fill(x + 17, y + 5, 10, 2, foot);
+          fill(x + 1, y + 16, 42, 1, SHADOW);
+          fill(x, y, DESK_WIDTH, 1, tint(finish.edge, 1));
+          fill(x, y + 1, DESK_WIDTH, 3, tint(finish.top, 0.9));
+          fill(x, y + 4, DESK_WIDTH, 2, tint(finish.front, 0.72));
+          fill(x + 9, y + 1, 7, 1, PALETTE.monitorStand);
+          // The height buttons, under the top's front edge
+          fill(x + 33, y + 6, 4, 1, foot);
+          dot(x + 34, y + 6, 0x6fd36f);
+          drawKeyboard(s, y + 2);
+        },
+      },
+
+      /** A black desk with lights that cycle round the colour wheel, a racing chair and a tower under it. */
+      gaming: {
+        back({ s, y }) {
+          const shell = 0x1d1f25, red = 0xd4140b;
+          fill(s.x - 4, y - 15, 9, 15, shell);
+          fill(s.x - 6, y - 8, 13, 7, shell);
+          fill(s.x - 6, y - 8, 2, 7, red);
+          fill(s.x + 5, y - 8, 2, 7, red);
+          fill(s.x - 2, y - 15, 5, 1, red);
+          fill(s.x - 1, y - 14, 3, 1, 0x3a3d47);
+        },
+        front({ x, y, s, tint }) {
+          drawMonitor(x + 6, y - 10);
+          const glow = (i, across) => rainbow((now * 0.25 + i / across) % 1);
+          for (let i = 0; i < 9; i++) dot(x + 8 + i, y - 3, glow(i, 9));
+          fill(x, y, DESK_WIDTH, 1, tint(0x4a4e5a, 1));
+          fill(x, y + 1, DESK_WIDTH, 4, tint(0x2a2d35, 0.9));
+          fill(x + 9, y + 1, 7, 1, PALETTE.monitorStand);
+          fill(x + 18, y + 1, 24, 3, 0x14161b);
+          fill(x, y + 5, DESK_WIDTH, 3, tint(0x1f2228, 0.72));
+          for (let i = 0; i < DESK_WIDTH - 2; i++) dot(x + 1 + i, y + 7, glow(i, DESK_WIDTH - 2));
+          // Legs bent like a Z, and the tower, its fans lit
+          fill(x + 2, y + 8, 3, 7, 0x1d1f25);
+          fill(x + 1, y + 14, 7, 1, 0xd4140b);
+          fill(x + 30, y + 8, 10, 8, 0x1d1f25);
+          fill(x + 31, y + 9, 8, 6, 0x14161b);
+          for (const [fy, i] of [[10, 0], [13, 3]]) {
+            fill(x + 33, y + fy, 3, 2, glow(i, 6));
+            dot(x + 34, y + fy, 0x14161b);
+          }
+          fill(x + 41, y + 8, 2, 7, 0x1d1f25);
+          fill(x + 1, y + 16, 42, 1, SHADOW);
+          drawKeyboard(s, y + 2);
+          for (let i = 0; i < 8; i++) dot(s.x - 4 + i, y + 2, glow(i, 8));
+        },
+      },
+
+      /**
+       * A tent, its flaps tied back, a lantern swinging from its ridge, and
+       * whoever works in it in its doorway, a laptop on their knees. Its
+       * canvas takes the effort's paint.
+       */
+      tent: {
+        back({ x, y, tint }) {
+          const canvas = 0x6f8a4a, cx = x + 29, peak = y - 24, base = y + 6;
+          // Guy ropes out to their pegs
+          for (let k = 0; k < 7; k++) {
+            dot(x + 12 - k, y - 6 + k + (k > 4 ? 1 : 0), 0xc9c3b8, 0.7);
+            dot(x + 46 + k, y - 6 + k + (k > 4 ? 1 : 0), 0xc9c3b8, 0.7);
+          }
+          fill(x + 4, y + 2, 2, 1, PALETTE.frame);
+          fill(x + 53, y + 2, 2, 1, PALETTE.frame);
+          fill(cx - 17, base + 1, 35, 1, SHADOW);
+          for (let row = peak; row <= base; row++) {
+            const half = Math.round(((row - peak) * 17) / 30);
+            fill(cx - half, row, half * 2 + 1, 1, tint(canvas, 1));
+            dot(cx - half, row, tint(canvas, 1.25));
+            dot(cx + half, row, tint(canvas, 0.8));
+            // The way in, dark inside
+            const inner = row >= y - 20 ? Math.round(((row - (y - 20)) * 11) / 26) + 1 : -1;
+            if (inner >= 0) fill(cx - inner, row, inner * 2 + 1, 1, tint(canvas, 0.35));
+          }
+          fill(cx, peak, 1, 4, tint(canvas, 1.25));
+          // A groundsheet, out in front
+          fill(cx - 13, base, 27, 1, tint(canvas, 0.6));
+          // The lantern, swinging on its cord, lit
+          const swing = Math.round(Math.sin(now * 1.6));
+          dot(cx, y - 20, PALETTE.frame);
+          dot(cx + swing, y - 19, PALETTE.frame);
+          fill(cx - 1 + swing, y - 18, 3, 3, PALETTE.brass);
+          dot(cx + swing, y - 17, 0xfff0b0);
+          fill(cx - 4 + swing, y - 20, 9, 8, 0xffd36b, 0.12);
+        },
+        front({ x, y, s, tint, occupant }) {
+          const canvas = 0x6f8a4a, cx = x + 29;
+          // The flaps, rolled and tied either side of the way in
+          for (let row = y - 8; row <= y + 5; row++) {
+            const inner = Math.round(((row - (y - 20)) * 11) / 26) + 1;
+            fill(cx - inner - 1, row, 2, 1, tint(canvas, 1.15));
+            fill(cx + inner, row, 2, 1, tint(canvas, 1.15));
+          }
+          fill(cx - 10, y - 2, 2, 1, 0xc9c3b8);
+          fill(cx + 9, y - 2, 2, 1, 0xc9c3b8);
+          // Their feet, either side of the laptop, while they sit
+          if (occupant && poseOf(occupant, now).kind === 'sit') {
+            const outfit = outfitOf(occupant.session.agent, occupant.session.model, memberOf(occupant.session));
+            fill(s.x - 5, y + 5, 3, 2, outfit.shoes);
+            fill(s.x + 3, y + 5, 3, 2, outfit.shoes);
+          }
+          drawLaptop(x + 22, y - 3);
+        },
+      },
+
+      /** A cardboard box for a desk, its flaps open, and another for a stool. */
+      box: {
+        back({ s, y, tint }) {
+          fill(s.x - 4, y - 6, 9, 7, tint(0xa07a4a, 0.82));
+          fill(s.x - 4, y - 6, 9, 1, tint(0xc9a06a, 1));
+          fill(s.x, y - 6, 1, 7, 0xe0cfa0);
+        },
+        front({ x, y, s, tint }) {
+          const face = 0xb58a55, top = 0xc9a06a, ink = 0x6e5233;
+          fill(x - 2, y + 1, 3, 3, tint(top, 0.95));
+          fill(x + 43, y + 1, 3, 3, tint(top, 0.95));
+          fill(x + 1, y, 42, 1, tint(0xdcb78c, 1));
+          fill(x + 1, y + 1, 42, 4, tint(top, 0.9));
+          fill(x + 1, y + 5, 42, 11, tint(face, 0.72));
+          fill(x + 1, y + 5, 42, 1, tint(0x8c6744, 0.62));
+          fill(x + 40, y + 5, 3, 11, tint(0x8c6744, 0.62));
+          // Tape down the middle, arrows for this way up, and a glass for fragile
+          fill(x + 20, y, 4, 16, 0xe0cfa0, 0.75);
+          for (const ax of [x + 6, x + 11]) {
+            dot(ax, y + 8, ink);
+            fill(ax - 1, y + 9, 3, 1, ink);
+            fill(ax, y + 10, 1, 3, ink);
+          }
+          fill(x + 31, y + 8, 5, 3, ink);
+          fill(x + 32, y + 11, 3, 1, ink);
+          fill(x + 33, y + 12, 1, 2, ink);
+          fill(x + 31, y + 14, 5, 1, ink);
+          fill(x + 2, y + 16, 41, 1, SHADOW);
+          drawLaptop(x + 6, y - 9);
+          // A keyboard of its own in front of whoever sits there, the laptop being out of reach
+          fill(s.x - 4, y + 1, 9, 2, 0x3a3d47);
+          fill(s.x - 3, y + 1, 7, 1, 0x5a5f6c);
+        },
+      },
+
+      /** A beanbag on a round rug, a laptop on the lap of whoever sinks into it. */
+      beanbag: {
+        back({ x, y, tint }) {
+          const rug = 0x4a5a7a;
+          fill(x + 10, y + 9, 34, 6, rug);
+          fill(x + 13, y + 8, 28, 1, rug);
+          fill(x + 13, y + 15, 28, 1, rug);
+          fill(x + 12, y + 10, 30, 4, lighter(rug), 0.25);
+          const bag = 0xc0584a;
+          fill(x + 21, y - 10, 14, 1, tint(bag, 1.1));
+          fill(x + 19, y - 9, 18, 1, tint(bag, 1.05));
+          fill(x + 18, y - 8, 20, 12, tint(bag, 1));
+          fill(x + 18, y - 8, 1, 1, tint(bag, 0.8));
+          fill(x + 37, y - 8, 1, 1, tint(bag, 0.8));
+          fill(x + 21, y - 9, 4, 1, WHITE, 0.25);
+          fill(x + 34, y - 7, 3, 10, tint(bag, 0.85));
+        },
+        front({ x, y, s, tint, occupant }) {
+          const bag = 0xc0584a;
+          fill(x + 17, y + 1, 22, 7, tint(bag, 1.1));
+          fill(x + 18, y + 8, 20, 2, tint(bag, 0.8));
+          fill(x + 17, y + 1, 1, 1, tint(bag, 0.8));
+          fill(x + 38, y + 1, 1, 1, tint(bag, 0.8));
+          fill(x + 18, y + 10, 21, 1, SHADOW);
+          // Legs out in front, crossed at the ankles, while they sit
+          if (occupant && poseOf(occupant, now).kind === 'sit') {
+            const outfit = outfitOf(occupant.session.agent, occupant.session.model, memberOf(occupant.session));
+            fill(s.x - 3, y + 2, 7, 3, outfit.pants);
+            fill(s.x - 4, y + 5, 3, 2, outfit.shoes);
+            fill(s.x + 2, y + 5, 3, 2, outfit.shoes);
+          }
+          drawLaptop(x + 22, y - 4);
+        },
+      },
+
+      /** An igloo of snow blocks, and a desk cut from ice, snow drifting down. */
+      igloo: {
+        back({ x, y }) {
+          const snow = 0xe8f0f6, joint = 0xc4d2de, cx = x + 28, base = y + 4;
+          for (let row = y - 19; row <= base; row++) {
+            const t = (base - row) / 23, half = Math.round(18 * Math.sqrt(Math.max(0, 1 - t * t)));
+            fill(cx - half, row, half * 2 + 1, 1, (base - row) % 5 === 0 ? joint : snow);
+            fill(cx + half - 2, row, 3, 1, 0xd2dee8);
+            if ((base - row) % 5 !== 0) {
+              const course = Math.floor((base - row) / 5);
+              for (let jx = cx - half + ((course % 2) * 4) + 3; jx < cx + half - 1; jx += 8) dot(jx, row, joint);
+            }
+          }
+          // The way in, an arch
+          for (let row = y - 14; row <= base; row++) {
+            const half = [3, 5, 6][row - (y - 14)] ?? 6;
+            fill(cx - half, row, half * 2 + 1, 1, 0x2a3a52);
+          }
+          fill(cx - 7, y - 14, 15, 1, 0xf8fbfd, 0.6);
+          for (let k = 0; k < 4; k++) {
+            const fall = (now * 5 + k * 6.5) % 26;
+            dot(x + [6, 18, 36, 44][k], y - 22 + Math.round(fall), WHITE, 0.85 * (1 - fall / 26));
+          }
+        },
+        front({ x, y, s, tint }) {
+          drawMonitor(x + 6, y - 10);
+          fill(x, y, DESK_WIDTH, 1, tint(0xf4fbfe, 1));
+          fill(x, y + 1, DESK_WIDTH, 4, tint(0xcfe6f2, 0.9));
+          fill(x + 9, y + 1, 7, 1, PALETTE.monitorStand);
+          fill(x, y + 5, DESK_WIDTH, 11, tint(0x9fc8dc, 0.72));
+          fill(x, y + 5, DESK_WIDTH, 1, tint(0x86b4cc, 0.62));
+          // Light caught in the ice
+          for (const [sx, sy] of [[5, 7], [22, 9], [34, 6]]) {
+            for (let k = 0; k < 4; k++) dot(x + sx + k, y + sy + 4 - k, WHITE, 0.45);
+          }
+          fill(x + 1, y + 16, 42, 1, SHADOW);
+          drawKeyboard(s, y + 2);
+        },
+      },
+
+      /**
+       * A camper van, its side hatch propped up as an awning over a counter,
+       * fairy lights under it, and whoever works in it seen through the hatch.
+       */
+      van: {
+        back({ x, y }) {
+          fill(x + 9, y - 14, 33, 15, 0x3a2f2a);
+          fill(x + 9, y - 14, 33, 2, 0x2a221e);
+          fill(x + 36, y - 11, 5, 1, 0x6b4e37);
+          fill(x + 36, y - 13, 2, 2, PALETTE.mug);
+        },
+        front({ x, y, tint }) {
+          const cream = 0xece4cf, paint = 0x4f9a9a;
+          fill(x, y - 21, 44, 1, cream);
+          fill(x - 2, y - 20, 49, 6, cream);
+          fill(x - 2, y - 14, 11, 15, cream);
+          fill(x + 42, y - 14, 5, 15, cream);
+          // The cab's window, the counter and the paint below it
+          fill(x - 1, y - 13, 8, 7, 0x9fc8dc);
+          fill(x, y - 12, 2, 4, WHITE, 0.4);
+          fill(x + 7, y, 37, 2, PALETTE.deskTop);
+          fill(x + 7, y + 2, 37, 1, PALETTE.deskFront);
+          fill(x - 2, y + 1, 9, 2, cream);
+          fill(x + 44, y + 1, 3, 2, cream);
+          fill(x - 2, y + 3, 49, 9, tint(paint, 0.85));
+          fill(x - 2, y + 3, 49, 1, tint(paint, 1.1));
+          fill(x - 2, y + 7, 3, 2, 0xf2d35b);
+          fill(x + 44, y + 7, 3, 2, 0xd04a4a);
+          fill(x + 19, y + 5, 1, 6, tint(paint, 0.6));
+          // Wheels
+          for (const wx of [x + 3, x + 33]) {
+            fill(wx, y + 10, 9, 6, 0x1d1f25);
+            fill(wx - 1, y + 11, 11, 4, 0x1d1f25);
+            fill(wx + 3, y + 12, 3, 2, 0xc9c3b8);
+          }
+          fill(x - 2, y + 16, 49, 1, SHADOW);
+          // The awning, striped, and its fairy lights
+          fill(x + 7, y - 18, 37, 3, 0xd96a5a);
+          for (let k = 0; k < 37; k += 6) fill(x + 7 + k, y - 18, 3, 3, 0xf4f1ea);
+          fill(x + 7, y - 15, 37, 1, SHADOW);
+          for (let k = 0; k < 8; k++) {
+            const lit = (Math.floor(now * 1.5) + k) % 3 !== 0;
+            dot(x + 11 + k * 4, y - 14 + (k % 2), [0xf2d35b, 0xff8a3d, 0x6fd36f, 0x8fc0e8][k % 4], lit ? 1 : 0.3);
+          }
+          drawMonitor(x + 11, y - 10);
+        },
+      },
+
+      /** A spaceship's cockpit: a console of lights, a pilot's seat, a canopy of glass and a blinking aerial. */
+      cockpit: {
+        back({ s, y }) {
+          fill(s.x - 5, y - 15, 11, 15, 0x3a3f4a);
+          fill(s.x - 5, y - 15, 1, 15, 0x8a93a3);
+          fill(s.x + 5, y - 15, 1, 15, 0x8a93a3);
+          fill(s.x - 3, y - 14, 7, 3, 0x2a2e36);
+        },
+        front({ x, y, s, tint }) {
+          const hull = 0x5a6270, cx = x + 28, glass = 0x9fe6f2;
+          // The canopy, a bubble round the seat
+          for (let row = y - 20; row <= y; row++) {
+            const t = (y - row) / 20, half = Math.round(14 * Math.sqrt(Math.max(0, 1 - t * t)));
+            fill(cx - half, row, half * 2 + 1, 1, glass, 0.1);
+            dot(cx - half, row, glass, 0.75);
+            dot(cx + half, row, glass, 0.75);
+            if (row === y - 20) fill(cx - half, row, half * 2 + 1, 1, glass, 0.75);
+          }
+          for (let k = 0; k < 6; k++) dot(cx - 9 + Math.round(k * 0.8), y - 17 + k, WHITE, 0.5);
+          fill(cx, y - 23, 1, 3, 0x8a93a3);
+          dot(cx, y - 24, PALETTE.alarm, Math.floor(now * 1.5) % 2 ? 1 : 0.25);
+          drawMonitor(x + 6, y - 10);
+          fill(x + 6, y - 11, 13, 1, 0x4ad4e8, 0.8);
+          // The console, its lights blinking in turn
+          fill(x, y, DESK_WIDTH, 1, tint(0x8a93a3, 1));
+          fill(x, y + 1, DESK_WIDTH, 4, tint(hull, 0.9));
+          fill(x, y + 5, DESK_WIDTH, 11, tint(0x3a3f4a, 0.72));
+          fill(x, y + 5, DESK_WIDTH, 1, tint(0x2a2e36, 0.62));
+          const lights = [0x6fd36f, 0xf2d35b, 0xd96a5a, 0x4ad4e8];
+          for (let i = 0; i < 7; i++) {
+            const on = (Math.floor(now * 3) + i * 5) % 7 < 4;
+            dot(x + 2 + i * 2, y + 2 + (i % 2), lights[i % 4], on ? 1 : 0.35);
+            dot(x + 35 + (i % 4) * 2, y + 2 + Math.floor(i / 4), lights[(i + 1) % 4], on ? 0.35 : 1);
+          }
+          for (let k = 0; k < 10; k++) fill(x + 3 + k * 4, y + 13, 2, 2, k % 2 ? PALETTE.hazard : PALETTE.machine);
+          fill(x + 4, y + 8, 12, 3, 0x1d1f25);
+          fill(x + 5, y + 9, Math.round(5 + Math.sin(now * 2) * 5), 1, 0x4ad4e8);
+          fill(x + 1, y + 16, 42, 1, SHADOW);
+          drawKeyboard(s, y + 2);
+          fill(s.x + 8, y - 2, 1, 3, PALETTE.frame);
+          dot(s.x + 8, y - 3, PALETTE.alarm);
+        },
+      },
+
+      /** The deck of a pirate ship: a barrel to sit on, the Jolly Roger flying, and a wheel that turns while they work. */
+      ship: {
+        back({ x, y, s }) {
+          // The flag, on its staff at the stern
+          fill(x + 1, y - 23, 1, 23, 0x5a3b25);
+          dot(x + 1, y - 24, PALETTE.brass);
+          const wave = Math.floor(now * 3) % 2;
+          for (let c = 0; c < 9; c++) fill(x + 2 + c, y - 23 + (c > 1 && (c + wave) % 2 ? 1 : 0), 1, 6, 0x1a1a1f);
+          fill(x + 5, y - 22, 3, 2, WHITE);
+          dot(x + 5, y - 19, WHITE);
+          dot(x + 7, y - 19, WHITE);
+          // The barrel they sit on
+          fill(s.x - 4, y - 6, 9, 10, 0x7a5232);
+          fill(s.x - 4, y - 6, 9, 1, 0x8c6744);
+          fill(s.x - 4, y - 4, 9, 1, 0x3a3a40);
+          fill(s.x - 4, y, 9, 1, 0x3a3a40);
+        },
+        front({ x, y, tint, occupant }) {
+          drawMonitor(x + 6, y - 10);
+          const hull = 0x6b4a2e;
+          // The rail on its posts, and the hull below, curving in at the keel
+          fill(x - 1, y, 46, 1, 0xa87a56);
+          fill(x - 1, y + 1, 46, 1, 0x8c6744);
+          fill(x - 1, y + 2, 46, 3, 0x2a1d16);
+          for (let k = 0; k < 12; k++) fill(x + 1 + k * 4, y + 2, 1, 3, 0x8c6744);
+          fill(x - 1, y + 5, 46, 1, 0x4a301e);
+          fill(x - 1, y + 6, 46, 8, tint(hull, 0.8));
+          fill(x + 1, y + 14, 42, 1, tint(hull, 0.65));
+          fill(x + 4, y + 15, 36, 1, tint(hull, 0.55));
+          for (const py of [8, 11]) fill(x - 1, y + py, 46, 1, tint(hull, 0.6));
+          // Portholes, ringed in brass
+          for (const px of [x + 6, x + 32]) {
+            fill(px, y + 7, 4, 4, PALETTE.brass);
+            fill(px + 1, y + 8, 2, 2, 0x2f7fb0);
+          }
+          fill(x + 2, y + 16, 40, 1, SHADOW);
+          // The wheel, turning while someone works at it
+          const cx = x + 39, cy = y - 5;
+          const working = occupant && occupant.session.state === 'thinking';
+          const turn = working ? now * 1.2 : 0.3;
+          fill(cx - 1, y - 1, 3, 2, 0x5a3b25);
+          for (let k = 0; k < 8; k++) {
+            const a = turn + (k * Math.PI) / 4;
+            for (let r = 1; r <= 6; r++) dot(cx + Math.round(Math.cos(a) * r), cy + Math.round(Math.sin(a) * r), r > 4 ? 0xc49a6c : 0x6b4e37);
+          }
+          for (let k = 0; k < 24; k++) {
+            const a = (k * Math.PI) / 12;
+            dot(cx + Math.round(Math.cos(a) * 4), cy + Math.round(Math.sin(a) * 4), 0xa87a56);
+          }
+          fill(cx - 1, cy - 1, 3, 3, PALETTE.brass);
+        },
+      },
+
+      /** A throne of gold and red velvet, a jewel glinting on top, at a desk trimmed in gold. Whoever sits in it wears a crown. */
+      throne: {
+        back({ x, y }) {
+          const gold = 0xd6b25e, velvet = 0x9a2a3a;
+          fill(x + 25, y - 22, 7, 1, gold);
+          fill(x + 21, y - 21, 15, 25, gold);
+          fill(x + 23, y - 18, 11, 22, velvet);
+          fill(x + 23, y - 18, 11, 1, shaded(velvet, 0.7));
+          dot(x + 21, y - 23, gold);
+          dot(x + 35, y - 23, gold);
+          fill(x + 19, y - 4, 3, 2, gold);
+          fill(x + 35, y - 4, 3, 2, gold);
+          fill(x + 27, y - 21, 3, 2, 0xd4140b);
+          dot(x + 28, y - 22, WHITE, 0.4 + 0.6 * Math.max(0, Math.sin(now * 2.2)));
+        },
+        front(d) {
+          const { x, y, s, occupant } = d;
+          drawMonitor(x + 6, y - 10);
+          drawDeskBody(d);
+          fill(x, y + 5, DESK_WIDTH, 1, PALETTE.brass);
+          fill(x + 30, y + 8, 10, 1, PALETTE.brass);
+          fill(x + 34, y + 10, 2, 1, PALETTE.brass);
+          if (!occupant) return;
+          const top = topOf(occupant, poseOf(occupant, now));
+          fill(s.x - 2, top - 2, 5, 1, PALETTE.brass);
+          for (const dx of [-2, 0, 2]) dot(s.x + dx, top - 3, PALETTE.brass);
+          dot(s.x, top - 2, 0xd4140b);
+        },
+      },
+
+      /** A greenhouse of glass, plants hanging from its roof and potted along its sides, a potting bench in front. */
+      greenhouse: {
+        back({ x, y }) {
+          const bar = 0xe8ece6, cx = x + 29;
+          fill(x + 13, y - 14, 33, 18, 0xa8d8b0, 0.16);
+          for (let row = y - 23; row < y - 14; row++) {
+            const half = Math.round(((row - (y - 23)) * 16) / 9);
+            fill(cx - half, row, half * 2 + 1, 1, 0xa8d8b0, 0.16);
+          }
+          for (const bx of [x + 21, x + 37]) fill(bx, y - 14, 1, 18, bar, 0.5);
+          // Vines from the roof, swaying, and pots along the walls
+          for (const [vx, length, phase] of [[x + 16, 9, 0], [x + 42, 7, 1.3], [x + 33, 5, 2.1]]) {
+            for (let k = 0; k < length; k++) {
+              const sway = k > 2 ? Math.round(Math.sin(now * 1.2 + phase + k * 0.4) * 0.8) : 0;
+              dot(vx + sway, y - 14 + k, k % 2 ? PALETTE.leafDark : PALETTE.leaf);
+            }
+          }
+          for (const [px, flower] of [[x + 15, 0xf28fb0], [x + 40, 0xf2d35b]]) {
+            fill(px, y - 2, 4, 3, PALETTE.pot);
+            fill(px - 1, y - 8, 6, 6, PALETTE.leaf);
+            fill(px, y - 9, 4, 1, PALETTE.leafDark);
+            dot(px + 1, y - 6, PALETTE.leafDark);
+            dot(px, y - 8, flower);
+            dot(px + 3, y - 6, flower);
+          }
+          // A hanging basket, in flower
+          fill(cx + 7, y - 21, 1, 3, PALETTE.frame);
+          fill(cx + 5, y - 18, 5, 2, PALETTE.pot);
+          fill(cx + 4, y - 19, 7, 1, PALETTE.leaf);
+          dot(cx + 6, y - 20, 0xf28fb0);
+          dot(cx + 9, y - 20, 0xf2d35b);
+        },
+        front(d) {
+          const { x, y } = d, bar = 0xe8ece6, cx = x + 29;
+          // The frame, over the panes either side of the open door
+          fill(x + 13, y - 14, 1, 18, bar);
+          fill(x + 45, y - 14, 1, 18, bar);
+          fill(x + 13, y - 14, 33, 1, bar);
+          for (let row = y - 23; row < y - 14; row++) {
+            const half = Math.round(((row - (y - 23)) * 16) / 9);
+            dot(cx - half, row, bar);
+            dot(cx + half, row, bar);
+          }
+          fill(cx, y - 23, 1, 9, bar, 0.6);
+          fill(x + 14, y - 13, 7, 17, 0xcfeee0, 0.18);
+          fill(x + 38, y - 13, 7, 17, 0xcfeee0, 0.18);
+          fill(x + 15, y - 12, 1, 4, WHITE, 0.5);
+          drawMonitor(x + 4, y - 10);
+          drawDeskBody(d);
+          // Seedlings in a tray on the bench
+          fill(x + 19, y + 1, 9, 2, 0x5a3b25);
+          for (let k = 0; k < 4; k++) dot(x + 20 + k * 2, y, PALETTE.leaf);
+        },
+      },
+    };
+
+    /** The back of a desk's workspace, behind whoever is at it. */
+    function drawWorkspaceBack(desk) {
+      const kind = workspaceOf(sessionAt(desk));
+      if (WORKSPACE_PARTS[kind].back) WORKSPACE_PARTS[kind].back(workspaceAt(desk));
+    }
+
+    /**
+     * How a desk's workspace is drawn: where it is, its colours (painted for
+     * its session's effort, from white for low to red for max, plain when
+     * there's none, flashing as the button goes down) and who is at it.
+     */
+    function workspaceAt(desk) {
+      const { x, y } = DESKS[desk];
+      let paint = EFFORT_PAINT[office.deskEffort(desk)] ?? null;
+      if (blast && blast.desk === desk && sinceBlast >= 0 && sinceBlast < 1.2 && Math.floor(sinceBlast * 6) % 2 === 0) paint = WHITE;
+      return {
+        x, y, s: seat(desk),
+        tint: (plain, shade) => (paint === null ? plain : shaded(paint, shade)),
+        finish: DESK_FINISHES[decor.desk],
+        occupant: occupantOf(desk),
+      };
+    }
+
+    /** Something on a desk whose corner is at `x`, `y`: a plant, papers, a lamp, or what you've put on it. */
+    function drawDeskThing(thing, x, y) {
       if (thing === 'plant') {
         fill(x + 38, y - 2, 3, 3, PALETTE.pot);
         fill(x + 37, y - 5, 5, 3, PALETTE.leaf);
@@ -1876,20 +2476,32 @@
         dot(x + 40, y - 2, PALETTE.mug);
         fill(x + 37, y - 3, 3, 1, DESK_THINGS.coffee);
       }
+    }
 
-      const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
+    function drawDesk(desk) {
+      const { x, y } = DESKS[desk], s = seat(desk);
+      const kind = workspaceOf(sessionAt(desk)), workspace = WORKSPACES[kind];
+      WORKSPACE_PARTS[kind].front(workspaceAt(desk));
+
+      // Something different on each desk, or what you've put on it
+      const member = memberOf(sessionAt(desk));
+      const thing = member && member.desk !== 'auto' ? member.desk : ['plant', 'papers', 'lamp'][desk % 3];
+      if (workspace.things) drawDeskThing(thing, x + workspace.things.dx, y + workspace.things.dy);
+
+      const occupant = occupantOf(desk);
       if (!occupant) return;
       const skin = lookFor(occupant).skin;
       const tool = occupant.session.state === 'thinking' ? toolKind(occupant.session.tool) : null;
       if (tool === 'web') {
-        // A little globe at the end of the desk, turning
+        // A little globe at the end of the desk, turning, moved as what's on the desk is
         const turn = Math.floor(now * 4) % 5;
-        fill(x + 2, y - 5, 3, 1, PALETTE.sea);
-        fill(x + 1, y - 4, 5, 3, PALETTE.sea);
-        fill(x + 2, y - 1, 3, 1, PALETTE.sea);
-        fill(x + 1 + turn, y - 4, 1, 2, PALETTE.leaf);
-        dot(x + 1 + ((turn + 2) % 5), y - 2, PALETTE.leaf);
-        dot(x + 3, y, PALETTE.frame);
+        const { dx, dy } = workspace.things || { dx: 0, dy: 0 }, gx = x + dx, gy = y + dy;
+        fill(gx + 2, gy - 5, 3, 1, PALETTE.sea);
+        fill(gx + 1, gy - 4, 5, 3, PALETTE.sea);
+        fill(gx + 2, gy - 1, 3, 1, PALETTE.sea);
+        fill(gx + 1 + turn, gy - 4, 1, 2, PALETTE.leaf);
+        dot(gx + 1 + ((turn + 2) % 5), gy - 2, PALETTE.leaf);
+        dot(gx + 3, gy, PALETTE.frame);
       }
       if (tool === 'read') {
         // Leafing through papers, a page lifting now and then
@@ -1914,7 +2526,9 @@
       }
     }
 
+    /** The office's chair, at a workspace that has one. */
     function drawChair(desk) {
+      if (!WORKSPACES[workspaceOf(sessionAt(desk))].chair) return;
       const s = seat(desk), y = DESKS[desk].y;
       // A rounded back, lower than the monitor beside it
       const [chair, chairTop] = CHAIRS[decor.chair];
@@ -2096,6 +2710,663 @@
       fill(265, 97, 18, 1, SHADOW);
     }
 
+    /**
+     * A dragon asleep on its hoard: its breath lifts its back, smoke curls
+     * from its nose, and the gold glints. Someone come to look wakes one eye.
+     */
+    function drawDragon() {
+      const scale = 0x3f8a5a, dark = 0x2c6a44, belly = 0xe8c87a, gold = 0xf2c94c, deep = 0xc9952a;
+      const watched = atCorner(0), breath = Math.sin(now * 1.3) > 0.2 ? 1 : 0;
+      // The hoard, a mound of coins
+      fill(253, 96, 50, 1, SHADOW);
+      for (let row = 84; row <= 95; row++) {
+        const half = Math.round(24 * Math.sqrt((row - 83) / 12));
+        fill(278 - half, row, half * 2, 1, gold);
+        for (let k = (row % 3) * 2; k < half * 2; k += 5) dot(278 - half + k, row, deep);
+      }
+      fill(256, 93, 5, 3, PALETTE.brass);
+      dot(258, 92, 0xd4140b);
+      fill(296, 91, 4, 2, 0x8fc0e8);
+      // The tail, round the front of the hoard to its tip
+      for (const [tx, ty] of [[292, 86], [295, 88], [297, 90], [298, 92], [296, 93], [293, 94]]) fill(tx, ty, 3, 2, scale);
+      fill(290, 94, 3, 2, dark);
+      dot(289, 93, dark);
+      // The body, curled on top, rising as it breathes, and the wings folded on it
+      fill(267, 77 - breath, 26, 10 + breath, scale);
+      fill(265, 79 - breath, 2, 7 + breath, scale);
+      fill(293, 79 - breath, 2, 7, scale);
+      fill(268, 84, 22, 3, belly);
+      for (let k = 0; k < 5; k++) dot(270 + k * 4, 85, deep);
+      fill(271, 72 - breath, 14, 5, dark);
+      fill(273, 70 - breath, 8, 2, dark);
+      fill(276, 69 - breath, 3, 1, dark);
+      for (let k = 0; k < 6; k++) dot(268 + k * 4, 76 - breath, 0xd96a5a);
+      // The neck down to the head, resting on the gold, nose to the left
+      fill(259, 80, 9, 5, scale);
+      fill(250, 81, 11, 6, scale);
+      fill(248, 83, 3, 4, scale);
+      fill(250, 86, 11, 1, belly);
+      dot(249, 83, PALETTE.frame);
+      fill(256, 78, 1, 3, belly);
+      fill(259, 77, 1, 3, belly);
+      if (watched) {
+        fill(253, 82, 3, 2, 0xf2d35b);
+        dot(254, 82, PALETTE.frame);
+        dot(254, 83, PALETTE.frame);
+      } else {
+        fill(253, 83, 3, 1, dark);
+      }
+      // Smoke from its nose, puff after puff, quicker when it's awake
+      const puffs = watched ? 3 : 2;
+      for (let k = 0; k < puffs; k++) {
+        const rise = (now * (watched ? 0.5 : 0.3) + k / puffs) % 1;
+        const size = 1 + Math.round(rise * 2);
+        fill(247 - Math.round(rise * 5), 82 - Math.round(rise * 14), size, size, PALETTE.smoke, 0.7 * (1 - rise));
+      }
+      // Coins catching the light, one after another
+      for (let k = 0; k < 4; k++) {
+        const glint = (now * 0.7 + k * 0.27) % 1;
+        if (glint < 0.12) dot([262, 284, 272, 291][k], [90, 88, 93, 92][k], WHITE);
+      }
+    }
+
+    /** A pinball table, its playfield lit: the flippers flick and the ball flies while someone plays. */
+    function drawPinball() {
+      const playing = atCorner(0), cabinet = 0x2b2350, trim = 0x8a5cf0;
+      fill(261, 90, 27, 1, SHADOW);
+      fill(263, 82, 2, 8, PALETTE.machine);
+      fill(284, 82, 2, 8, PALETTE.machine);
+      // The backbox, its lights chasing round the score
+      fill(262, 51, 25, 13, cabinet);
+      fill(262, 51, 25, 1, trim);
+      fill(264, 53, 21, 7, PALETTE.doorway);
+      for (let k = 0; k < 10; k++) {
+        const lit = (Math.floor(now * 6) + k) % 4 === 0;
+        dot(264 + k * 2, 61, lit ? 0xffd36b : 0x4a3a80);
+      }
+      for (let k = 0; k < 5; k++) fill(266 + k * 4, 55, 3, 3, playing ? 0xff8a3d : 0x6a3f2a);
+      fill(273, 64, 3, 2, PALETTE.machine);
+      // The playfield, seen from the end it's played at
+      fill(261, 66, 27, 17, cabinet);
+      fill(263, 67, 23, 14, 0x1d3a7a);
+      fill(261, 66, 1, 17, trim);
+      fill(287, 66, 1, 17, trim);
+      const bumpers = [[267, 69, 0xd96a5a], [276, 68, 0xf2d35b], [281, 72, 0x6fd36f]];
+      bumpers.forEach(([bx, by, colour], i) => {
+        const hit = playing && (Math.floor(now * 3) + i) % 3 === 0;
+        fill(bx, by, 3, 3, hit ? WHITE : colour);
+      });
+      fill(264, 75, 3, 1, 0x8fc0e8);
+      fill(282, 75, 3, 1, 0x8fc0e8);
+      const flick = playing && Math.floor(now * 2.5) % 2 === 0 ? 1 : 0;
+      fill(268, 79 - flick, 4, 1, WHITE);
+      fill(277, 79 - flick, 4, 1, WHITE);
+      if (playing) {
+        const bx = 274 + Math.round(Math.sin(now * 2.3) * 9), by = 73 + Math.round(Math.cos(now * 3.1) * 5);
+        dot(bx, by, 0xe0e0e8);
+      } else {
+        dot(286, 79, 0xe0e0e8);
+      }
+      fill(261, 82, 27, 2, cabinet);
+      dot(268, 82, 0xd4140b);
+      dot(281, 82, 0xd4140b);
+    }
+
+    /** A jukebox, its arch of light running round the colours: while someone picks a record, it spins and notes rise. */
+    function drawJukebox() {
+      const playing = atCorner(0), wood = 0x7a3b2a;
+      fill(263, 88, 23, 1, SHADOW);
+      fill(266, 56, 17, 1, wood);
+      fill(264, 57, 21, 2, wood);
+      fill(263, 59, 23, 29, wood);
+      // The arch of light, its colours moving round
+      for (let k = 0; k < 30; k++) {
+        const [ax, ay] = k < 10 ? [264, 86 - k * 2.6] : k < 20 ? [266 + (k - 10) * 1.7, 59 - Math.round(Math.sin(((k - 10) / 9) * Math.PI) * 2)] : [284, 60 + (k - 20) * 2.6];
+        fill(Math.round(ax), Math.round(ay), 1, 2, rainbow((k / 30 + now * 0.3) % 1));
+      }
+      // The records behind glass, one turning
+      fill(267, 62, 15, 9, PALETTE.doorway);
+      fill(267, 62, 15, 1, WHITE, 0.25);
+      const spin = playing ? Math.floor(now * 8) % 2 : 0;
+      fill(271, 65, 7, 4, 0x1a1a1f);
+      dot(274, 66, 0xd96a5a);
+      dot(272 + spin * 4, 65 + spin * 3, 0x5a5a66);
+      // The buttons, the grille and the coin slot
+      for (let k = 0; k < 6; k++) dot(267 + k * 3, 73, playing && k === 2 ? 0x6fd36f : PALETTE.paper);
+      for (let row = 76; row < 84; row += 2) fill(267, row, 15, 1, 0x4a2a1e);
+      fill(266, 85, 17, 3, 0x5a2a1e);
+      if (!playing) return;
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.45 + k / 3) % 1;
+        const nx = 268 + k * 6 + Math.round(Math.sin(rise * 6 + k) * 2), ny = 57 - Math.round(rise * 5);
+        const colour = [0xf2d35b, 0x8fc0e8, 0xf28fb0][k];
+        fill(nx, ny, 2, 1, colour, 1 - rise);
+        fill(nx + 1, ny - 3, 1, 3, colour, 1 - rise);
+      }
+    }
+
+    /** A pool table: while someone's at it, the cue goes in, the white runs up the table and the rack breaks. */
+    function drawPool() {
+      const rail = 0x6b3a22, felt = 0x2f7a4a;
+      const left = atCorner(0), right = atCorner(1);
+      fill(250, 92, 52, 1, SHADOW);
+      for (const lx of [252, 298]) fill(lx, 86, 3, 6, rail);
+      fill(250, 72, 52, 14, rail);
+      fill(253, 74, 46, 10, felt);
+      fill(253, 74, 46, 1, shaded(felt, 0.7));
+      fill(250, 86, 52, 2, shaded(rail, 0.7));
+      for (const [px, py] of [[252, 73], [275, 73], [298, 73], [252, 84], [275, 84], [298, 84]]) fill(px, py, 2, 1, PALETTE.frame);
+      // The balls: racked at one end, the white at the other
+      const shot = left || right ? (now % 4) / 4 : 0;
+      const toward = right && !left ? -1 : 1;
+      const rack = [[285, 79], [287, 78], [287, 80], [289, 77], [289, 79], [289, 81]];
+      const colours = [0xf2d35b, 0xd4140b, 0x4c8bf5, 0x1a1a1f, 0x9a6ad0, 0xe08a3a];
+      const spread = shot > 0.5 ? Math.min(1, (shot - 0.5) * 3) : 0;
+      rack.forEach(([bx, by], i) => {
+        const sx = toward > 0 ? bx : 545 - bx;
+        dot(sx + Math.round(spread * toward * ((i % 3) + 1)), by + Math.round(spread * (by - 79) * 1.5), colours[i]);
+      });
+      const run = shot < 0.25 ? 0 : Math.min(1, (shot - 0.25) * 4);
+      const white = toward > 0 ? 262 + Math.round(run * 20) : 290 - Math.round(run * 20);
+      dot(white, 79, WHITE);
+      if (!left && !right) return;
+      // The cue, drawn back, then in
+      const back = shot < 0.2 ? Math.round((shot / 0.2) * 4) : shot < 0.25 ? 0 : 2;
+      for (let k = 0; k < 14; k++) {
+        const cx = toward > 0 ? white - 2 - back - k : white + 2 + back + k;
+        dot(cx, 79 + Math.round(k / 5), k < 2 ? 0xeae6dc : 0xc49a6c);
+      }
+    }
+
+    /** An upright piano and its bench: whoever plays has their back to the room, keys going down and notes rising. */
+    function drawPiano() {
+      const playing = atCorner(0), body = 0x1d1f25, shine = 0x3a3d47;
+      fill(261, 82, 31, 1, SHADOW);
+      fill(262, 58, 29, 2, shine);
+      fill(262, 60, 29, 22, body);
+      fill(263, 60, 1, 22, shine);
+      // The music on its stand, and the candles
+      fill(270, 62, 13, 6, PALETTE.paper);
+      for (const row of [63, 65]) fill(271, row, 11, 1, 0x8a8f9c);
+      fill(265, 57, 1, 3, 0xf2efe9);
+      fill(287, 57, 1, 3, 0xf2efe9);
+      dot(265, 56, 0xffd36b, 0.6 + 0.4 * Math.sin(now * 9));
+      dot(287, 56, 0xffd36b, 0.6 + 0.4 * Math.sin(now * 7 + 1));
+      // The keys, some pressed while it's played
+      fill(263, 71, 27, 3, 0xf4f1ea);
+      for (let k = 0; k < 9; k++) dot(264 + k * 3, 71, PALETTE.frame);
+      if (playing) {
+        for (let k = 0; k < 3; k++) {
+          const key = (Math.floor(now * 5) * (k + 2) + k * 7) % 26;
+          dot(264 + key, 73, 0xb8b3a8);
+        }
+      }
+      fill(263, 74, 27, 1, shine);
+      fill(265, 79, 3, 2, PALETTE.brass);
+      fill(285, 79, 3, 2, PALETTE.brass);
+      if (!playing) return;
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.5 + k / 3) % 1;
+        const nx = 266 + k * 9 + Math.round(Math.sin(rise * 5 + k) * 2), ny = 57 - Math.round(rise * 5);
+        fill(nx, ny, 2, 1, PALETTE.paper, 1 - rise);
+        fill(nx + 1, ny - 3, 1, 3, PALETTE.paper, 1 - rise);
+      }
+    }
+
+    /** The piano's bench, in front of whoever sits at it. */
+    function drawPianoBench() {
+      fill(268, 86, 17, 2, 0x3a3d47);
+      fill(268, 88, 17, 1, 0x1d1f25);
+      fill(269, 89, 2, 2, 0x1d1f25);
+      fill(282, 89, 2, 2, 0x1d1f25);
+      fill(267, 91, 19, 1, SHADOW);
+    }
+
+    /** A drum kit, the drummer behind it: while they play, the sticks come down and the cymbals shake. */
+    function drawDrums() {
+      const playing = atCorner(0), shell = 0x2f5aa8, chrome = 0xc9c3b8, brass = 0xe0b84a;
+      const beat = playing ? Math.floor(now * 6) % 2 : 0;
+      fill(250, 93, 54, 1, SHADOW);
+      // Cymbals on their stands, shaking when hit
+      for (const [cx, top, hit] of [[256, 72, beat], [298, 68, 1 - beat]]) {
+        fill(cx, top + 1, 1, 93 - top - 1, chrome);
+        fill(cx - 2, 92, 5, 1, chrome);
+        const tilt = playing && hit ? 1 : 0;
+        fill(cx - 4, top - tilt, 4, 1, brass);
+        fill(cx + 1, top + tilt, 4, 1, brass);
+        dot(cx, top, brass);
+      }
+      // The toms over the bass drum, the floor tom and the snare
+      fill(260, 82, 9, 3, chrome);
+      fill(260, 85, 9, 2, shell);
+      fill(291, 81, 9, 3, chrome);
+      fill(291, 84, 9, 7, shell);
+      fill(292, 91, 1, 2, chrome);
+      fill(298, 91, 1, 2, chrome);
+      fill(266, 76, 8, 2, chrome);
+      fill(266, 78, 8, 3, shell);
+      fill(279, 76, 8, 2, chrome);
+      fill(279, 78, 8, 3, shell);
+      // The bass drum, its front head marked, thumping
+      const thump = playing && beat ? 1 : 0;
+      fill(268, 81 + thump, 17, 12 - thump, shell);
+      fill(270, 82 + thump, 13, 10 - thump, 0xf2efe9);
+      fill(274, 85 + thump, 5, 4, 0xd96a5a);
+      fill(268, 81 + thump, 17, 1, chrome);
+      if (!playing) return;
+      // The sticks, coming down in turn
+      const lift = [beat ? 3 : 0, beat ? 0 : 3];
+      [[270, 268], [282, 286]].forEach(([hand, tip], i) => {
+        for (let k = 0; k < 5; k++) dot(hand + Math.round(((tip - hand) * k) / 4), 81 - lift[i] - k + (k > 2 ? 1 : 0), 0xe9d3a0);
+      });
+    }
+
+    /** A brass telescope on its tripod, aimed at the sky: it drifts while no one looks, and stars twinkle where it points. */
+    function drawTelescope() {
+      const looking = atCorner(0), tube = 0xe8e4da, leg = 0x6b4e37;
+      fill(266, 92, 24, 1, SHADOW);
+      for (const [fx, fy] of [[267, 91], [287, 91], [279, 88]]) {
+        for (let k = 0; k <= 16; k++) dot(Math.round(278 + ((fx - 278) * k) / 16), Math.round(74 + ((fy - 74) * k) / 16), leg);
+      }
+      fill(276, 72, 5, 3, PALETTE.brass);
+      // The tube, from the eyepiece up to its lens, swinging a little while no one's at it
+      const drift = looking ? 0 : Math.round(Math.sin(now * 0.4) * 2);
+      const from = { x: 271, y: 79 }, to = { x: 292, y: 60 + drift };
+      for (let k = 0; k <= 20; k++) {
+        const tx = Math.round(from.x + ((to.x - from.x) * k) / 20), ty = Math.round(from.y + ((to.y - from.y) * k) / 20);
+        const band = k === 7 || k === 15;
+        fill(tx - 1, ty - 1, 3, 3, band ? PALETTE.brass : tube);
+        dot(tx + 1, ty + 1, 0xb8b3a8);
+      }
+      fill(to.x - 1, to.y - 2, 4, 4, PALETTE.brass);
+      fill(to.x, to.y - 1, 2, 2, 0x1d3a7a);
+      fill(from.x - 2, from.y, 3, 2, PALETTE.frame);
+      // A star chart on a stand beside it
+      fill(296, 80, 1, 12, leg);
+      fill(292, 78, 10, 7, 0x1d3a7a);
+      for (const [sx, sy] of [[294, 80], [297, 79], [299, 82], [295, 83]]) dot(sx, sy, PALETTE.paper);
+      // Stars, out where it points
+      for (let k = 0; k < 3; k++) {
+        const t = (now * 0.6 + k * 0.33) % 1;
+        if (t < 0.4) dot(to.x + 4 + k * 3, to.y - 5 - k * 2, 0xfff0b0, 1 - t / 0.4);
+      }
+    }
+
+    /** A tall tank of jellyfish, glowing as they pulse up and drift down, bubbles rising past them. */
+    function drawJellyfish() {
+      const metal = 0x5a5f6c;
+      fill(260, 91, 31, 1, SHADOW);
+      fill(261, 84, 29, 7, PALETTE.counter);
+      fill(263, 86, 25, 4, PALETTE.doorPanel);
+      fill(262, 51, 27, 2, metal);
+      fill(262, 82, 27, 2, metal);
+      // The water, darker at the bottom, and the glass's shine
+      for (let row = 53; row < 82; row++) fill(262, row, 27, 1, row < 64 ? 0x1a4a7a : row < 74 ? 0x153d68 : 0x0e2a4a);
+      fill(263, 54, 1, 26, WHITE, 0.2);
+      fill(286, 54, 1, 26, WHITE, 0.1);
+      for (const [speed, phase, jx, colour] of [[0.5, 0, 268, 0xf28fb0], [0.4, 2.1, 280, 0xb88af0], [0.6, 4.2, 274, 0x8fe0f0]]) {
+        const bob = Math.sin(now * speed + phase), pulse = Math.floor(now * 2 + phase) % 2;
+        const y = 66 + Math.round(bob * 8), x = jx + Math.round(Math.sin(now * 0.3 + phase) * 2);
+        fill(x - 3, y - 3, 7, 7, colour, 0.15);
+        fill(x - 1, y - 1, 4 - pulse, 1, colour);
+        fill(x - 2 + pulse, y, 6 - pulse * 2, 2, colour);
+        for (let k = 0; k < 3; k++) {
+          const sway = Math.round(Math.sin(now * 3 + phase + k) * 0.6);
+          fill(x - 1 + k * 2 + sway, y + 2, 1, 3 + (k % 2), colour, 0.7);
+        }
+      }
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.4 + k / 2) % 1;
+        dot(284 - k * 17, 80 - Math.round(rise * 26), WHITE, 0.6 * (1 - rise));
+      }
+    }
+
+    /** A bonsai on a low stand, a stone lantern beside it: a leaf falls now and then, and a trimmer's snips glint. */
+    function drawBonsai() {
+      const wood = 0x5a3b25;
+      fill(260, 91, 34, 1, SHADOW);
+      fill(261, 80, 32, 2, 0x8c6744);
+      fill(261, 82, 32, 2, wood);
+      fill(263, 84, 2, 7, wood);
+      fill(289, 84, 2, 7, wood);
+      // The pot, the trunk twisting up, and the pads of leaves
+      fill(267, 76, 18, 4, 0x4a6a8a);
+      fill(266, 76, 20, 1, 0x5a7a9a);
+      fill(268, 75, 16, 1, 0x3b5a3a);
+      for (const [tx, ty] of [[276, 74], [276, 72], [275, 70], [274, 68], [275, 66], [277, 64]]) fill(tx, ty, 2, 2, 0x6e4a2e);
+      fill(270, 69, 5, 1, 0x6e4a2e);
+      fill(278, 67, 5, 1, 0x6e4a2e);
+      for (const [px, py, w] of [[264, 66, 10], [279, 64, 10], [271, 60, 11]]) {
+        fill(px + 1, py, w - 2, 1, PALETTE.leaf);
+        fill(px, py + 1, w, 3, PALETTE.leaf);
+        fill(px + 1, py + 3, w - 2, 1, PALETTE.leafDark);
+        dot(px + 2, py + 1, 0x6fba6a);
+      }
+      // The stone lantern
+      fill(288, 74, 3, 6, 0x8a8f9c);
+      fill(286, 73, 7, 1, 0x9aa0a6);
+      dot(289, 76, 0xffd36b, 0.8);
+      // A leaf falling to the stand
+      const fall = (now * 0.25) % 1;
+      if (fall < 0.6) dot(283 + Math.round(Math.sin(fall * 12)), 68 + Math.round((fall / 0.6) * 11), PALETTE.leaf);
+      if (atCorner(0) && Math.floor(now * 2) % 3 === 0) dot(266, 65, WHITE);
+    }
+
+    /** A jungle of plants: a palm, a monstera and a fern, their leaves stirring, and a parrot that bobs and flaps. */
+    function drawJungle() {
+      const leaf = PALETTE.leaf, dark = PALETTE.leafDark, light = 0x6fba6a, deep = 0x2f6a3a;
+      fill(246, 93, 60, 1, SHADOW);
+      const sway = (phase) => Math.round(Math.sin(now * 0.9 + phase) * 0.8);
+      // The monstera, to the left, its broad leaves split
+      fill(250, 86, 10, 7, PALETTE.pot);
+      fill(249, 86, 12, 1, 0x8a4f32);
+      for (const [lx, ly, phase] of [[244, 72, 0.5], [252, 64, 1.5], [257, 75, 2.5], [246, 80, 3.5]]) {
+        const s = sway(phase);
+        [3, 6, 8, 8, 7, 4].forEach((w, r) => fill(lx + s + Math.floor((8 - w) / 2), ly + r, w, 1, r < 3 ? deep : 0x285a32));
+        for (let r = 1; r < 5; r++) dot(lx + s + 1 + r, ly + r, 0x3f8a4a);
+        dot(lx + s + 1, ly + 2, PALETTE.wood);
+        dot(lx + s + 6, ly + 3, PALETTE.wood);
+        // Its stem, down to the pot
+        for (let k = 0; k <= 8; k++) {
+          const sy = ly + 6 + Math.round(((86 - ly - 6) * k) / 8);
+          if (sy < 86) dot(Math.round(lx + 4 + s + ((255 - lx - 4 - s) * k) / 8), sy, deep);
+        }
+      }
+      // The palm, in the middle, its fronds arching over the rest
+      fill(272, 86, 9, 7, PALETTE.pot);
+      fill(271, 86, 11, 1, 0x8a4f32);
+      for (let k = 0; k < 8; k++) fill(275 + (k > 4 ? 1 : 0), 62 + k * 3, 3, 3, k % 2 ? 0x8a6a42 : 0x6e5233);
+      for (const [dir, length, lift, phase] of [[-1, 14, 3, 0], [1, 14, 3, 1], [-1, 9, 0, 2], [1, 9, 0, 3], [-1, 6, 5, 4], [1, 6, 5, 5]]) {
+        for (let k = 1; k <= length; k++) {
+          const fx = 277 + dir * k, fy = 61 - lift + Math.round((k * k) / (length + 2)) + (k > length / 2 ? sway(phase) : 0);
+          dot(fx, fy, leaf);
+          dot(fx, fy + 1, k % 2 ? dark : leaf);
+          if (k > 2 && k % 2 === 0) dot(fx, fy + 2, dark);
+        }
+      }
+      fill(275, 59, 5, 3, leaf);
+      dot(277, 58, light);
+      // The fern, to the right, its fronds arching out of the pot
+      fill(292, 87, 9, 6, PALETTE.pot);
+      fill(291, 87, 11, 1, 0x8a4f32);
+      for (let f = 0; f < 7; f++) {
+        const angle = Math.PI * (1.12 + f * 0.13), s = sway(f);
+        for (let k = 1; k <= 9; k++) {
+          const fx = 296 + Math.round(Math.cos(angle) * k * 1.1) + (k > 5 ? s : 0);
+          const fy = 86 + Math.round(Math.sin(angle) * k) + Math.round((k * k) / 22);
+          dot(fx, fy, k % 3 ? leaf : light);
+          if (k > 1 && k < 8) dot(fx + (k % 2 ? 1 : -1), fy + 1, dark);
+        }
+      }
+      // The parrot on the palm, bobbing, and now and then flapping
+      const px = 284, py = 63, bob = Math.floor(now * 2) % 2, flap = (now % 5) < 0.6 ? Math.floor(now * 10) % 2 : -1;
+      fill(px, py - 4 + bob, 3, 3, 0xd4140b);
+      dot(px + 3, py - 3 + bob, 0xf2d35b);
+      dot(px + 1, py - 3 + bob, WHITE);
+      fill(px, py - 1, 3, 4, 0xd4140b);
+      fill(px - 1, py + 3, 2, 3, 0x4c8bf5);
+      if (flap >= 0) fill(px + 3, py - 2 + flap * 2, 3, 2, 0x4c8bf5);
+      else fill(px - 1, py, 2, 3, 0x4c8bf5);
+      dot(px + 1, py + 3, 0xf2d35b);
+    }
+
+    /** A coffee bar, a chalkboard in front: steam from the machine, and a cup filling while the barista's in. */
+    function drawCoffeeBar() {
+      const wood = 0x5a3b25;
+      fill(252, 93, 50, 1, SHADOW);
+      // The espresso machine, chrome, on the bar
+      fill(282, 63, 14, 10, 0xc9c3b8);
+      fill(282, 63, 14, 1, WHITE);
+      fill(284, 65, 10, 3, PALETTE.machine);
+      dot(286, 66, 0x6fd36f);
+      dot(291, 66, 0xd96a5a);
+      fill(286, 69, 2, 2, PALETTE.machine);
+      fill(291, 69, 2, 2, PALETTE.machine);
+      const brewing = atCorner(0), fillUp = brewing ? (now * 0.25) % 1 : 0;
+      fill(286, 72, 3, 1, PALETTE.mug);
+      if (fillUp > 0) fill(286, 72, 3, 1, 0x5a3a24);
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.5 + k / 2) % 1;
+        dot(292 + Math.round(Math.sin(rise * 6 + k)), 61 - Math.round(rise * 8), WHITE, 0.6 * (1 - rise));
+      }
+      // Cups stacked, and the bar itself
+      for (let k = 0; k < 3; k++) fill(256, 70 - k * 2, 4, 2, k % 2 ? 0xe9e6df : PALETTE.mug);
+      fill(262, 71, 3, 2, 0x8a5a2b);
+      fill(254, 73, 46, 3, 0x8c6744);
+      fill(254, 73, 46, 1, 0xa87a56);
+      fill(254, 76, 46, 16, wood);
+      for (let k = 0; k < 5; k++) fill(257 + k * 9, 78, 1, 13, shaded(wood, 0.8));
+      fill(254, 76, 46, 1, shaded(wood, 0.7));
+      // The chalkboard, standing on the floor
+      fill(244, 82, 9, 10, PALETTE.counter);
+      fill(245, 83, 7, 7, 0x2a2e2a);
+      for (const [cx, cy, w] of [[246, 84, 5], [246, 86, 4], [246, 88, 5]]) fill(cx, cy, w, 1, PALETTE.paper, 0.75);
+      fill(244, 92, 9, 1, SHADOW);
+    }
+
+    /** Two racks of servers, their lights blinking, a cable bundle over them, a red light now and then. */
+    function drawServers() {
+      fill(258, 89, 35, 1, SHADOW);
+      const lights = [0x6fd36f, 0x6fd36f, 0xf2d35b, 0x4c8bf5];
+      for (const [rx, seed] of [[259, 0], [276, 7]]) {
+        fill(rx, 52, 16, 37, 0x1d1f25);
+        fill(rx, 52, 16, 1, 0x3a3f4a);
+        fill(rx, 52, 1, 37, 0x3a3f4a);
+        fill(rx + 15, 52, 1, 37, 0x3a3f4a);
+        for (let u = 0; u < 11; u++) {
+          const uy = 54 + u * 3;
+          fill(rx + 2, uy, 12, 2, 0x2a2e36);
+          fill(rx + 9, uy, 4, 1, 0x14161b);
+          for (let k = 0; k < 3; k++) {
+            const on = (Math.floor(now * (3 + ((u + k + seed) % 4))) + u * 3 + k + seed) % 3 !== 0;
+            dot(rx + 3 + k * 2, uy, lights[(u + k + seed) % lights.length], on ? 1 : 0.2);
+          }
+        }
+      }
+      if (Math.floor(now * 1.2) % 7 === 0) dot(288, 63, PALETTE.alarm);
+      // A tray of cables along the tops, dropping into each rack
+      fill(259, 50, 33, 2, 0x5a5f6c);
+      [0x4c8bf5, 0xf2d35b, 0xd96a5a].forEach((colour, k) => {
+        fill(261 + k * 2, 50, 1, 3, colour);
+        fill(278 + k * 2, 50, 1, 3, colour);
+        dot(266 + k * 6, 50, colour);
+      });
+    }
+
+    /** A 3D printer on a table, its head running back and forth as the print grows layer by layer, its spool turning. */
+    function drawPrinter() {
+      const frame = 0x3a3f4a, rail = 0x8a93a3, filament = 0x4c8bf5;
+      fill(257, 91, 42, 1, SHADOW);
+      fill(258, 78, 40, 2, 0x8c6744);
+      fill(258, 80, 40, 2, PALETTE.counter);
+      fill(260, 82, 2, 9, PALETTE.counter);
+      fill(294, 82, 2, 9, PALETTE.counter);
+      // The frame and its bed
+      fill(265, 56, 2, 22, frame);
+      fill(286, 56, 2, 22, frame);
+      fill(265, 56, 23, 2, frame);
+      fill(267, 75, 19, 2, 0x2a2e36);
+      // The print, growing, then taken off for the next
+      const progress = (now / 30) % 1, layers = Math.min(12, Math.floor(progress * 14));
+      for (let k = 0; k < layers; k++) {
+        const w = k < 4 ? 9 : k < 8 ? 7 : 5;
+        fill(276 - Math.floor(w / 2), 74 - k, w, 1, k % 2 ? filament : shaded(filament, 0.85));
+      }
+      // The gantry, at the layer it's on, and the head running along it
+      const gy = 72 - layers;
+      fill(267, gy, 19, 1, rail);
+      const run = layers < 12 ? Math.round(Math.sin(now * 4) * 4) : 0;
+      fill(274 + run, gy - 2, 5, 3, PALETTE.machine);
+      dot(276 + run, gy + 1, layers < 12 ? 0xff8a3d : PALETTE.machine);
+      // The spool, turning while it prints, and its little screen
+      fill(290, 62, 7, 7, filament);
+      fill(292, 64, 3, 3, PALETTE.paper);
+      const spoke = layers < 12 ? Math.floor(now * 3) % 2 : 0;
+      dot(293 + (spoke ? 1 : -1), 65, 0x9aa0a6);
+      for (let k = 0; k < 6; k++) dot(289 - Math.round(k * 0.5), 66 + k, filament);
+      fill(268, 79, 6, 1, PALETTE.frame);
+      fill(268, 79, Math.round(progress * 6), 1, 0x6fd36f);
+    }
+
+    /** A heavy bag on its stand: it swings when it's hit, a star where the punch lands. */
+    function drawBoxing() {
+      const post = 0x3a3f4a, bag = 0xb8322a;
+      fill(268, 93, 36, 1, SHADOW);
+      fill(296, 53, 3, 39, post);
+      fill(278, 53, 21, 2, post);
+      fill(293, 91, 9, 2, post);
+      // The bag, hung from its chain, swinging out from the top
+      const hitting = atCorner(0), swing = hitting ? Math.sin(now * 5) : Math.sin(now * 0.8) * 0.15;
+      fill(281, 55, 1, 5, 0x9aa0a6);
+      for (let row = 0; row < 22; row++) {
+        const sx = Math.round(swing * row * 0.15);
+        const w = row === 0 || row === 21 ? 7 : 9;
+        fill(282 - Math.ceil(w / 2) + sx, 60 + row, w, 1, row === 4 || row === 16 ? 0x2a2e36 : bag);
+        if (row > 0 && row < 21) dot(282 - 4 + sx, 60 + row, lighter(bag));
+      }
+      if (hitting && swing > 0.85) {
+        const sx = Math.round(swing * 10 * 0.15);
+        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) dot(276 + sx + dx, 70 + dy, 0xffd36b);
+      }
+      // A pair of dumbbells, and a towel over the stand
+      fill(301, 90, 7, 1, 0x5a5f6c);
+      fill(300, 89, 2, 3, PALETTE.machine);
+      fill(307, 89, 2, 3, PALETTE.machine);
+      fill(299, 56, 3, 7, 0xe9e6df);
+    }
+
+    /** The treadmill's console and handrails, beyond whoever walks on it. */
+    function drawTreadmillConsole() {
+      const grey = 0x5a5f6c;
+      fill(264, 68, 2, 14, grey);
+      fill(286, 68, 2, 14, grey);
+      fill(262, 63, 28, 7, 0x2a2e36);
+      fill(262, 63, 28, 1, grey);
+      fill(265, 65, 10, 3, 0x1a3a2a);
+      const running = atCorner(0);
+      for (let k = 0; k < 4; k++) {
+        const level = running ? 1 + ((Math.floor(now * 2) + k * 2) % 3) : 1;
+        fill(266 + k * 2, 68 - level, 1, level, 0x6fd36f);
+      }
+      dot(279, 65, running ? 0x6fd36f : 0x5a5f6c);
+      dot(282, 65, 0xd96a5a);
+      dot(285, 65, 0x4c8bf5);
+    }
+
+    /** The treadmill's belt, running under whoever walks on it. */
+    function drawTreadmillBelt() {
+      fill(260, 93, 32, 1, SHADOW);
+      fill(261, 79, 30, 4, 0x3a3f4a);
+      fill(263, 83, 26, 9, 0x23252c);
+      fill(261, 83, 2, 9, 0x8a93a3);
+      fill(289, 83, 2, 9, 0x8a93a3);
+      fill(261, 92, 30, 1, 0x5a5f6c);
+      const shift = atCorner(0) ? Math.floor(now * 8) % 3 : 0;
+      for (let row = 83 + shift; row < 92; row += 3) fill(263, row, 26, 1, 0x34373f);
+    }
+
+    /** A hot tub's back rim, behind whoever is in it. */
+    function drawHotTubBack() {
+      fill(254, 76, 46, 2, 0xa87a56);
+      fill(255, 78, 44, 3, 0x7a5232);
+      for (let k = 0; k < 8; k++) fill(257 + k * 6, 78, 1, 3, 0x5a3b25);
+    }
+
+    /** The hot tub's water, up to the shoulders of whoever sits in it, bubbling and steaming, a duck afloat, and the tub's front. */
+    function drawHotTubFront() {
+      fill(253, 96, 48, 1, SHADOW);
+      fill(255, 81, 44, 6, 0x3fa0c0);
+      fill(255, 81, 44, 1, 0x8fd6ea);
+      for (let k = 0; k < 6; k++) {
+        const t = (now * 0.9 + k * 0.37) % 1;
+        dot(258 + ((k * 13) % 40), 82 + (k % 3), WHITE, t < 0.5 ? 0.8 : 0.2);
+      }
+      const bob = Math.round(Math.sin(now * 2));
+      fill(292, 80 + bob, 4, 2, DESK_THINGS.duck);
+      fill(294, 78 + bob, 2, 2, DESK_THINGS.duck);
+      dot(296, 79 + bob, DESK_THINGS.beak);
+      fill(253, 86, 48, 2, 0xa87a56);
+      fill(254, 88, 46, 8, 0x7a5232);
+      for (let k = 0; k < 8; k++) fill(256 + k * 6, 88, 1, 8, 0x5a3b25);
+      fill(254, 90, 46, 1, 0x3a3a40);
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.35 + k / 3) % 1;
+        fill(262 + k * 14 + Math.round(Math.sin(rise * 5 + k) * 2), 78 - Math.round(rise * 18), 2 + Math.round(rise * 2), 1, WHITE, 0.35 * (1 - rise));
+      }
+    }
+
+    /** A ball pit's back wall, padded. */
+    function drawBallPitBack() {
+      fill(254, 75, 46, 2, 0x5a8ad0);
+      fill(254, 77, 46, 7, 0x3f6aa8);
+      for (let k = 0; k < 5; k++) fill(256 + k * 9, 77, 1, 7, 0x2f5a8a);
+    }
+
+    /** The balls, up to the shoulders of whoever's in, one bouncing up now and then, and the pit's front wall. */
+    function drawBallPitFront() {
+      const colours = [0xd4140b, 0xf2d35b, 0x4c8bf5, 0x6fd36f, 0xf28fb0, 0xe08a3a];
+      fill(253, 96, 48, 1, SHADOW);
+      for (let row = 0; row < 4; row++) {
+        for (let k = 0; k < 22; k++) fill(255 + k * 2 + (row % 2), 81 + row * 2, 2, 2, colours[(k * 7 + row * 5) % colours.length]);
+      }
+      const hop = (now * 0.8) % 1;
+      if (hop < 0.5) {
+        const h = Math.round(Math.sin(hop * 2 * Math.PI) * 6);
+        fill(266 + Math.floor(now * 0.8) % 4 * 7, 80 - h, 2, 2, colours[Math.floor(now * 0.8) % colours.length]);
+      }
+      fill(253, 88, 48, 2, 0xd96a5a);
+      fill(254, 90, 46, 6, 0xb8322a);
+      for (let k = 0; k < 5; k++) fill(256 + k * 9, 90, 1, 6, 0x8a2a24);
+    }
+
+    /** A campfire in a ring of stones, flames flickering, sparks and smoke rising, a glow on the floor. */
+    function drawCampfire() {
+      const cx = 276;
+      fill(cx - 16, 88, 33, 8, 0xff8a3d, 0.08);
+      fill(cx - 10, 86, 21, 10, 0xff8a3d, 0.08);
+      for (const [sx, sy] of [[266, 91], [270, 93], [276, 94], [282, 93], [286, 91], [269, 89], [283, 89]]) {
+        fill(sx - 1, sy, 3, 2, 0x8a8f9c);
+        dot(sx - 1, sy, 0xa8adb6);
+      }
+      fill(269, 90, 14, 2, 0x5a3b25);
+      fill(271, 89, 10, 1, 0x6e4a2e);
+      // The flames, each column its own height, red to yellow
+      for (let k = 0; k < 9; k++) {
+        const h = 4 + Math.round(4 * Math.abs(Math.sin(now * (5 + k) + k * 1.7))) - Math.abs(k - 4);
+        if (h <= 0) continue;
+        const fx = cx - 4 + k;
+        fill(fx, 89 - h, 1, h, 0xd4140b);
+        if (h > 2) fill(fx, 89 - h + 1, 1, h - 1, 0xff8a3d);
+        if (h > 4) fill(fx, 89 - h + 3, 1, h - 3, 0xf2d35b);
+      }
+      for (let k = 0; k < 3; k++) {
+        const rise = (now * 0.8 + k / 3) % 1;
+        dot(cx - 2 + k * 2 + Math.round(Math.sin(rise * 7 + k) * 2), 82 - Math.round(rise * 14), 0xffd36b, 1 - rise);
+      }
+      for (let k = 0; k < 2; k++) {
+        const rise = (now * 0.25 + k / 2) % 1;
+        fill(cx - 1 + Math.round(Math.sin(rise * 4 + k) * 3), 76 - Math.round(rise * 20), 2 + Math.round(rise * 2), 2, PALETTE.smoke, 0.35 * (1 - rise));
+      }
+      // Marshmallows toasting on sticks, held out by whoever sits by it
+      [[0, 259, 269], [1, 293, 283]].forEach(([i, hand, tip]) => {
+        if (!atCorner(i)) return;
+        for (let k = 0; k <= 8; k++) dot(Math.round(hand + ((tip - hand) * k) / 8), 85 - Math.round(k * 0.4), 0x8a6a42);
+        const toast = (now * 0.1 + i * 0.5) % 1;
+        fill(tip + (i ? -1 : 0), 81, 2, 2, toast < 0.5 ? 0xf4f1ea : 0xd9b26a);
+      });
+    }
+
+    /** The logs either side of the fire, in front of whoever sits on them. */
+    function drawCampfireLogs() {
+      for (const lx of [248, 290]) {
+        fill(lx, 90, 15, 4, 0x6e4a2e);
+        fill(lx, 90, 15, 1, 0x8a6a42);
+        fill(lx, 90, 2, 4, 0xc9a06a);
+        dot(lx + 1, 91, 0x8a6a42);
+        fill(lx, 94, 15, 1, SHADOW);
+      }
+    }
+
     /* The pet */
 
     /**
@@ -2208,7 +3479,14 @@
     /** What the lounge's corner piece is made of, each part at the depth it stands at. */
     const CORNER_PARTS = {
       arcade: [[86, drawArcade]], vending: [[86, drawVending]], foosball: [[89, drawFoosball]], fishtank: [[86, drawFishTank]],
-      books: [[86, drawBookcase], [90, drawBeanbagBack], [94.5, drawBeanbagFront]], none: [],
+      books: [[86, drawBookcase], [90, drawBeanbagBack], [94.5, drawBeanbagFront]],
+      dragon: [[96, drawDragon]], pinball: [[90, drawPinball]], jukebox: [[88, drawJukebox]], pool: [[92, drawPool]],
+      piano: [[82, drawPiano], [91, drawPianoBench]], drums: [[93, drawDrums]], telescope: [[92, drawTelescope]],
+      jellyfish: [[91, drawJellyfish]], bonsai: [[91, drawBonsai]], jungle: [[93, drawJungle]], coffee: [[93, drawCoffeeBar]],
+      servers: [[89, drawServers]], printer: [[91, drawPrinter]], boxing: [[93, drawBoxing]],
+      treadmill: [[80, drawTreadmillConsole], [88, drawTreadmillBelt]], hottub: [[80, drawHotTubBack], [89, drawHotTubFront]],
+      ballpit: [[80, drawBallPitBack], [89, drawBallPitFront]], campfire: [[92.5, drawCampfire], [93, drawCampfireLogs]],
+      none: [],
     };
 
     /** A rally starts whenever both ends of the table are taken. */
@@ -2547,35 +3825,37 @@
     function drawScreenLight(desk) {
       const session = sessionAt(desk);
       if (!session) return;
-      const { x, y } = DESKS[desk];
+      // The screen's top-left, wherever the desk has it
+      const { screen } = WORKSPACES[workspaceOf(session)];
+      const x = DESKS[desk].x + screen.dx, y = DESKS[desk].y + screen.dy;
       const blinkedOff = session.state === 'asking' && Math.floor(now * 2) % 2 === 1;
       // A command running turns the screen terminal-green.
       const shell = session.state === 'thinking' && toolKind(session.tool) === 'shell';
       const light = shell ? PALETTE.terminal
         : session.state === 'idle' || blinkedOff ? PALETTE.monitorOn : colour(session.state);
 
-      if (session.state !== 'idle') fill(x + 3, y - 13, 19, 14, light, 0.12);
-      fill(x + 5, y - 11, 15, 1, light);
-      fill(x + 5, y - 10, 1, 9, light);
-      fill(x + 19, y - 10, 1, 9, light);
+      if (session.state !== 'idle') fill(x - 3, y - 3, 19, 14, light, 0.12);
+      fill(x - 1, y - 1, 15, 1, light);
+      fill(x - 1, y, 1, 9, light);
+      fill(x + 13, y, 1, 9, light);
 
       if (shell) {
         // Lines of output, scrolling up
         for (let k = 0; k < 4; k++) {
           const rise = (now * 1.4 + k / 4) % 1;
-          fill(x + 7 + (k % 2) * 2, y - 12 - Math.round(rise * 9), 5 + (k % 3) * 2, 1, light, 1 - rise);
+          fill(x + 1 + (k % 2) * 2, y - 2 - Math.round(rise * 9), 5 + (k % 3) * 2, 1, light, 1 - rise);
         }
       } else if (session.state === 'thinking') {
         for (let k = 0; k < 3; k++) {
           const rise = (now * 0.8 + k / 3 + desk * 0.17) % 1;
-          dot(x + 8 + k * 4, y - 12 - Math.round(rise * 9), light, 1 - rise);
+          dot(x + 2 + k * 4, y - 2 - Math.round(rise * 9), light, 1 - rise);
         }
       } else if (session.state === 'error') {
         for (let k = 0; k < 3; k++) {
           const rise = (now * 0.5 + k / 3) % 1;
           const size = rise > 0.5 ? 3 : 2;
           const drift = Math.round(Math.sin(rise * 6 + k) * 1.5);
-          fill(x + 9 + k * 2 + drift, y - 13 - Math.round(rise * 12), size, size, PALETTE.smoke, 0.8 * (1 - rise));
+          fill(x + 3 + k * 2 + drift, y - 3 - Math.round(rise * 12), size, size, PALETTE.smoke, 0.8 * (1 - rise));
         }
       }
     }
@@ -2607,9 +3887,10 @@
       }
 
       if (state === 'idle') {
-        // A nap, after a while on the couch
+        // A nap, after a while on the couch or the beanbag, not at the drums or in the hot tub
         const spot = spotOf(person.place);
         if (person.isWalking || spot === null || spots[spot].pose !== 'sit' || now - person.arrivedAt <= 20) return;
+        if (spot >= LOUNGE_SPOTS.length && decor.corner !== 'books') return;
         const rise = (now * 0.35 + person.look.phase) % 1;
         const zx = x + 3 + Math.round(rise * 3), zy = top - 3 - Math.round(rise * 8);
         fill(zx, zy, 3, 1, WHITE, 1 - rise);
@@ -2859,18 +4140,19 @@
       if (!session || !session.turnStartedAt || (session.state !== 'thinking' && session.state !== 'asking')) return;
       const seconds = Math.max(0, Math.floor((Date.now() - session.turnStartedAt) / 1000));
       const text = turnLength(seconds);
-      // The screen is eleven pixels across, from x + 7: the colon goes
+      // The screen is eleven pixels across, inside its edge: the colon goes
       // without the gaps round it, so m:ss fits inside it.
       const gap = (c, next) => (c === ':' || next === ':' ? 0 : 1);
       const chars = [...text];
       const width = chars.reduce((w, c, i) => w + GLYPHS[c][0].length + (i < chars.length - 1 ? gap(c, chars[i + 1]) : 0), 0);
-      let at = x + 7 + Math.floor((11 - width) / 2);
+      const { screen } = WORKSPACES[workspaceOf(session)];
+      let at = x + screen.dx + 1 + Math.floor((11 - width) / 2);
       chars.forEach((c, i) => {
-        GLYPHS[c].forEach((row, r) => [...row].forEach((on, column) => { if (on === '1') dot(at + column, y - 8 + r, PALETTE.bubble); }));
+        GLYPHS[c].forEach((row, r) => [...row].forEach((on, column) => { if (on === '1') dot(at + column, y + screen.dy + 2 + r, PALETTE.bubble); }));
         at += GLYPHS[c][0].length + gap(c, chars[i + 1]);
       });
 
-      const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
+      const occupant = occupantOf(desk);
       if (seconds < LONG_TURN || !occupant) return;
       const s = seat(desk), top = topOf(occupant, poseOf(occupant, now));
       const run = (now * 1.5 + occupant.look.phase) % 1;
@@ -2883,16 +4165,16 @@
      */
     function drawSpotlight() {
       if (selectedDesk < 0) return;
-      const { x, y } = DESKS[selectedDesk];
+      const { x, y } = DESKS[selectedDesk], top = y + reachOf(selectedDesk);
       for (const [grow, alpha] of [[0, 0.1], [3, 0.06]]) {
-        fill(x - 4 - grow, y - 14 + grow / 2, DESK_WIDTH + 8 + grow * 2, 34 - grow, ink, alpha);
+        fill(x - 4 - grow, top + grow / 2, DESK_WIDTH + 8 + grow * 2, y + 20 - top - grow, ink, alpha);
       }
     }
 
     function drawSelectionCorners() {
       if (selectedDesk < 0) return;
       const { x, y } = DESKS[selectedDesk];
-      const left = x - 3, right = x + DESK_WIDTH + 2, top = y - 14, bottom = y + 18;
+      const left = x - 3, right = x + DESK_WIDTH + 2, top = y + reachOf(selectedDesk), bottom = y + 18;
       for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
         fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink);
         fill(cx, dy > 0 ? cy : cy - 3, 1, 4, ink);
@@ -2907,7 +4189,7 @@
     function drawCarried({ person, x, y, over, from }) {
       if (over !== null && over !== from) {
         const d = DESKS[over];
-        const left = d.x - 3, right = d.x + DESK_WIDTH + 2, top = d.y - 14, bottom = d.y + 18;
+        const left = d.x - 3, right = d.x + DESK_WIDTH + 2, top = d.y + reachOf(over), bottom = d.y + 18;
         const blink = 0.55 + 0.45 * Math.sin(now * 8);
         for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [right, top, -1, 1], [left, bottom, 1, -1], [right, bottom, -1, -1]]) {
           fill(dx > 0 ? cx : cx - 3, cy, 4, 1, ink, blink);
@@ -2923,7 +4205,9 @@
       });
       drawPerson(lifted);
       const top = topOf(lifted, poseOf(lifted, now));
-      const [chair, chairTop] = CHAIRS[decor.chair];
+      // Their chair, or what they sit on at a workspace with none
+      const workspace = WORKSPACES[workspaceOf(person.session)];
+      const [chair, chairTop] = workspace.carry || CHAIRS[decor.chair];
       fill(lifted.position.x - 4, top - 5, 9, 2, chairTop);
       fill(lifted.position.x - 3, top - 3, 1, 2, chair);
       fill(lifted.position.x + 3, top - 3, 1, 2, chair);
@@ -3119,10 +4403,15 @@
     DESKS.forEach((d, desk) => {
       items.push([d.y + 5, () => drawDesk(desk)]);
       items.push([d.y + 3.5, () => drawChair(desk)]); // just behind whoever sits in it
+      items.push([d.y + 3, () => drawWorkspaceBack(desk)]);
     });
-    // Someone being carried is drawn on top, where the finger has them, not at their desk.
-    const carried = frame.carrying && frame.carrying.person;
-    for (const person of office.people) if (person !== carried) items.push([person.position.y, () => drawPerson(person)]);
+    // Someone being carried is drawn on top, where the finger has them, not at their desk. Someone at
+    // the clock or the whiteboard is in front of the first row's workspaces, the tallest of which reach
+    // the wall: they're there to be seen.
+    const atWall = (person) => !person.isWalking && /^(clock|board):/.test(person.place);
+    for (const person of office.people) {
+      if (person !== carried) items.push([atWall(person) ? DESKS[0].y + 5.5 : person.position.y, () => drawPerson(person)]);
+    }
     office.seats.forEach((s, desk) => { if (s.session && s.session.compacting) items.push([DESKS[desk].y + 16, () => drawShredder(desk)]); });
     for (const intern of office.interns) {
       // One still waiting for room hasn't come in yet.
@@ -3968,10 +5257,26 @@
       };
     }
 
+    /**
+     * Where a key's desk is, to a finger: its workspace, as high as that
+     * reaches, down to the desk's front; and its label below. A tall one
+     * reaches up into the label of the desk behind it, where it wins.
+     */
+    function deskBoxes(desk) {
+      const { x, y } = DESKS[desk], seat = office.seats[desk] || {};
+      const left = x - 2, right = x + DESK_WIDTH + 2;
+      return [
+        { left, right, top: y + WORKSPACES[workspaceOf(seat.session)].top, bottom: y + 18 },
+        { left, right, top: y + 18, bottom: y + 27 },
+      ];
+    }
+
     /** The key's desk under a point of the room, if there is one: where a carried agent would land. */
     function deskAt(x, y) {
-      const desk = DESKS.findIndex((d, i) => i < office.seats.length
-        && x >= d.x - 2 && x <= d.x + DESK_WIDTH + 2 && y >= d.y - 14 && y <= d.y + 27);
+      const within = (box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+      const boxes = DESKS.slice(0, office.seats.length).map((_, desk) => deskBoxes(desk));
+      let desk = boxes.findIndex(([workspace]) => within(workspace));
+      if (desk < 0) desk = boxes.findIndex(([, label]) => within(label));
       return desk >= 0 ? desk : null;
     }
 
@@ -4007,14 +5312,17 @@
       const dome = placed('button', BUTTON), stand = placed('mic', MIC);
       consider({ kind: 'button' }, { left: dome.x - 7, right: dome.x + 8, top: dome.y - 1, bottom: dome.y + 16 }, 1);
       consider({ kind: 'mic' }, { left: stand.x - (decor.mic === 'megaphone' ? 9 : 5), right: stand.x + 6, top: stand.y - 25, bottom: stand.y + 1 }, 1);
-      DESKS.forEach(({ x: dx, y: dy }, desk) => {
+      DESKS.forEach((_, desk) => {
         const seat = office.seats[desk] || {};
         // An empty desk only matters where a hire would sit.
         const target = seat.session ? { kind: 'session', id: seat.session.id }
           : seat.pin ? { kind: 'pinned', name: seat.pin, desk }
           : hiresInto(desk) ? { kind: 'empty', desk } : null;
-        // The desk, its chair and monitor, and its label
-        if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
+        // The desk, its chair and monitor, and below them its label
+        if (!target) return;
+        const [workspace, label] = deskBoxes(desk);
+        consider(target, workspace, 2);
+        consider(target, label, 3);
       });
       const button = heldButton();
       if (button) {
@@ -4221,6 +5529,64 @@
     };
   }
 
+  /** What a preview shows of the room, in the wide room's art pixels: round the corner piece, or round the first desk. */
+  const PREVIEW_CROPS = {
+    corner: { x: 238, y: 49, w: 80, h: 51 },
+    workspace: { x: DESKS[0].x - 6, y: DESKS[0].y - 27, w: DESK_WIDTH + 14, h: 45 },
+  };
+  let previewRoom = null; // the canvas previews draw the whole room on
+  /** Someone at a workspace in its preview, at ease, so no bubble hides it. */
+  const PREVIEW_AGENT = {
+    id: 'preview', name: 'preview', state: 'idle', effort: '', agent: 'claude', model: '', tool: 'Edit', subagents: [],
+    maxPressedAt: null, turnStartedAt: null, dial: false, mic: false,
+  };
+
+  /**
+   * One of the room's choices on its own, for the setup page to show it by:
+   * `what` is { corner } with someone at each of its places, or
+   * { workspace } with an agent at it. It's drawn by the room's own code in
+   * the layout's `room` (its floor, paint and finishes), `now` seconds in,
+   * and cut to the piece, as big as fits `canvas` in whole pixels. `tall`
+   * shows it where the room held upright has it.
+   */
+  function preview(canvas, what, { room = null, now = 0, tall = false } = {}) {
+    const kept = { decor, spots, boardSpots, shape };
+    try {
+      shape = tall ? TALL : WIDE;
+      decor = roomOf({ ...room, ...what, team: null, staff: 'none', sky: 'day', pet: 'none' });
+      spots = spotsOf(decor);
+      boardSpots = boardSpotsOf(decor);
+      const office = new Office();
+      office.apply(what.workspace ? [{ pin: null, session: PREVIEW_AGENT }] : [], {}, now);
+      if (what.corner) CORNER_SPOTS[decor.corner].forEach((_, i) => {
+        const spot = LOUNGE_SPOTS.length + i, member = office.hireStaff();
+        member.place = spotPlace(spot);
+        member.position = { x: spots[spot].x, y: spots[spot].y };
+        member.isFacingAway = facesAway(spots[spot].pose);
+      });
+      const crop = { ...PREVIEW_CROPS[what.workspace ? 'workspace' : 'corner'] };
+      if (what.corner) Object.assign(crop, placed('corner', crop));
+      const scale = Math.max(1, Math.floor(Math.min(canvas.width / crop.w, canvas.height / crop.h)));
+      // One canvas for the whole room, kept from one preview to the next
+      if (!previewRoom || previewRoom.ownerDocument !== canvas.ownerDocument) previewRoom = canvas.ownerDocument.createElement('canvas');
+      const whole = previewRoom;
+      whole.width = shape.width * scale; // clears it, too
+      whole.height = shape.height * scale;
+      drawOffice(whole.getContext('2d'), office, {
+        now, hour: 12, minute: 0, month: 5, width: whole.width, height: whole.height, ratio: 1, selected: null,
+        mic: { held: false, heldAt: null, releasedAt: null, listener: null, usable: true }, framed: false, floating: null,
+      });
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const w = crop.w * scale, h = crop.h * scale;
+      ctx.drawImage(whole, crop.x * scale, crop.y * scale, w, h,
+        Math.floor((canvas.width - w) / 2), Math.floor((canvas.height - h) / 2), w, h);
+    } finally {
+      ({ decor, spots, boardSpots, shape } = kept);
+    }
+  }
+
   /** The pop-out window's size, in CSS pixels: two to each of the room's, and the margin round it. */
   const popOutSize = { width: WIDTH * 2 + FLOAT_MARGINS.window * 2, height: HEIGHT * 2 + FLOAT_MARGINS.window * 2 };
 
@@ -4234,6 +5600,7 @@
     remindSound(new Chip(audio, soft), audio.currentTime + 0.02);
   }
 
-  // `remind` is the deck's reminder; `Ambience` and `sounds` let each of the office's sounds be tried on its own.
-  window.AgentOffice = { create, popOutSize, remind, Ambience, sounds: Object.keys(SOUNDS) };
+  // `preview` draws a piece for the setup page; `remind` is the deck's reminder; `Ambience` and `sounds` let
+  // each of the office's sounds be tried on its own.
+  window.AgentOffice = { create, popOutSize, preview, remind, Ambience, sounds: Object.keys(SOUNDS) };
 })();

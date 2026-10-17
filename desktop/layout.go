@@ -57,24 +57,26 @@ func (k *KeyCount) UnmarshalJSON(data []byte) error {
 // each of the back wall's five places holds, the floor, the walls' paint, the
 // lounge's carpet and the piece in its corner, whether the sky keeps the
 // computer's time or it's always day, its pet, whether the windows follow the
-// seasons, how loud it is, the desks' finish and the chairs' colour, how many
-// of its own staff hang about, your team, and the dress code, as the Mac app's
+// seasons, how loud it is, the desks' finish, what everyone works at (a desk,
+// a tent, a throne…) and the chairs' colour, how many of its own staff hang
+// about, your team, and the dress code, as the Mac app's
 // Room. office.js draws it, with the same choices. Anything unknown, or of the wrong kind, is
 // as standard: it only changes how the room looks.
 type Room struct {
-	Mic    string   `json:"mic"`
-	Wall   []string `json:"wall"`
-	Floor  string   `json:"floor"`
-	Paint  string   `json:"paint"`
-	Lounge string   `json:"lounge"`
-	Corner string   `json:"corner"`
-	Sky    string   `json:"sky"`
-	Pet    string   `json:"pet"`
-	Season string   `json:"season"`
-	Sound  string   `json:"sound"`
-	Desk   string   `json:"desk"`
-	Chair  string   `json:"chair"`
-	Staff  string   `json:"staff"`
+	Mic       string   `json:"mic"`
+	Wall      []string `json:"wall"`
+	Floor     string   `json:"floor"`
+	Paint     string   `json:"paint"`
+	Lounge    string   `json:"lounge"`
+	Corner    string   `json:"corner"`
+	Sky       string   `json:"sky"`
+	Pet       string   `json:"pet"`
+	Season    string   `json:"season"`
+	Sound     string   `json:"sound"`
+	Desk      string   `json:"desk"`
+	Workspace string   `json:"workspace"`
+	Chair     string   `json:"chair"`
+	Staff     string   `json:"staff"`
 	// How each project's agent looks, by the project's name.
 	Team map[string]TeamMember `json:"team"`
 	// What agents wear by their model's size and by agent. After the team, so
@@ -84,9 +86,9 @@ type Room struct {
 
 // TeamMember is how one project's agent looks in the office: skin, hair, a
 // hairstyle, something extra such as glasses or a cap, an outfit and its
-// colour, what's on its desk, and a nickname for it. "auto" is as the
-// project's name picks it, and the clothes as its model's, as the Mac app's
-// TeamMember.
+// colour, what's on its desk, what it works at, and a nickname for it. "auto"
+// is as the project's name picks it, the clothes as its model's, and what it
+// works at as everyone does, as the Mac app's TeamMember.
 type TeamMember struct {
 	Skin      string `json:"skin"`
 	Hair      string `json:"hair"`
@@ -95,6 +97,7 @@ type TeamMember struct {
 	Outfit    string `json:"outfit"`
 	Colour    string `json:"colour"`
 	Desk      string `json:"desk"`
+	Workspace string `json:"workspace"`
 	Name      string `json:"name"`
 }
 
@@ -114,9 +117,15 @@ var teamChoices = map[string][]string{
 	"extra":     {"none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"},
 	"outfit": {"auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat", "polo", "cardigan", "hawaiian",
 		"tracksuit", "overalls", "waistcoat"},
-	"colour": {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
-	"desk":   {"auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"},
+	"colour":    {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
+	"desk":      {"auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"},
+	"workspace": append([]string{"auto"}, workspaces...),
 }
+
+// What an agent can work at: the office's choice for everyone, the first
+// being standard, and a team member's own, which can also be "auto".
+var workspaces = []string{"desk", "standing", "gaming", "tent", "box", "beanbag", "igloo", "van", "cockpit", "ship", "throne",
+	"greenhouse"}
 
 // checked is the member with anything unknown as standard, and the nickname
 // on one line, cut to its limit.
@@ -129,7 +138,7 @@ func (m TeamMember) checked() TeamMember {
 	}
 	return TeamMember{Skin: choose("skin", m.Skin), Hair: choose("hair", m.Hair), Hairstyle: choose("hairstyle", m.Hairstyle),
 		Extra: choose("extra", m.Extra), Outfit: choose("outfit", m.Outfit), Colour: choose("colour", m.Colour),
-		Desk: choose("desk", m.Desk), Name: oneLine(m.Name, nicknameLimit)}
+		Desk: choose("desk", m.Desk), Workspace: choose("workspace", m.Workspace), Name: oneLine(m.Name, nicknameLimit)}
 }
 
 // Dress is the office's dress code: what agents wear by the size of their
@@ -259,14 +268,17 @@ var (
 		"floor":  {"wood", "tiles", "concrete", "carpet"},
 		"paint":  {"slate", "sage", "clay", "cream"},
 		"lounge": {"navy", "teal", "plum", "sand"},
-		"corner": {"arcade", "vending", "foosball", "fishtank", "books", "none"},
-		"sky":    {"live", "day"},
-		"pet":    {"none", "cat", "dog", "lizard", "monkey"},
-		"season": {"calendar", "off"},
-		"sound":  {"off", "quiet", "normal"},
-		"desk":   {"wood", "walnut", "white", "black"},
-		"chair":  {"teal", "black", "red", "grey", "green"},
-		"staff":  {"some", "none", "many"},
+		"corner": {"arcade", "vending", "foosball", "fishtank", "books", "dragon", "pinball", "jukebox", "pool", "piano", "drums",
+			"telescope", "jellyfish", "bonsai", "jungle", "coffee", "servers", "printer", "boxing", "treadmill", "hottub", "ballpit",
+			"campfire", "none"},
+		"sky":       {"live", "day"},
+		"pet":       {"none", "cat", "dog", "lizard", "monkey"},
+		"season":    {"calendar", "off"},
+		"sound":     {"off", "quiet", "normal"},
+		"desk":      {"wood", "walnut", "white", "black"},
+		"workspace": workspaces,
+		"chair":     {"teal", "black", "red", "grey", "green"},
+		"staff":     {"some", "none", "many"},
 	}
 	wallChoices  = []string{"window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"}
 	standardWall = []string{"window", "whiteboard", "window", "pinboard", "window"}
@@ -285,7 +297,7 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 	json.Unmarshal(raw["wall"], &wall)
 	*r = Room{Mic: text(raw["mic"]), Floor: text(raw["floor"]), Paint: text(raw["paint"]), Lounge: text(raw["lounge"]),
 		Corner: text(raw["corner"]), Sky: text(raw["sky"]), Pet: text(raw["pet"]), Season: text(raw["season"]), Sound: text(raw["sound"]),
-		Desk: text(raw["desk"]), Chair: text(raw["chair"]), Staff: text(raw["staff"])}
+		Desk: text(raw["desk"]), Workspace: text(raw["workspace"]), Chair: text(raw["chair"]), Staff: text(raw["staff"])}
 	for _, place := range wall {
 		r.Wall = append(r.Wall, text(place))
 	}
@@ -297,7 +309,7 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 		json.Unmarshal(given, &parts)
 		r.Team[project] = TeamMember{Skin: text(parts["skin"]), Hair: text(parts["hair"]), Hairstyle: text(parts["hairstyle"]),
 			Extra: text(parts["extra"]), Outfit: text(parts["outfit"]), Colour: text(parts["colour"]), Desk: text(parts["desk"]),
-			Name: text(parts["name"])}
+			Workspace: text(parts["workspace"]), Name: text(parts["name"])}
 	}
 	json.Unmarshal(raw["dress"], &r.Dress)
 	*r = r.checked()
@@ -322,8 +334,8 @@ func (r Room) checked() Room {
 	checked := Room{Mic: choose("mic", r.Mic), Floor: choose("floor", r.Floor), Paint: choose("paint", r.Paint),
 		Lounge: choose("lounge", r.Lounge), Corner: choose("corner", r.Corner), Sky: choose("sky", r.Sky),
 		Pet: choose("pet", r.Pet), Season: choose("season", r.Season), Sound: choose("sound", r.Sound),
-		Desk: choose("desk", r.Desk), Chair: choose("chair", r.Chair), Staff: choose("staff", r.Staff),
-		Wall: slices.Clone(standardWall), Dress: r.Dress.checked()}
+		Desk: choose("desk", r.Desk), Workspace: choose("workspace", r.Workspace), Chair: choose("chair", r.Chair),
+		Staff: choose("staff", r.Staff), Wall: slices.Clone(standardWall), Dress: r.Dress.checked()}
 	for i := range checked.Wall {
 		if i < len(r.Wall) && slices.Contains(wallChoices, r.Wall[i]) {
 			checked.Wall[i] = r.Wall[i]
