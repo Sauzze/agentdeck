@@ -264,18 +264,29 @@ There's more to see while they work:
   first whiteboard.
 - **The floor** in wood, tiles, concrete or carpet, **the walls** in slate,
   sage, clay or cream, and **the lounge's carpet** in navy, teal, plum or sand.
-- **In the lounge:** an arcade machine, a vending machine, a foosball table, a
-  fish tank, or a bookcase and a beanbag. Idle agents go and play, grab a
-  snack, or read.
+- **In the lounge:** one of 23 pieces, each picked from its picture: an arcade
+  machine, a vending machine, a foosball table, a fish tank, a bookcase and a
+  beanbag, a dragon asleep on its gold, pinball, a jukebox, a pool table, a
+  piano, a drum kit, a telescope, jellyfish, a bonsai, a jungle, a coffee bar,
+  servers, a 3D printer, a punching bag, a treadmill, a hot tub, a ball pit or a
+  campfire. Idle agents and staff go and play, grab a snack, or sit by the fire,
+  and the pet joins in.
+- **Where everyone works:** at a desk, or a standing desk, a gaming desk, a
+  tent, a cardboard box, a beanbag, an igloo, a camper van, a spaceship, a
+  pirate ship, a throne or a greenhouse. Each project can have its own on its
+  team card, and it goes with them when they swap desks.
 - **Daylight** that follows the clock, with night falling at 8 pm, or always day.
 - **Seasons in the windows:** snow in winter, with lights strung along the wall
   through December, falling leaves in autumn, blossom in spring, birds in summer.
 - **A pet:** a cat that naps on the couch, a dog that follows people about, a
   lizard that basks on the wall, or a monkey that climbs on things and steals
   cups.
-- **Sound:** off, quiet or normal. A soft room tone, keys clicking while your
-  agents type, the door, the coffee machine and the ping-pong table. It starts
-  with your first tap, as browsers require.
+- **Sound:** off, quiet or normal, in the style of an old games console, and
+  mostly silence: a burst of typing as an agent gets to work, the door, the
+  coffee machine, a ping-pong rally, the red button's siren, a hire, a firing,
+  the pets, the wind in winter, and now and then the lounge's piece while
+  someone's at it. The one sound that asks for you is the reminder after five
+  minutes of waiting. It starts with your first tap, as browsers require.
 - **The desks** in wood, walnut, white or black, where no effort paints them,
   and **the chairs** in teal, black, red, grey or green.
 - **Office staff:** a few, none, or lots of them in the lounge.
@@ -283,8 +294,8 @@ There's more to see while they work:
 **Your team**, under the furnishing, has a card for each of your projects:
 choose its agent's skin, hair and hairstyle, something extra (glasses,
 sunglasses, headphones, a cap, a beanie, a beard, a moustache or a bow), an
-outfit and its colour, what's on their desk, and a nickname for their desk's
-label. Anything left on Auto stays as the office picks it, and clothes on Auto
+outfit and its colour, what's on their desk, where they work, and a nickname
+for their desk's label. Anything left on Auto stays as the office picks it, and clothes on Auto
 follow the model.
 
 **The dress code**, under the team, chooses the outfit and colour for each size
