@@ -12,7 +12,8 @@ Code, Codex, Gemini CLI, OpenCode and Grok.
 A key lights up for each of your agent sessions to show what it's doing. You
 can approve a permission request from across the room, interrupt an agent, turn
 a dial to change how hard Claude thinks, or hold a button and talk to it. Lay
-the deck out your way, with buttons of your own. SauzzeDeck Pro runs in
+the deck out your way, with buttons of your own, or watch your agents at work
+as people in [a little pixel-art office](#the-office). SauzzeDeck Pro runs in
 your Mac's menu bar, or in the tray on [Windows and Linux](#windows-and-linux-preview).
 Your phone connects to it over your Wi-Fi, so there's nothing to install from
 an app store.
@@ -252,7 +253,7 @@ the room works like the keys:
 | A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
-| ▲ ▼ ✓ ✕ over an agent waiting on you | In full screen, on `/office` and in the pop-out window, where the deck's controls are out of sight, select an agent waiting on you and these keys appear over its desk: ▲ ▼ move through its options, ✓ accepts, ✕ rejects |
+| ▲ ▼ ✓ ✕, over an agent waiting on you | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk wherever the deck's controls are out of sight: in full screen, on `/office` and in the pop-out window. |
 
 **Full screen:** tap **⛶** above the room, and the dial and buttons step aside
 for it. The desks, the red button and the microphone work as above, and the
