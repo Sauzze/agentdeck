@@ -57,6 +57,11 @@ enum Agent: String, CaseIterable {
         self == .gemini ? nil : rawValue
     }
 
+    /// What the agent is called among the processes in its tab's foreground,
+    /// for firing it and nothing else there. `node` is all Gemini CLI says,
+    /// which is enough inside the agent's own tab.
+    var foregroundName: String { processName ?? "node" }
+
     /// Which agent sent `event`. The hook script names it, except for Grok:
     /// it also runs Claude Code's hooks, and tells itself apart by its
     /// camelCase envelope.

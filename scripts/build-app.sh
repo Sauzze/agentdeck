@@ -25,6 +25,7 @@ if ! swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} >build/build.log 2>&1; the
   exit 1
 fi
 BIN="$(swift build -c release ${ARCHS[@]+"${ARCHS[@]}"} --show-bin-path)/$EXECUTABLE"
+scripts/build-saver.sh "${1:-}"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -35,4 +36,6 @@ strip -S -no_code_signature_warning "$APP/Contents/MacOS/$EXECUTABLE"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns Resources/report.sh Resources/opencode-plugin.js "$APP/Contents/Resources/"
 cp -R Resources/web "$APP/Contents/Resources/"
+# Signed already, so the app's signature seals it as it is.
+cp -R "build/SauzzeDeck Office.saver" "$APP/Contents/Resources/"
 codesign --force --sign - "$APP"

@@ -28,6 +28,9 @@ type Tab interface {
 	// Scroll moves the view of the scrollback by lines, up when negative.
 	Scroll(lines int) error
 	ScrollToBottom() error
+	// Close stops the agent in the tab, and closes the tab where the
+	// terminal lets it: the office's firing.
+	Close() error
 }
 
 var errUnsupported = errors.New("not possible in this terminal")
@@ -173,6 +176,19 @@ func (t commandTab) ScrollToBottom() error {
 		return nil
 	case "kitty":
 		return t.run("scroll-window", "--match", "id:"+t.id, "end")
+	}
+	return errUnsupported
+}
+
+// Close closes the pane, and with it the agent in it.
+func (t commandTab) Close() error {
+	switch t.kind {
+	case "tmux":
+		return t.run("kill-pane", "-t", t.id)
+	case "wezterm":
+		return t.run("kill-pane", "--pane-id", t.id)
+	case "kitty":
+		return t.run("close-window", "--match", "id:"+t.id)
 	}
 	return errUnsupported
 }

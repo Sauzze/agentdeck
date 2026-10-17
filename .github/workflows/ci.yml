@@ -19,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: swift build -c release
+      - run: scripts/build-saver.sh
 
   desktop:
     name: Windows and Linux app, on ${{ matrix.os }}

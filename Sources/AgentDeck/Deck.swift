@@ -160,7 +160,10 @@ final class Deck {
                         "dial": s.agent.hasEffortDial, "mic": s.agent.hasVoice,
                         "activity": s.activity ?? NSNull(),
                         "tool": s.tool.isEmpty ? NSNull() : s.tool,
-                        "subagents": s.subagents.map { ["id": $0.id, "type": $0.type] },
+                        "model": s.model.isEmpty ? NSNull() : s.model,
+                        "subagents": s.subagents.map { subagent -> [String: Any] in
+                            ["id": subagent.id, "type": subagent.type, "model": subagent.model.isEmpty ? NSNull() : subagent.model]
+                        },
                         "maxPressedAt": s.maxPressedAt.map { Int64($0) } ?? NSNull(),
                         "compacting": s.compacting,
                         "turnStartedAt": s.turnStartedAt.map { Int64($0) } ?? NSNull(),
@@ -170,8 +173,16 @@ final class Deck {
                 return entry
             },
             "overflow": overflow.count,
+            // The Mac's clock, so the office can count turns on the phone's,
+            // whichever of the two is right.
+            "now": Int64(Date().timeIntervalSince1970 * 1000),
             "theme": Theme.current(),
             "scroll": Config.shared.scrollEnabled,
+            // What the office's held desks offer: firing, and hiring once there's a folder to hire into.
+            "hiring": [
+                "fire": Config.shared.hiringEnabled,
+                "hire": Config.shared.hiringEnabled && Deck.folder(Config.shared.hireFolder) != nil,
+            ],
             "layout": Config.shared.layout.jsonObject,
         ]
         // Keys in order: unsorted, the same layout can come out differently
@@ -216,6 +227,9 @@ final class Deck {
         // Releasing the mic stops recording where it started, whatever is
         // selected now — and even if that session has since gone.
         if action == "mic" && query["phase"] != "down" { return releaseMic(done: done) }
+        // A new hire has no session yet, and a swap is of two desks.
+        if action == "hire" { return hire(at: query["desk"], done: done) }
+        if action == "swap" { return done(swapKeys(query)) }
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
 
@@ -243,6 +257,18 @@ final class Deck {
         case "mic":
             guard agent.hasVoice else { return done(.status(400, "\(agent.name) has no voice input")) }
             pressMic(session, done: done)
+        case "fire":
+            guard Config.shared.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
+            Terminal.queue.async {
+                let fired = Terminal.fire(tty: tty, agent: agent)
+                DispatchQueue.main.async {
+                    switch fired {
+                    case .fired: done(.status(204))
+                    case .notStopped: done(.status(409, "Couldn't stop the agent, so its tab is left open."))
+                    case .gone: done(.status(404, "That agent's tab has gone."))
+                    }
+                }
+            }
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when \(agent.name) is done")) }
             onTerminal(done) { Terminal.type(agent.newConversation, tty: tty) }
@@ -273,6 +299,104 @@ final class Deck {
             done(.status(queued ? 202 : 204))
         default:
             done(.status(400, "Unknown action"))
+        }
+    }
+
+    static let hiringOff = "Hiring and firing are off. Turn them on in setup, on your Mac."
+
+    /// Swaps two keys' projects, for a person carried from one desk to
+    /// another in the office: each is pinned where the other was, so the
+    /// order holds the next time too, as pins made in setup do. It only
+    /// orders the keys, so any paired phone may.
+    private func swapKeys(_ query: [String: String]) -> Response {
+        let (keys, _) = layout()
+        guard let a = Int(query["from"] ?? ""), let b = Int(query["to"] ?? ""), a != b,
+              keys.indices.contains(a), keys.indices.contains(b) else { return .status(400, "Unknown desks") }
+        let project = { (i: Int) in keys[i].session?.project ?? keys[i].pin }
+        let (first, second) = (project(a), project(b))
+        guard first != nil || second != nil else { return .status(204) }
+        guard first != second else { return .status(409, "Both desks are the same project, so they stay as they are.") }
+        Config.shared.swapPins(first, at: a, with: second, at: b)
+        changed()
+        return .status(204)
+    }
+
+    /// How long after a hire the next is refused. A second tap, or a second
+    /// phone, would otherwise open a second window before the first new hire
+    /// has reached the deck.
+    private static let hireCooldown: TimeInterval = 5
+    private var lastHire: Date?
+
+    /// A new Terminal window with the agent set up for new hires at work in
+    /// it. Hired at a desk whose key is pinned to a project, it starts in that
+    /// project's folder, so it sits down at that desk; otherwise in the folder
+    /// set up for new hires. Its hooks bring it to the deck, and the office,
+    /// as for any session.
+    private func hire(at desk: String?, done: @escaping (Response) -> Void) {
+        let config = Config.shared
+        guard config.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
+        var pinned: String?
+        if let desk {
+            let (keys, _) = layout()
+            guard let index = Int(desk), keys.indices.contains(index) else { return done(.status(400, "Unknown desk")) }
+            pinned = keys[index].pin.flatMap(Deck.folder)
+        }
+        guard let folder = pinned ?? Deck.folder(config.hireFolder) else {
+            return done(.status(409, "Choose a folder for new hires in setup, on your Mac."))
+        }
+        if let last = lastHire, Date().timeIntervalSince(last) < Deck.hireCooldown {
+            return done(.status(429, "Hired a moment ago. Try again in a few seconds."))
+        }
+        lastHire = Date()
+        let agent = Agent(rawValue: config.hireAgent) ?? .claude
+        Terminal.queue.async {
+            let ok = Terminal.open(agent.rawValue, in: folder)
+            DispatchQueue.main.async {
+                // Nobody was hired, so the next try needn't wait.
+                if !ok { self.lastHire = nil }
+                done(ok ? .status(204) : .status(500, "Terminal didn't open"))
+            }
+        }
+    }
+
+    /// `path` as a folder that's there, with ~ for home, or nil.
+    static func folder(_ path: String) -> String? {
+        let expanded = (path.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
+        var isFolder: ObjCBool = false
+        guard expanded.hasPrefix("/"), FileManager.default.fileExists(atPath: expanded, isDirectory: &isFolder),
+              isFolder.boolValue else { return nil }
+        return (expanded as NSString).standardizingPath
+    }
+
+    /// The folder panel, while it's open.
+    private var hirePanel: NSOpenPanel?
+
+    /// Asks for the new hires' folder with the Mac's own panel, from the setup
+    /// page. Asked again while it's open, it brings that panel forward rather
+    /// than opening another, and answers at once.
+    func chooseHireFolder(then done: @escaping () -> Void) {
+        if let open = hirePanel {
+            NSApp.activate(ignoringOtherApps: true)
+            open.makeKeyAndOrderFront(nil)
+            return done()
+        }
+        let panel = NSOpenPanel()
+        hirePanel = panel
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "New hires from the office start their work in this folder."
+        if let current = Deck.folder(Config.shared.hireFolder) { panel.directoryURL = URL(fileURLWithPath: current) }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            self.hirePanel = nil
+            if response == .OK, let url = panel.url {
+                Config.shared.hireFolder = url.path
+                Config.shared.save()
+                self.refresh()
+            }
+            done()
         }
     }
 

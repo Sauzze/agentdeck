@@ -82,10 +82,13 @@ struct Layout: Codable, Equatable {
 
 /// How the office is furnished: the microphone or a megaphone, what each of
 /// the back wall's five places holds, the floor, the walls' paint, the
-/// lounge's carpet and the piece in its corner, and whether the sky keeps the
-/// computer's time or it's always day. office.js draws it, with the same
-/// choices. Anything unknown, or of the wrong kind, is as standard: it only
-/// changes how the room looks.
+/// lounge's carpet and the piece in its corner, whether the sky keeps the
+/// computer's time or it's always day, its pet, whether the windows follow
+/// the seasons, how loud it is, the desks' finish, what everyone works at (a
+/// desk, a tent, a throne…) and the chairs' colour, how many of its own staff
+/// hang about, your team, and the dress code. office.js
+/// draws it, with the same choices. Anything unknown, or of the wrong kind, is
+/// as standard: it only changes how the room looks.
 struct Room: Codable, Equatable {
     var mic = "mic"
     var wall = Room.standardWall
@@ -94,6 +97,21 @@ struct Room: Codable, Equatable {
     var lounge = "navy"
     var corner = "arcade"
     var sky = "live"
+    var pet = "none"
+    var season = "calendar"
+    var sound = "off"
+    var desk = "wood"
+    var workspace = "desk"
+    var chair = "teal"
+    var staff = "some"
+    /// How each project's agent looks, by the project's name.
+    var team: [String: TeamMember] = [:]
+    /// What agents wear by their model's size and by agent. After the team,
+    /// in the same place as the Windows and Linux app's Room has it.
+    var dress = Dress()
+
+    /// The most projects a team remembers.
+    static let teamLimit = 50
 
     /// Each part's choices; the first is the standard one.
     static let choices = [
@@ -101,9 +119,22 @@ struct Room: Codable, Equatable {
         "floor": ["wood", "tiles", "concrete", "carpet"],
         "paint": ["slate", "sage", "clay", "cream"],
         "lounge": ["navy", "teal", "plum", "sand"],
-        "corner": ["arcade", "vending", "foosball", "fishtank", "books", "none"],
+        "corner": ["arcade", "vending", "foosball", "fishtank", "books", "dragon", "pinball", "jukebox", "pool", "piano", "drums",
+                   "telescope", "jellyfish", "bonsai", "jungle", "coffee", "servers", "printer", "boxing", "treadmill", "hottub",
+                   "ballpit", "campfire", "none"],
         "sky": ["live", "day"],
+        "pet": ["none", "cat", "dog", "lizard", "monkey"],
+        "season": ["calendar", "off"],
+        "sound": ["off", "quiet", "normal"],
+        "desk": ["wood", "walnut", "white", "black"],
+        "workspace": Room.workspaces,
+        "chair": ["teal", "black", "red", "grey", "green"],
+        "staff": ["some", "none", "many"],
     ]
+    /// What an agent can work at: the office's choice for everyone, and a
+    /// team member's own, which can also be "auto".
+    static let workspaces = ["desk", "standing", "gaming", "tent", "box", "beanbag", "igloo", "van", "cockpit", "ship", "throne",
+                             "greenhouse"]
     static let wallChoices = ["window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"]
     static let standardWall = ["window", "whiteboard", "window", "pinboard", "window"]
 
@@ -121,16 +152,151 @@ struct Room: Codable, Equatable {
         lounge = choice(.lounge) ?? lounge
         corner = choice(.corner) ?? corner
         sky = choice(.sky) ?? sky
+        pet = choice(.pet) ?? pet
+        season = choice(.season) ?? season
+        sound = choice(.sound) ?? sound
+        desk = choice(.desk) ?? desk
+        workspace = choice(.workspace) ?? workspace
+        chair = choice(.chair) ?? chair
+        staff = choice(.staff) ?? staff
         let given = ((try? c?.decodeIfPresent([Loose].self, forKey: .wall)) ?? nil) ?? []
         wall = Room.standardWall.enumerated().map { i, standard in
             i < given.count ? given[i].text.flatMap { Room.wallChoices.contains($0) ? $0 : nil } ?? standard : standard
         }
+        let members = ((try? c?.decodeIfPresent([String: TeamMember].self, forKey: .team)) ?? nil) ?? [:]
+        team = Dictionary(uniqueKeysWithValues: members.filter { !$0.key.isEmpty }.sorted { $0.key < $1.key }
+            .prefix(Room.teamLimit).map { ($0.key, $0.value) })
+        dress = ((try? c?.decodeIfPresent(Dress.self, forKey: .dress)) ?? nil) ?? Dress()
     }
 
     /// One of the wall's places as given: text, or nothing for any other kind of value.
     private struct Loose: Decodable {
         let text: String?
         init(from decoder: Decoder) throws { text = try? decoder.singleValueContainer().decode(String.self) }
+    }
+}
+
+/// How one project's agent looks in the office: skin, hair, a hairstyle,
+/// something extra such as glasses or a cap, an outfit and its colour, what's
+/// on its desk, what it works at, and a nickname for it. "auto" is as the
+/// project's name picks it, the clothes as its model's, and what it works at
+/// as everyone does. office.js draws it, with the same choices.
+struct TeamMember: Codable, Equatable {
+    var skin = "auto"
+    var hair = "auto"
+    var hairstyle = "auto"
+    var extra = "none"
+    var outfit = "auto"
+    var colour = "auto"
+    var desk = "auto"
+    var workspace = "auto"
+    var name = ""
+
+    /// Each part's choices; the first is the standard one.
+    static let choices = [
+        "skin": ["auto", "porcelain", "fair", "light", "tan", "olive", "brown", "deep", "ebony"],
+        "hair": ["auto", "black", "espresso", "brown", "chestnut", "auburn", "ginger", "blond", "platinum", "grey", "white",
+                 "pink", "blue", "green", "purple"],
+        "hairstyle": ["auto", "short", "long", "spiky", "bun", "curly", "ponytail", "afro", "mohawk", "buzz", "bald"],
+        "extra": ["none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"],
+        "outfit": ["auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat", "polo", "cardigan", "hawaiian",
+                   "tracksuit", "overalls", "waistcoat"],
+        "colour": ["auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"],
+        "desk": ["auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"],
+        "workspace": ["auto"] + Room.workspaces,
+    ]
+    /// The most a nickname can be, in characters.
+    static let nicknameLimit = 16
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        func choice(_ key: CodingKeys) -> String? {
+            let given = (try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil
+            return given.flatMap { TeamMember.choices[key.stringValue]?.contains($0) == true ? $0 : nil }
+        }
+        skin = choice(.skin) ?? skin
+        hair = choice(.hair) ?? hair
+        hairstyle = choice(.hairstyle) ?? hairstyle
+        extra = choice(.extra) ?? extra
+        outfit = choice(.outfit) ?? outfit
+        colour = choice(.colour) ?? colour
+        desk = choice(.desk) ?? desk
+        workspace = choice(.workspace) ?? workspace
+        name = (((try? c?.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? "").oneLine(TeamMember.nicknameLimit)
+    }
+}
+
+/// The office's dress code: what agents wear by the size of their model, and
+/// by which agent they are, and rules that give a model its size by part of
+/// its name. Every size and every agent is always there, "auto" when it isn't
+/// set, so office.js never finds one missing. Anything unknown, or of the
+/// wrong kind, is as standard, as in the rest of the room. The Windows and
+/// Linux app's Dress matches.
+struct Dress: Codable, Equatable {
+    /// By the size of the model: small, medium, large and top.
+    var sizes = Dress.standard(Dress.sizeNames)
+    /// By agent: one for each the deck follows.
+    var agents = Dress.standard(Dress.agentNames)
+    /// In the order given.
+    var rules: [Rule] = []
+
+    static let sizeNames = ["small", "medium", "large", "top"]
+    static let agentNames = Agent.allCases.map(\.rawValue)
+    /// The most rules kept, and the most a rule's part of a name can be, in
+    /// characters.
+    static let ruleLimit = 20
+    static let containsLimit = 32
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        func attires(_ key: CodingKeys, _ names: [String]) -> [String: Attire] {
+            let given = ((try? c?.decodeIfPresent([String: Attire].self, forKey: key)) ?? nil) ?? [:]
+            return Dictionary(uniqueKeysWithValues: names.map { ($0, given[$0] ?? Attire()) })
+        }
+        sizes = attires(.sizes, Dress.sizeNames)
+        agents = attires(.agents, Dress.agentNames)
+        // A rule with nothing to look for, or a size the office doesn't have, is dropped.
+        let given = ((try? c?.decodeIfPresent([Rule].self, forKey: .rules)) ?? nil) ?? []
+        rules = Array(given.filter { !$0.contains.isEmpty && Dress.sizeNames.contains($0.size) }.prefix(Dress.ruleLimit))
+    }
+
+    private static func standard(_ names: [String]) -> [String: Attire] {
+        Dictionary(uniqueKeysWithValues: names.map { ($0, Attire()) })
+    }
+
+    /// A model whose name has `contains` in it is dressed as `size`. What it
+    /// looks for is kept on one line, and lowercased.
+    struct Rule: Codable, Equatable {
+        var contains = ""
+        var size = ""
+
+        init(from decoder: Decoder) throws {
+            let c = try? decoder.container(keyedBy: CodingKeys.self)
+            func text(_ key: CodingKeys) -> String { ((try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil) ?? "" }
+            contains = text(.contains).lowercased().oneLine(Dress.containsLimit)
+            size = text(.size)
+        }
+    }
+}
+
+/// What the dress code puts on agents: an outfit and its colour, from a team
+/// member's choices. "auto" is as its model's, as for a team member.
+struct Attire: Codable, Equatable {
+    var outfit = "auto"
+    var colour = "auto"
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        func choice(_ key: CodingKeys) -> String? {
+            let given = (try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil
+            return given.flatMap { TeamMember.choices[key.stringValue]?.contains($0) == true ? $0 : nil }
+        }
+        outfit = choice(.outfit) ?? outfit
+        colour = choice(.colour) ?? colour
     }
 }
 

@@ -262,7 +262,8 @@ func (d *Deck) snapshot() []byte {
 				"id": s.ID, "name": s.Name(), "project": s.ProjectName(), "state": s.State, "effort": effort,
 				"pending": s.PendingEffort != "", "agent": s.Agent, "agentName": s.Agent.Name(),
 				"dial": s.Agent.HasEffortDial(), "mic": s.Agent.HasVoice(),
-				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "subagents": append([]Subagent{}, s.Subagents...),
+				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "model": orNull(s.Model),
+				"subagents":    append([]Subagent{}, s.Subagents...),
 				"maxPressedAt": millisOrNull(s.MaxPressedAt), "compacting": s.Compacting,
 				"turnStartedAt": millisOrNull(s.TurnStartedAt), "errorKind": orNull(s.ErrorKind),
 			}
@@ -271,7 +272,12 @@ func (d *Deck) snapshot() []byte {
 	}
 	state, _ := json.Marshal(map[string]any{
 		"keys": entries, "overflow": len(overflow), "theme": currentTheme(d.config), "scroll": d.config.ScrollEnabled,
+		// What the office's held desks offer: firing here; hiring is the Mac app's for now.
+		"hiring": map[string]bool{"fire": d.config.HiringEnabled, "hire": false},
 		"layout": d.config.Layout,
+		// This computer's clock, so the office can count turns on the phone's,
+		// whichever of the two is right.
+		"now": int64(nowMillis()),
 	})
 	return state
 }
@@ -423,12 +429,67 @@ func (d *Deck) inTab(name string, op func(Tab) error) (int, string) {
 	return http.StatusNoContent, ""
 }
 
+const hiringOff = "Hiring and firing are off. Turn them on in setup, on your computer."
+
+// swapKeys swaps two keys' projects, for a person carried from one desk to
+// another in the office: each is pinned where the other was, so the order
+// holds the next time too, as pins made in setup do. It only orders the keys,
+// so any paired phone may.
+func (d *Deck) swapKeys(query url.Values) (int, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	keys, _ := d.layout()
+	a, errA := strconv.Atoi(query.Get("from"))
+	b, errB := strconv.Atoi(query.Get("to"))
+	if errA != nil || errB != nil || a == b || a < 0 || b < 0 || a >= len(keys) || b >= len(keys) {
+		return http.StatusBadRequest, "Unknown desks"
+	}
+	project := func(i int) *string {
+		if s := keys[i].session; s != nil {
+			p := s.Project
+			return &p
+		}
+		return keys[i].pin
+	}
+	first, second := project(a), project(b)
+	switch {
+	case first == nil && second == nil:
+		return http.StatusNoContent, ""
+	case first != nil && second != nil && *first == *second:
+		return http.StatusConflict, "Both desks are the same project, so they stay as they are."
+	}
+	d.config.SwapPins(first, a, second, b)
+	d.changed()
+	return http.StatusNoContent, ""
+}
+
 // Perform runs one of the phone's controls on a session.
 func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 	// Releasing the mic stops recording where it started, whatever is
 	// selected now — and even if that session has since gone.
 	if action == "mic" && query.Get("phase") != "down" {
 		return d.releaseMic()
+	}
+	d.mu.Lock()
+	hiring := d.config.HiringEnabled
+	d.mu.Unlock()
+	if action == "swap" {
+		return d.swapKeys(query)
+	}
+	if action == "hire" {
+		if !hiring {
+			return http.StatusForbidden, hiringOff
+		}
+		// The desk is read as the Mac app reads it, though nobody is hired here.
+		if query.Has("desk") {
+			d.mu.Lock()
+			keys, _ := d.layout()
+			d.mu.Unlock()
+			if desk, err := strconv.Atoi(query.Get("desk")); err != nil || desk < 0 || desk >= len(keys) {
+				return http.StatusBadRequest, "Unknown desk"
+			}
+		}
+		return http.StatusNotImplemented, "Hiring from the office needs the Mac app, for now."
 	}
 	d.mu.Lock()
 	session := d.sessions.Get(id)
@@ -473,6 +534,14 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 			return http.StatusBadRequest, agent.Name() + " has no voice input"
 		}
 		return d.pressMic(tab)
+	case "fire":
+		if !hiring {
+			return http.StatusForbidden, hiringOff
+		}
+		if status, message := d.inTab(tab, func(t Tab) error { return t.Close() }); status != http.StatusNotFound {
+			return status, message
+		}
+		return http.StatusNotFound, "That agent's tab has gone."
 	case "clear":
 		if busy {
 			return http.StatusConflict, "Busy — clear it when " + agent.Name() + " is done"

@@ -65,6 +65,8 @@ final class Phones {
         // Agent Office pairs like a phone. Its app is named with a space, so
         // the system may write it either way.
         if userAgent.contains("AgentOffice") || userAgent.contains("Agent%20Office") { return "Agent Office" }
+        // So does the screen saver, from its Options: see ScreenSaver/Pairing.swift.
+        if userAgent.contains("SauzzeDeckScreenSaver") { return "Screen saver" }
         if userAgent.contains("iPhone") { return "iPhone" }
         if userAgent.contains("iPad") { return "iPad" }
         if userAgent.contains("Android") { return "Android phone" }

@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
@@ -36,7 +37,12 @@ import (
 type launcherCommand struct {
 	Press *Keystroke `json:"press,omitempty"`
 	Type  string     `json:"type,omitempty"`
+	// Stop ends the agent: the office's firing.
+	Stop bool `json:"stop,omitempty"`
 }
+
+// How long a fired agent is given to end before it's made to.
+const stopGrace = 3 * time.Second
 
 // How long the launcher waits before reaching for the app again.
 const reconnectDelay = 3 * time.Second
@@ -84,7 +90,7 @@ func RunLauncher(args []string) int {
 	go func() { _, _ = io.Copy(input, os.Stdin) }()
 	go func() { _, _ = io.Copy(os.Stdout, io.TeeReader(terminal, cursor)) }()
 	go followSize(terminal)
-	go serveDeck(id, agentNamed(args[0]), folder, input, cursor)
+	go serveDeck(id, agentNamed(args[0]), folder, input, cursor, func() { stopProcess(cmd.Process) })
 
 	if err := cmd.Wait(); err != nil {
 		var exit *exec.ExitError
@@ -182,7 +188,7 @@ func (c *cursorMode) bytesFor(key Key) string {
 
 // serveDeck connects to the app and carries out its commands until the
 // agent exits, reconnecting whenever the connection drops.
-func serveDeck(id string, agent Agent, folder string, input io.Writer, cursor *cursorMode) {
+func serveDeck(id string, agent Agent, folder string, input io.Writer, cursor *cursorMode, stop func()) {
 	query := url.Values{"id": {id}, "agent": {string(agent)}, "folder": {folder}}
 	address := fmt.Sprintf("http://127.0.0.1:%d/launcher?%s", Port, query.Encode())
 	for {
@@ -190,7 +196,7 @@ func serveDeck(id string, agent Agent, folder string, input io.Writer, cursor *c
 			request, _ := http.NewRequest(http.MethodGet, address, nil)
 			request.Header.Set(hookKeyHeader, strings.TrimSpace(string(key)))
 			if response, err := http.DefaultClient.Do(request); err == nil {
-				follow(response.Body, input, cursor)
+				follow(response.Body, input, cursor, stop)
 				response.Body.Close()
 			}
 		}
@@ -198,7 +204,17 @@ func serveDeck(id string, agent Agent, folder string, input io.Writer, cursor *c
 	}
 }
 
-func follow(commands io.Reader, input io.Writer, cursor *cursorMode) {
+// stopProcess asks the agent to end, and makes it after a moment. Windows
+// can only make it.
+func stopProcess(process *os.Process) {
+	if process.Signal(syscall.SIGTERM) != nil {
+		_ = process.Kill()
+		return
+	}
+	time.AfterFunc(stopGrace, func() { _ = process.Kill() })
+}
+
+func follow(commands io.Reader, input io.Writer, cursor *cursorMode, stop func()) {
 	lines := bufio.NewScanner(commands)
 	for lines.Scan() {
 		var command launcherCommand
@@ -206,6 +222,8 @@ func follow(commands io.Reader, input io.Writer, cursor *cursorMode) {
 			continue
 		}
 		switch {
+		case command.Stop:
+			stop()
 		case command.Press != nil:
 			for i := 0; i < max(command.Press.Times, 1); i++ {
 				if i > 0 {
@@ -245,6 +263,10 @@ func (t *launcherTab) Type(text string) error  { return t.send(launcherCommand{T
 // Focus does nothing: the launcher can't tell which window it runs in, so
 // selecting the key on the phone is all a tap can do.
 func (t *launcherTab) Focus() error { return nil }
+
+// Close ends the agent. The window it runs in is the terminal's own, which
+// the launcher can't reach, so that stays open.
+func (t *launcherTab) Close() error { return t.send(launcherCommand{Stop: true}) }
 
 // Scrolling belongs to the terminal around the launcher, which it can't reach.
 func (t *launcherTab) Scroll(int) error      { return errUnsupported }

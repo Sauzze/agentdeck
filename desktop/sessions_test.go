@@ -3,7 +3,9 @@ package desktop
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 const tab = "tmux:%1@/tmp/tmux-501/default"
@@ -208,7 +210,7 @@ func TestSubagentsComeAndGo(t *testing.T) {
 	if s.Apply(event("SubagentStart", "agent_id", "a1", "agent_type", "Explore"), Claude, tab, "", 150) {
 		t.Fatal("a start that arrived after its stop changed the session")
 	}
-	if got := s.Get("s1").Subagents; len(got) != 1 || got[0] != (Subagent{"a2", "Plan"}) {
+	if got := s.Get("s1").Subagents; len(got) != 1 || got[0] != (Subagent{ID: "a2", Type: "Plan"}) {
 		t.Fatalf("subagents %+v, want only a2", got)
 	}
 
@@ -264,5 +266,52 @@ func TestATurnsTimeAndWhyItFailed(t *testing.T) {
 	s.Apply(event("UserPromptSubmit"), Claude, tab, "", 300)
 	if session := s.Get("s1"); session.ErrorKind != "" {
 		t.Fatalf("error %q kept into the next turn", session.ErrorKind)
+	}
+}
+
+// reply is a transcript line: a reply written by model.
+func reply(model string) string {
+	return `{"type": "assistant", "message": {"role": "assistant", "model": "` + model + `", "content": []}}`
+}
+
+func TestTheModelIsReadFromATranscript(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s1.jsonl")
+	writeFile(t, path, strings.Join([]string{
+		`{"type": "user", "message": {"role": "user", "content": "hi"}}`,
+		reply("claude-haiku-5-5"), reply("claude-opus-5-5"), reply("<synthetic>"), `not json`, "",
+	}, "\n"))
+	if got := firstModel(path); got != "claude-haiku-5-5" {
+		t.Errorf("first model %q, want claude-haiku-5-5", got)
+	}
+	if got := lastModel(path); got != "claude-opus-5-5" {
+		t.Errorf("last model %q, want claude-opus-5-5: an API error's notice isn't a model's", got)
+	}
+	if lastModel(filepath.Join(t.TempDir(), "none.jsonl")) != "" || firstModel("") != "" {
+		t.Error("a transcript that isn't there named a model")
+	}
+
+	// A long tool output: only the end is read, from the first whole line.
+	long := filepath.Join(t.TempDir(), "long.jsonl")
+	writeFile(t, long, reply("claude-haiku-5-5")+"\n"+`{"output": "`+strings.Repeat("x", transcriptReach)+`"}`+"\n"+reply("claude-sonnet-5-5")+"\n")
+	if got := lastModel(long); got != "claude-sonnet-5-5" {
+		t.Errorf("last model of a long transcript %q, want claude-sonnet-5-5", got)
+	}
+}
+
+func TestASubagentsTranscriptIsReadAtMostOnceASecond(t *testing.T) {
+	folder := t.TempDir()
+	s := NewSessions()
+	s.Apply(event("UserPromptSubmit", "transcript_path", filepath.Join(folder, "s1.jsonl")), Claude, tab, "", 100)
+	s.Apply(event("SubagentStart", "agent_id", "a1", "agent_type", "Explore"), Claude, tab, "", 200)
+	s.Apply(event("PreToolUse", "agent_id", "a1", "tool_name", "Read"), Claude, tab, "", 300)
+	// It replies now, a moment after its transcript was last looked at.
+	writeFile(t, filepath.Join(folder, "s1", "subagents", "agent-a1.jsonl"), reply("claude-haiku-5-5")+"\n")
+	s.Apply(event("PostToolUse", "agent_id", "a1", "tool_name", "Read"), Claude, tab, "", 400)
+	if model := s.Get("s1").Subagents[0].Model; model != "" {
+		t.Fatalf("the transcript was read again within a second, finding %q", model)
+	}
+	s.Get("s1").Subagents[0].lookedForModelAt = time.Now().Add(-modelLookInterval)
+	if !s.Apply(event("PreToolUse", "agent_id", "a1", "tool_name", "Grep"), Claude, tab, "", 500) || s.Get("s1").Subagents[0].Model != "claude-haiku-5-5" {
+		t.Fatalf("a second on, the subagent's model is %q, want claude-haiku-5-5", s.Get("s1").Subagents[0].Model)
 	}
 }

@@ -46,6 +46,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             add(to: menu, "Unpair All Phones…", #selector(unpairAll))
         }
         menu.addItem(.separator())
+        add(to: menu, "Install Screen Saver…", #selector(installScreenSaver))
         let login = add(to: menu, "Open at Login", #selector(toggleLogin))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(.separator())
@@ -74,6 +75,18 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         // A menu bar app is never active by itself, and the alert would open behind other windows.
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { deck.unpairAll() }
+    }
+
+    @objc private func installScreenSaver() {
+        do {
+            try ScreenSaver.install()
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn't install the screen saver"
+            alert.informativeText = error.localizedDescription
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
     }
 
     @objc private func toggleLogin() { LoginItem.isEnabled.toggle() }

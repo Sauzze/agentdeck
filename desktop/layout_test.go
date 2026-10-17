@@ -429,3 +429,179 @@ func TestOnlyMaxSaysItWasPressed(t *testing.T) {
 		t.Fatal("a press of ☢ Max wasn't kept")
 	}
 }
+
+func TestTheRoomKeepsOnlyChoicesItHas(t *testing.T) {
+	var room Room
+	if err := json.Unmarshal([]byte(`{"floor": "lava", "pet": "cat", "sky": 5, "team": {
+		"api": {"skin": "green", "hair": "blue", "extra": "monocle", "name": "  a nickname far longer than sixteen\n"},
+		"web": "a person", "": {"hair": "pink"}}}`), &room); err != nil {
+		t.Fatal(err)
+	}
+	if room.Floor != "wood" || room.Pet != "cat" || room.Sky != "live" {
+		t.Errorf("floor %q, pet %q, sky %q; want wood, cat and live", room.Floor, room.Pet, room.Sky)
+	}
+	want := TeamMember{Skin: "auto", Hair: "blue", Hairstyle: "auto", Extra: "none", Outfit: "auto", Colour: "auto", Desk: "auto",
+		Workspace: "auto", Name: "a nickname far l"}
+	if got := room.Team["api"]; got != want {
+		t.Errorf("api's agent is %+v, want %+v", got, want)
+	}
+	// A member that isn't an object looks as standard; one with no project is dropped.
+	if got := room.Team["web"]; got != (TeamMember{}.checked()) || len(room.Team) != 2 {
+		t.Errorf("team %+v, want api, and web as standard", room.Team)
+	}
+	for _, team := range []string{`"everyone"`, `[{"skin": "fair"}]`, `5`, `null`} {
+		var room Room
+		if err := json.Unmarshal([]byte(`{"team": `+team+`}`), &room); err != nil || room.Team == nil || len(room.Team) != 0 {
+			t.Errorf("a team of %s gave %v, %v; want an empty team", team, room.Team, err)
+		}
+	}
+}
+
+func TestEveryoneWorksAtTheOfficesChoiceOrTheirOwn(t *testing.T) {
+	var room Room
+	if err := json.Unmarshal([]byte(`{"workspace": "tent", "corner": "dragon", "team": {
+		"api": {"workspace": "igloo"}, "web": {"workspace": "hammock"}, "docs": {"workspace": 5}}}`), &room); err != nil {
+		t.Fatal(err)
+	}
+	if room.Workspace != "tent" || room.Corner != "dragon" {
+		t.Errorf("workspace %q, corner %q; want tent and dragon", room.Workspace, room.Corner)
+	}
+	for project, want := range map[string]string{"api": "igloo", "web": "auto", "docs": "auto"} {
+		if got := room.Team[project].Workspace; got != want {
+			t.Errorf("%s works at %q, want %q", project, got, want)
+		}
+	}
+	var unknown Room
+	if err := json.Unmarshal([]byte(`{"workspace": "auto", "corner": "volcano"}`), &unknown); err != nil {
+		t.Fatal(err)
+	}
+	if unknown.Workspace != "desk" || unknown.Corner != "arcade" {
+		t.Errorf("workspace %q, corner %q; want the standard desk and arcade", unknown.Workspace, unknown.Corner)
+	}
+}
+
+func TestATeamRemembersFiftyProjectsAtMost(t *testing.T) {
+	team := map[string]TeamMember{}
+	for i := range 60 {
+		team[fmt.Sprintf("p%02d", i)] = TeamMember{Hair: "blue"}
+	}
+	checked := Room{Team: team}.checked().Team
+	if len(checked) != teamLimit || checked["p00"].Hair != "blue" || checked["p49"].Hair != "blue" {
+		t.Fatalf("kept %d projects, want the first %d by name", len(checked), teamLimit)
+	}
+	if _, kept := checked["p50"]; kept {
+		t.Fatal("kept p50, past the first fifty by name")
+	}
+}
+
+func TestTheDressCodeKeepsOnlyChoicesItHas(t *testing.T) {
+	var room Room
+	if err := json.Unmarshal([]byte(`{"team": {"api": {"outfit": "waistcoat", "colour": "teal"}}, "dress": {
+		"sizes": {"small": {"outfit": "toga", "colour": "chartreuse"}, "large": {"outfit": "hawaiian", "colour": "red"}, "huge": {"outfit": "suit"}},
+		"agents": {"codex": {"outfit": "overalls"}, "grok": {"colour": 5}}}}`), &room); err != nil {
+		t.Fatal(err)
+	}
+	if got := room.Team["api"]; got.Outfit != "waistcoat" || got.Colour != "teal" {
+		t.Errorf("api's agent wears %q in %q, want a teal waistcoat", got.Outfit, got.Colour)
+	}
+	auto := Attire{Outfit: "auto", Colour: "auto"}
+	want := Dress{
+		// An unknown outfit or colour is auto, and a size or agent left out is there, as auto.
+		Sizes:  DressSizes{Small: auto, Medium: auto, Large: Attire{Outfit: "hawaiian", Colour: "red"}, Top: auto},
+		Agents: DressAgents{Claude: auto, Codex: Attire{Outfit: "overalls", Colour: "auto"}, Gemini: auto, OpenCode: auto, Grok: auto},
+		Rules:  []DressRule{},
+	}
+	if got, _ := json.Marshal(room.Dress); string(got) != string(must(json.Marshal(want))) {
+		t.Errorf("dress code kept as\n%s\nwant\n%s", got, must(json.Marshal(want)))
+	}
+	for _, outfit := range []string{"polo", "cardigan", "hawaiian", "tracksuit", "overalls", "waistcoat"} {
+		if got := (Attire{Outfit: outfit}).checked().Outfit; got != outfit {
+			t.Errorf("the dress code's %s became %s", outfit, got)
+		}
+		if got := (TeamMember{Outfit: outfit}).checked().Outfit; got != outfit {
+			t.Errorf("a team member's %s became %s", outfit, got)
+		}
+	}
+}
+
+func TestADressCodeOfTheWrongKindIsStandard(t *testing.T) {
+	standard := must(json.Marshal(Dress{}.checked()))
+	for _, dress := range []string{`"formal"`, `[{"sizes": {}}]`, `5`, `null`, `{"sizes": "all suits", "agents": []}`,
+		`{"sizes": {"small": "suit", "top": ["suit", "red"]}, "agents": {"claude": null, "codex": 5}}`} {
+		var room Room
+		if err := json.Unmarshal([]byte(`{"dress": `+dress+`}`), &room); err != nil {
+			t.Fatal(err)
+		}
+		if got := must(json.Marshal(room.Dress)); string(got) != string(standard) {
+			t.Errorf("a dress code of %s gave\n%s\nwant\n%s", dress, got, standard)
+		}
+	}
+	var room Room
+	if err := json.Unmarshal([]byte(`{"floor": "tiles"}`), &room); err != nil || string(must(json.Marshal(room.Dress))) != string(standard) {
+		t.Errorf("a room without a dress code gave %+v, %v; want it standard", room.Dress, err)
+	}
+}
+
+func TestDressRulesAreCheckedAndKeptInOrder(t *testing.T) {
+	var dress Dress
+	if err := json.Unmarshal([]byte(`{"rules": [
+		{"contains": "  Qwen-MAX\n", "size": "large"},
+		{"contains": "a part of a model's name far longer than thirty-two", "size": "top"},
+		{"contains": " \t ", "size": "small"},
+		{"contains": "mini", "size": "tiny"},
+		{"contains": "mini"},
+		{"size": "small"},
+		"haiku", 5, null,
+		{"contains": "Haiku", "size": "small"}
+	]}`), &dress); err != nil {
+		t.Fatal(err)
+	}
+	want := []DressRule{{"qwen-max", "large"}, {"a part of a model's name far lon", "top"}, {"haiku", "small"}}
+	if got, _ := json.Marshal(dress.Rules); string(got) != string(must(json.Marshal(want))) {
+		t.Errorf("rules kept as %s, want %s", got, must(json.Marshal(want)))
+	}
+	rules := make([]string, 25)
+	for i := range rules {
+		rules[i] = fmt.Sprintf(`{"contains": "model-%02d", "size": "medium"}`, i)
+	}
+	// One to drop first: twenty are kept of those left.
+	if err := json.Unmarshal([]byte(`{"rules": [{"contains": "", "size": "top"}, `+strings.Join(rules, ", ")+`]}`), &dress); err != nil {
+		t.Fatal(err)
+	}
+	if len(dress.Rules) != dressRuleLimit || dress.Rules[0].Contains != "model-00" || dress.Rules[19].Contains != "model-19" {
+		t.Errorf("of 25 rules, kept %d, from %+v; want the first %d", len(dress.Rules), dress.Rules[0], dressRuleLimit)
+	}
+	for _, given := range []string{`"qwen: large"`, `{"contains": "qwen", "size": "large"}`, `5`, `null`} {
+		var dress Dress
+		if err := json.Unmarshal([]byte(`{"rules": `+given+`}`), &dress); err != nil || dress.Rules == nil || len(dress.Rules) != 0 {
+			t.Errorf("rules of %s gave %v, %v; want none", given, dress.Rules, err)
+		}
+	}
+}
+
+func TestARoomIsWrittenInTheSameOrderEveryTime(t *testing.T) {
+	text := string(must(json.Marshal(Room{}.checked())))
+	order := func(keys ...string) bool {
+		at := -1
+		for _, key := range keys {
+			i := strings.Index(text, `"`+key+`":`)
+			if i <= at {
+				return false
+			}
+			at = i
+		}
+		return true
+	}
+	if !order("staff", "team", "dress") || !order("sizes", "small", "medium", "large", "top", "agents", "rules") ||
+		!order("agents", "claude", "codex", "gemini", "opencode", "grok", "rules") {
+		t.Fatalf("a standard room is written\n%s\nwant the dress code after the team, sizes small to top, then the agents in order", text)
+	}
+}
+
+// must is the value, for calls that can't fail here.
+func must[T any](value T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return value
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -144,5 +145,46 @@ func TestOnlyTheHookReportsEvents(t *testing.T) {
 	}
 	if got := report(thisComputer, d.access.HookKey); got != http.StatusNoContent || d.sessions.Get("s1") == nil {
 		t.Fatalf("the hook's own event: %d, and the session isn't on the deck", got)
+	}
+}
+
+func TestHiringIsSetUpOnlyWhenEveryPartIsRight(t *testing.T) {
+	d := newTestDeck(t)
+	setUp := func(query string) int {
+		return serve(t, d, call{method: "POST", target: "/setup/hiring?" + query, host: "localhost:7710", from: thisComputer,
+			headers: map[string]string{setupHeader: "1"}}).Code
+	}
+	writeFile(t, filepath.Join(homeDir, "work", "keep"), "")
+	for _, query := range []string{
+		"enabled=1&agent=codex&folder=work",        // a relative path
+		"enabled=1&agent=codex&folder=~/nowhere",   // a folder that isn't there
+		"enabled=1&agent=codex&folder=~/work/keep", // a file, not a folder
+		"enabled=1&agent=skynet&folder=" + homeDir, // an agent there isn't
+	} {
+		if got := setUp(query); got != http.StatusBadRequest {
+			t.Errorf("%s: %d, want %d", query, got, http.StatusBadRequest)
+		}
+		if c := d.config; c.HiringEnabled || c.HireAgent != string(Claude) || c.HireFolder != "" {
+			t.Fatalf("%s was refused, yet hiring is now %v, %q, %q", query, c.HiringEnabled, c.HireAgent, c.HireFolder)
+		}
+	}
+	if got := setUp("enabled=1&agent=codex&folder=~/work"); got != http.StatusOK || d.config.HireFolder != filepath.Join(homeDir, "work") ||
+		!d.config.HiringEnabled || d.config.HireAgent != "codex" {
+		t.Fatalf("~/work: %d, and hiring is %+v", got, d.config)
+	}
+	if got := setUp("folder="); got != http.StatusOK || d.config.HireFolder != "" || d.config.HireAgent != "codex" {
+		t.Fatalf("an empty folder: %d, and the folder is %q, the agent %q; want it cleared and the agent kept", got, d.config.HireFolder, d.config.HireAgent)
+	}
+}
+
+// The team cards in setup go by the project's name, which stays put as the
+// agent moves into a subfolder.
+func TestTheSetupPageNamesEachSessionsProject(t *testing.T) {
+	d := newTestDeck(t)
+	d.sessions.Apply(map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": "/work/api/cmd/server"},
+		Claude, tab, "/work/api", 100)
+	sessions := (&router{deck: d}).setupState()["sessions"].([]map[string]any)
+	if len(sessions) != 1 || sessions[0]["name"] != "api" {
+		t.Fatalf("sessions %v, want one named api", sessions)
 	}
 }

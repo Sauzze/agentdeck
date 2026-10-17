@@ -463,6 +463,37 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 		d.mu.Unlock()
 		writeJSON(w, http.StatusOK, rt.setupState())
 
+	// Every part is checked before any is kept, so a wrong one changes
+	// nothing. An empty folder clears it.
+	case r.Method == http.MethodPost && path == "/setup/hiring":
+		folder := strings.TrimSpace(query.Get("folder"))
+		if folder != "" {
+			checked, ok := existingFolder(folder)
+			if !ok {
+				http.Error(w, "There's no folder at "+query.Get("folder")+".", http.StatusBadRequest)
+				return
+			}
+			folder = checked
+		}
+		if query.Has("agent") && !slices.Contains(agents, Agent(query.Get("agent"))) {
+			http.Error(w, "Unknown agent", http.StatusBadRequest)
+			return
+		}
+		d.mu.Lock()
+		if query.Has("enabled") {
+			config.HiringEnabled = query.Get("enabled") == "1"
+		}
+		if query.Has("folder") {
+			config.HireFolder = folder
+		}
+		if query.Has("agent") {
+			config.HireAgent = query.Get("agent")
+		}
+		config.save()
+		d.changed()
+		d.mu.Unlock()
+		writeJSON(w, http.StatusOK, rt.setupState())
+
 	case r.Method == http.MethodPost && path == "/setup/scroll":
 		d.mu.Lock()
 		config.ScrollEnabled = query.Get("enabled") == "1"
@@ -601,6 +632,11 @@ func (rt *router) setupState() map[string]any {
 		// No accessibility step: nothing here needs that permission.
 		"checklist": map[string]any{"hooks": connected, "scroll": d.config.ScrollEnabled, "openAtLogin": openAtLogin},
 		"agents":    agentList,
+		// Firing works here; hiring, which opens a terminal, is the Mac app's for now.
+		"hiring": map[string]any{
+			"enabled": d.config.HiringEnabled, "folder": d.config.HireFolder, "agent": d.config.HireAgent,
+			"canHire": false, "canChoose": false,
+		},
 		// What to type to start an agent through the launcher.
 		"launcher": launchCommand(),
 		"pairing":  pairing,

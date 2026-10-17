@@ -332,8 +332,9 @@
   // On the setup page, the deck is a preview: that page sends it what to
   // draw, and its controls say what they would do instead of doing it.
   const preview = location.pathname === '/setup/preview';
-  // /office: the office alone, for a spare screen.
+  // /office: the office alone, for a spare screen; /office?saver, the Mac's screen saver.
   const whole = location.pathname === '/office';
+  const saver = whole && new URLSearchParams(location.search).has('saver');
   const $ = (id) => document.getElementById(id);
 
   let keyData = [];    // the keys as the server lays them out
@@ -426,6 +427,21 @@
     held() {
       tick();
     },
+    // Firing, once the office has asked: whether the agent was let go,
+    // which only a plain yes means. And hiring, into the desk held.
+    async fire(id) {
+      tick();
+      return (await send('/act', { session: id, action: 'fire' })) === 204;
+    },
+    hire(desk) {
+      tick();
+      send('/act', { action: 'hire', desk });
+    },
+    // An agent carried from one desk to another: the two swap, and stay so.
+    swap(from, to) {
+      tick();
+      send('/act', { action: 'swap', from, to });
+    },
     // The paint chips on the picked desk, as the dial.
     effort(level) {
       tick();
@@ -475,14 +491,15 @@
    * The phone's office alone, filling the screen as /office does: the dial
    * and buttons step aside, and the room's desks, red button and microphone
    * do their work. Where the browser can, its own bars go too; iPhone
-   * Safari keeps them, having no full screen for a page. The room is wide,
-   * so it's biggest sideways. A reload brings the controls back.
+   * Safari keeps them, having no full screen for a page. Held upright, the
+   * room stands upright too. A reload brings the controls back.
    */
   let full = false;
   // Beside the controls, the room is seen through a window, rounded like the
-  // keys. On a screen of its own, that window floats, filling the screen.
+  // keys. On a screen of its own, that window floats, filling the screen,
+  // and as the screen saver it goes from edge to edge.
   office.setFramed(!whole);
-  if (whole) office.setFloating('screen');
+  if (whole) office.setFloating(saver ? 'edge' : 'screen');
 
   function setFull(on) {
     full = on;
@@ -493,7 +510,6 @@
     const page = document.documentElement;
     if (on && page.requestFullscreen && !document.fullscreenElement) page.requestFullscreen().catch(() => {});
     if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    if (on && matchMedia('(orientation: portrait)').matches) flash('Turn your phone sideways for a bigger office');
   }
 
   $('full-switch').addEventListener('click', () => {
@@ -537,6 +553,48 @@
     if (video.paused) video.play().catch(() => {});
   }
   document.addEventListener('pointerdown', keepAwake, { capture: true });
+
+  /* ------------------------------------------------------- kept waiting */
+
+  /**
+   * An agent left waiting on you this long gets one reminder: three buzzes
+   * and a chime, once a wait. Nothing sooner, so the deck stays quiet;
+   * the office shows the wait wearing on meanwhile. The chime needs a tap
+   * first, as all sound does, which the deck has had by then.
+   */
+  const REMIND_AFTER = 5 * 60 * 1000;
+  const REMIND_CHECK = 5000;
+  const waits = new Map(); // each waiting session's { since, reminded }
+  let chimes = null;       // the deck's sound, from the first tap
+
+  document.addEventListener('pointerdown', () => {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!chimes && Context) chimes = new Context();
+    else if (chimes && chimes.state === 'suspended') chimes.resume().catch(() => {});
+  }, { capture: true });
+
+  /** Follows who is waiting on you, from each snapshot. */
+  function noteWaits() {
+    const waiting = new Set(sessions.filter((s) => s.state === 'asking').map((s) => s.id));
+    for (const id of waits.keys()) if (!waiting.has(id)) waits.delete(id);
+    for (const id of waiting) if (!waits.has(id)) waits.set(id, { since: Date.now(), reminded: false });
+  }
+
+  setInterval(() => {
+    if (preview) return;
+    for (const wait of waits.values()) {
+      if (wait.reminded || Date.now() - wait.since < REMIND_AFTER) continue;
+      wait.reminded = true;
+      remind();
+    }
+  }, REMIND_CHECK);
+
+  function remind() {
+    if (navigator.vibrate) navigator.vibrate([90, 120, 90, 120, 90]);
+    else for (let k = 0; k < 3; k++) setTimeout(tick, k * 210);
+    if (!chimes || chimes.state !== 'running' || !window.AgentOffice) return;
+    AgentOffice.remind(chimes); // the office's sound, in the same style as the rest of it
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
   /* ------------------------------------------------------------ pop out */
@@ -764,14 +822,25 @@
     armed = null;
   }
 
-  /** POST and say anything that is not a plain yes on the status line. */
+  /**
+   * POST and say anything that is not a plain yes on the status line. It
+   * comes to the computer's status, or false with no answer: in the
+   * preview, or out of reach.
+   */
   async function send(pathname, params, signal) {
-    if (preview) return flash(rehearse(params));
+    if (preview) {
+      flash(rehearse(params));
+      return false;
+    }
     const res = await post(pathname, params, signal);
-    if (!res) return flash("Can't reach your computer");
-    if (res.status === 401) return unpaired();
-    if (res.status === 202) return flash('queued — goes in when Claude is done');
-    if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
+    if (!res) {
+      flash("Can't reach your computer");
+      return false;
+    }
+    if (res.status === 401) unpaired();
+    else if (res.status === 202) flash('queued — goes in when Claude is done');
+    else if (!res.ok) flash((await res.text()) || `failed (${res.status})`);
+    return res.status;
   }
 
   let flashTimer = null;
@@ -1073,6 +1142,7 @@
     const count = Math.max(1, keyData.length);
     if (count !== $('keys').children.length) buildKeys(count);
     sessions = keyData.filter((k) => k.session).map((k) => k.session);
+    noteWaits();
     overflow = data.overflow;
     scrollEnabled = data.scroll;
     applyTheme(data.theme);
@@ -1084,7 +1154,9 @@
 
   /** In the preview, what a control would have done to the selected session. */
   function rehearse(params) {
-    const name = current() ? ` · ${current().project}` : '';
+    // A hire is for no session yet; firing names the one the office asked about.
+    const target = params.action === 'hire' || params.action === 'swap' ? null : sessions.find((s) => s.id === params.session) || current();
+    const name = target ? ` · ${target.project}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
       const does = b.text ? `types ${b.text}` : b.key ? `presses ${KEY_NAMES[b.key]}` : 'types nothing yet';
@@ -1095,6 +1167,7 @@
       clear: 'starts a fresh conversation', up: 'moves up', down: 'moves down',
       mic: params.phase === 'down' ? 'starts listening' : 'stops listening',
       effort: `sets effort to ${params.level}`, scroll: 'scrolls',
+      fire: 'fires', hire: 'hires a new agent', swap: 'swaps two desks',
     };
     return `${words[params.action] || params.action}${name}`;
   }
