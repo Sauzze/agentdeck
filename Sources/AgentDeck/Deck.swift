@@ -12,6 +12,12 @@ final class Deck {
     private static let closedTabCheckInterval: TimeInterval = 10
     /// How often to ping idle event streams so they stay open.
     private static let pingInterval: TimeInterval = 20
+    /// How soon after a change the sessions are saved, so a burst of events
+    /// writes once.
+    private static let saveDelay: TimeInterval = 1
+    /// Sessions saved this recently before a restart are shown as they were;
+    /// any older, a turn may have ended while nobody was listening.
+    private static let freshSave: Double = 120_000
     /// Claude stops listening by itself after two minutes.
     private static let voiceLimit: TimeInterval = 120
     /// Without Accessibility, posted keys vanish without a trace. The phone
@@ -35,9 +41,15 @@ final class Deck {
     /// Ttys Terminal reported last time. Only these can be found closed:
     /// sessions in other terminal apps never appear here and are left alone.
     private var terminalTTYs = Set<String>()
+    /// Ttys missing from Terminal's last look. Missing again at the next, with
+    /// no agent left running on them, their tabs have closed: one look alone
+    /// can catch Terminal in the middle of opening or closing a window.
+    private var missedOnce = Set<String>()
+    private var savePending = false
 
     init() {
         sessions.onChange = { [weak self] in self?.changed() }
+        restoreSessions()
 
         Timer.scheduledTimer(withTimeInterval: Deck.seenCheckInterval, repeats: true) { [weak self] _ in
             self?.checkFrontTab()
@@ -84,6 +96,52 @@ final class Deck {
         let state = snapshotJSON()
         streams.values.forEach { $0.stream.send(state) }
         onChange()
+        scheduleSave()
+    }
+
+    // MARK: Across a restart
+
+    /// What's written to keep the deck across a restart: the sessions, their
+    /// keys, and when.
+    private struct SavedDeck: Codable {
+        let savedAt: Double
+        let sessions: [Sessions.Saved]
+        let keys: [String: Int]
+    }
+
+    private func scheduleSave() {
+        guard !savePending else { return }
+        savePending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Deck.saveDelay) { [weak self] in
+            guard let self else { return }
+            self.savePending = false
+            let saved = SavedDeck(savedAt: Date().timeIntervalSince1970 * 1000, sessions: self.sessions.saved, keys: self.keyOf)
+            guard let data = try? JSONEncoder().encode(saved) else { return }
+            FileManager.default.createFile(atPath: Paths.sessions.path, contents: data, attributes: [.posixPermissions: 0o600])
+        }
+    }
+
+    /// The sessions running when the app last stopped, back on their keys:
+    /// those whose agent is still running in its tab. Sessions only report
+    /// as something happens, so an idle one would otherwise stay away until
+    /// it's next used.
+    private func restoreSessions() {
+        guard let data = try? Data(contentsOf: Paths.sessions),
+              let saved = try? JSONDecoder().decode(SavedDeck.self, from: data), !saved.sessions.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let running = saved.sessions.filter { entry in
+                guard !entry.tty.isEmpty, let agent = Agent(rawValue: entry.agent) else { return false }
+                return Terminal.isRunning(agent.foregroundName, on: entry.tty) == true
+            }
+            DispatchQueue.main.async {
+                guard !running.isEmpty else { return }
+                for entry in running where self.keyOf[entry.id] == nil {
+                    if let key = saved.keys[entry.id] { self.keyOf[entry.id] = key }
+                }
+                let fresh = Date().timeIntervalSince1970 * 1000 - saved.savedAt < Deck.freshSave
+                self.sessions.restore(running, fresh: fresh)
+            }
+        }
     }
 
     // MARK: Keys
@@ -103,7 +161,8 @@ final class Deck {
         let config = Config.shared
         var remaining = sessions.all
         let live = Set(remaining.map(\.id))
-        keyOf = keyOf.filter { live.contains($0.key) }
+        // A session dropped as its tab seemed to close keeps its key, should it come back.
+        keyOf = keyOf.filter { live.contains($0.key) || sessions.wasDropped($0.key) }
 
         var fixed: Int?
         if case .fixed(let count) = config.layout.keys { fixed = count }
@@ -498,10 +557,27 @@ final class Deck {
         Terminal.queue.async {
             let open = Terminal.openTTYs()
             DispatchQueue.main.async {
-                self.checkingTabs = false
-                guard let open else { return } // unknown is not the same as none
-                self.sessions.prune(closedTTYs: self.terminalTTYs.subtracting(open))
-                self.terminalTTYs = open
+                guard let open else { // unknown is not the same as none
+                    self.checkingTabs = false
+                    return
+                }
+                let missing = self.terminalTTYs.subtracting(open)
+                let closed = missing.intersection(self.missedOnce)
+                self.missedOnce = missing.subtracting(closed)
+                self.terminalTTYs = open.union(self.missedOnce)
+                let suspects = self.sessions.all.filter { closed.contains($0.tty) }.map { (tty: $0.tty, agent: $0.agent) }
+                guard !suspects.isEmpty else {
+                    self.checkingTabs = false
+                    return
+                }
+                // The last word is the tab's own: its agent still running there means it's open.
+                DispatchQueue.global(qos: .utility).async {
+                    let gone = Set(suspects.filter { Terminal.isRunning($0.agent.foregroundName, on: $0.tty) == false }.map(\.tty))
+                    DispatchQueue.main.async {
+                        self.checkingTabs = false
+                        self.sessions.prune(closedTTYs: gone)
+                    }
+                }
             }
         }
     }

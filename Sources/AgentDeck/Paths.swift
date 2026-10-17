@@ -13,6 +13,8 @@ enum Paths {
 
     static let phones = support.appendingPathComponent("phones.json")
     static let config = support.appendingPathComponent("config.json")
+    /// The sessions running, and their keys, kept across a restart.
+    static let sessions = support.appendingPathComponent("sessions.json")
     static let hookScript = support.appendingPathComponent("report.sh")
     /// The hook's key, as the header curl sends: see `Access`.
     static let hookHeader = support.appendingPathComponent("hook-header")
