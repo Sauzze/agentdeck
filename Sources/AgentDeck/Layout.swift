@@ -82,8 +82,9 @@ struct Layout: Codable, Equatable {
 
 /// How the office is furnished: the microphone or a megaphone, what each of
 /// the back wall's five places holds, the floor, the walls' paint, the
-/// lounge's carpet and the piece in its corner, and whether the sky keeps the
-/// computer's time or it's always day. office.js draws it, with the same
+/// lounge's carpet and the piece in its corner, whether the sky keeps the
+/// computer's time or it's always day, its pet, whether the windows follow
+/// the seasons, and how loud it is. office.js draws it, with the same
 /// choices. Anything unknown, or of the wrong kind, is as standard: it only
 /// changes how the room looks.
 struct Room: Codable, Equatable {
@@ -94,6 +95,9 @@ struct Room: Codable, Equatable {
     var lounge = "navy"
     var corner = "arcade"
     var sky = "live"
+    var pet = "none"
+    var season = "calendar"
+    var sound = "off"
 
     /// Each part's choices; the first is the standard one.
     static let choices = [
@@ -103,6 +107,9 @@ struct Room: Codable, Equatable {
         "lounge": ["navy", "teal", "plum", "sand"],
         "corner": ["arcade", "vending", "foosball", "fishtank", "books", "none"],
         "sky": ["live", "day"],
+        "pet": ["none", "cat", "dog", "lizard", "monkey"],
+        "season": ["calendar", "off"],
+        "sound": ["off", "quiet", "normal"],
     ]
     static let wallChoices = ["window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"]
     static let standardWall = ["window", "whiteboard", "window", "pinboard", "window"]
@@ -121,6 +128,9 @@ struct Room: Codable, Equatable {
         lounge = choice(.lounge) ?? lounge
         corner = choice(.corner) ?? corner
         sky = choice(.sky) ?? sky
+        pet = choice(.pet) ?? pet
+        season = choice(.season) ?? season
+        sound = choice(.sound) ?? sound
         let given = ((try? c?.decodeIfPresent([Loose].self, forKey: .wall)) ?? nil) ?? []
         wall = Room.standardWall.enumerated().map { i, standard in
             i < given.count ? given[i].text.flatMap { Room.wallChoices.contains($0) ? $0 : nil } ?? standard : standard

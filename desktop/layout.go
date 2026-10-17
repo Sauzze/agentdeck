@@ -55,9 +55,10 @@ func (k *KeyCount) UnmarshalJSON(data []byte) error {
 
 // Room is how the office is furnished: the microphone or a megaphone, what
 // each of the back wall's five places holds, the floor, the walls' paint, the
-// lounge's carpet and the piece in its corner, and whether the sky keeps the
-// computer's time or it's always day, as the Mac app's Room. office.js draws
-// it, with the same choices. Anything unknown, or of the wrong kind, is as
+// lounge's carpet and the piece in its corner, whether the sky keeps the
+// computer's time or it's always day, its pet, whether the windows follow the
+// seasons, and how loud it is, as the Mac app's Room. office.js draws it, with
+// the same choices. Anything unknown, or of the wrong kind, is as
 // standard: it only changes how the room looks.
 type Room struct {
 	Mic    string   `json:"mic"`
@@ -67,6 +68,9 @@ type Room struct {
 	Lounge string   `json:"lounge"`
 	Corner string   `json:"corner"`
 	Sky    string   `json:"sky"`
+	Pet    string   `json:"pet"`
+	Season string   `json:"season"`
+	Sound  string   `json:"sound"`
 }
 
 var (
@@ -78,6 +82,9 @@ var (
 		"lounge": {"navy", "teal", "plum", "sand"},
 		"corner": {"arcade", "vending", "foosball", "fishtank", "books", "none"},
 		"sky":    {"live", "day"},
+		"pet":    {"none", "cat", "dog", "lizard", "monkey"},
+		"season": {"calendar", "off"},
+		"sound":  {"off", "quiet", "normal"},
 	}
 	wallChoices  = []string{"window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"}
 	standardWall = []string{"window", "whiteboard", "window", "pinboard", "window"}
@@ -95,7 +102,7 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 	var wall []json.RawMessage
 	json.Unmarshal(raw["wall"], &wall)
 	*r = Room{Mic: text(raw["mic"]), Floor: text(raw["floor"]), Paint: text(raw["paint"]), Lounge: text(raw["lounge"]),
-		Corner: text(raw["corner"]), Sky: text(raw["sky"])}
+		Corner: text(raw["corner"]), Sky: text(raw["sky"]), Pet: text(raw["pet"]), Season: text(raw["season"]), Sound: text(raw["sound"])}
 	for _, place := range wall {
 		r.Wall = append(r.Wall, text(place))
 	}
@@ -120,6 +127,7 @@ func (r Room) checked() Room {
 	}
 	checked := Room{Mic: choose("mic", r.Mic), Floor: choose("floor", r.Floor), Paint: choose("paint", r.Paint),
 		Lounge: choose("lounge", r.Lounge), Corner: choose("corner", r.Corner), Sky: choose("sky", r.Sky),
+		Pet: choose("pet", r.Pet), Season: choose("season", r.Season), Sound: choose("sound", r.Sound),
 		Wall: slices.Clone(standardWall)}
 	for i := range checked.Wall {
 		if i < len(r.Wall) && slices.Contains(wallChoices, r.Wall[i]) {

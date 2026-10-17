@@ -311,7 +311,10 @@
         <div class="field"><span>Lounge</span><div class="choices" id="room-lounge"></div></div>
         <label class="field"><span>In the lounge</span><select id="room-corner"></select></label>
         <div class="field"><span>Daylight</span><div class="choices" id="room-sky"></div></div>
-        <p class="hint">How the office looks on your phone and on a screen of its own. The preview shows it while you change it.</p>
+        <div class="field"><span>Seasons in the windows</span><div class="choices" id="room-season"></div></div>
+        <div class="field"><span>Pet</span><div class="choices" id="room-pet"></div></div>
+        <div class="field"><span>Sound</span><div class="choices" id="room-sound"></div></div>
+        <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Sound starts with your first tap. The preview shows the office while you change it.</p>
         <h3>Buttons</h3>
         <div class="rows" id="rows"></div>
         <p class="note" id="stick-note" hidden>Without the stick, add ▲ and ▼ to answer your agents' questions.</p>
@@ -732,11 +735,14 @@
     corner: [['arcade', 'An arcade machine'], ['vending', 'A vending machine'], ['foosball', 'A foosball table'],
       ['fishtank', 'A fish tank'], ['books', 'A bookcase and a beanbag'], ['none', 'Nothing']],
     sky: [['live', 'Follows the clock'], ['day', 'Always day']],
+    season: [['calendar', 'Follow the calendar'], ['off', 'Off']],
+    pet: [['none', 'None'], ['cat', 'Cat'], ['dog', 'Dog'], ['lizard', 'Lizard'], ['monkey', 'Monkey']],
+    sound: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
   };
   const WALL_CHOICES = [['window', 'Window'], ['whiteboard', 'Whiteboard'], ['pinboard', 'Pinboard'], ['poster', 'Poster'],
     ['shelf', 'Bookshelf'], ['plant', 'Plant'], ['bare', 'Bare wall']];
   const STANDARD_ROOM = { mic: 'mic', wall: ['window', 'whiteboard', 'window', 'pinboard', 'window'], floor: 'wood', paint: 'slate',
-    lounge: 'navy', corner: 'arcade', sky: 'live' };
+    lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off' };
   let peekOffice = false; // the preview shows the office while it's being furnished
 
   function select(options, value, onchange) {
@@ -749,7 +755,7 @@
   function drawRoom() {
     const room = layout.room || (layout.room = structuredClone(STANDARD_ROOM));
     const furnish = (edit) => change(edit, true);
-    for (const part of ['mic', 'floor', 'paint', 'lounge', 'sky']) {
+    for (const part of ['mic', 'floor', 'paint', 'lounge', 'sky', 'season', 'pet', 'sound']) {
       $(`room-${part}`).replaceChildren(...ROOM_CHOICES[part].map(([id, label, swatch]) =>
         choice(label, room[part] === id, () => furnish(() => { room[part] = id; }), swatch)));
     }

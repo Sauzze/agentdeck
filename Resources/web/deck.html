@@ -537,6 +537,57 @@
     if (video.paused) video.play().catch(() => {});
   }
   document.addEventListener('pointerdown', keepAwake, { capture: true });
+
+  /* ------------------------------------------------------- kept waiting */
+
+  /**
+   * An agent left waiting on you this long gets one reminder: three buzzes
+   * and a soft chime, once a wait. Nothing sooner, so the deck stays quiet;
+   * the office shows the wait wearing on meanwhile. The chime needs a tap
+   * first, as all sound does, which the deck has had by then.
+   */
+  const REMIND_AFTER = 5 * 60 * 1000;
+  const REMIND_CHECK = 5000;
+  const waits = new Map(); // each waiting session's { since, reminded }
+  let chimes = null;       // the deck's sound, from the first tap
+
+  document.addEventListener('pointerdown', () => {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!chimes && Context) chimes = new Context();
+    else if (chimes && chimes.state === 'suspended') chimes.resume().catch(() => {});
+  }, { capture: true });
+
+  /** Follows who is waiting on you, from each snapshot. */
+  function noteWaits() {
+    const waiting = new Set(sessions.filter((s) => s.state === 'asking').map((s) => s.id));
+    for (const id of waits.keys()) if (!waiting.has(id)) waits.delete(id);
+    for (const id of waiting) if (!waits.has(id)) waits.set(id, { since: Date.now(), reminded: false });
+  }
+
+  setInterval(() => {
+    if (preview) return;
+    for (const wait of waits.values()) {
+      if (wait.reminded || Date.now() - wait.since < REMIND_AFTER) continue;
+      wait.reminded = true;
+      remind();
+    }
+  }, REMIND_CHECK);
+
+  function remind() {
+    if (navigator.vibrate) navigator.vibrate([90, 120, 90, 120, 90]);
+    else for (let k = 0; k < 3; k++) setTimeout(tick, k * 210);
+    if (!chimes || chimes.state !== 'running') return;
+    const t = chimes.currentTime;
+    [880, 1320].forEach((pitch, k) => {
+      const osc = chimes.createOscillator(), gain = chimes.createGain();
+      osc.frequency.value = pitch;
+      gain.gain.setValueAtTime(0.09, t + k * 0.16);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + k * 0.16 + 0.6);
+      osc.connect(gain).connect(chimes.destination);
+      osc.start(t + k * 0.16);
+      osc.stop(t + k * 0.16 + 0.6);
+    });
+  }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
   /* ------------------------------------------------------------ pop out */
@@ -1073,6 +1124,7 @@
     const count = Math.max(1, keyData.length);
     if (count !== $('keys').children.length) buildKeys(count);
     sessions = keyData.filter((k) => k.session).map((k) => k.session);
+    noteWaits();
     overflow = data.overflow;
     scrollEnabled = data.scroll;
     applyTheme(data.theme);

@@ -163,7 +163,9 @@ control Terminal. Click **Allow**.
    Screen**; on Android, open the browser's menu and tap **Add to Home
    screen**. SauzzeDeck Pro now opens full screen and stays paired.
 
-While the deck is open, your phone's screen stays on, from your first tap.
+While the deck is open, your phone's screen stays on, from your first tap. If
+an agent has been waiting on you for five minutes, your phone buzzes three
+times and chimes once, to remind you.
 
 Each phone you pair appears under **Paired phones** on the setup page, with
 when it was last used. **Revoke** cuts one phone off straight away;
@@ -222,7 +224,7 @@ doing:
 | On the deck | In the office |
 |---|---|
 | Working | Typing, the screen lit, dots rising from it |
-| Waiting on you | Standing up and waving, with a blinking **!** |
+| Waiting on you | Standing up and waving, with a blinking **!**. Kept waiting more than five minutes, they get agitated: hopping, a red **!**, steam from the ears |
 | Done, unread | Leaning back with a coffee and a ✓ |
 | Idle | Off to the coffee machine, the window, the water cooler, the couch or a game of ping-pong |
 | Error | Head in hands, smoke from the screen. A rate limit has them waiting under the clock instead. |
@@ -257,6 +259,14 @@ There's more to see while they work:
   fish tank, or a bookcase and a beanbag. Idle agents go and play, grab a
   snack, or read.
 - **Daylight** that follows the clock, with night falling at 8 pm, or always day.
+- **Seasons in the windows:** snow in winter, with lights strung along the wall
+  through December, falling leaves in autumn, blossom in spring, birds in summer.
+- **A pet:** a cat that naps on the couch, a dog that follows people about, a
+  lizard that basks on the wall, or a monkey that climbs on things and steals
+  cups.
+- **Sound:** off, quiet or normal. A soft room tone, keys clicking while your
+  agents type, the door, the coffee machine and the ping-pong table. It starts
+  with your first tap, as browsers require.
 
 It's kept with the layout, so each profile can have an office of its own.
 

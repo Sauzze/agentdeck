@@ -84,6 +84,9 @@
     lounge: ['navy', 'teal', 'plum', 'sand'],
     corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'none'],
     sky: ['live', 'day'],
+    pet: ['none', 'cat', 'dog', 'lizard', 'monkey'],
+    season: ['calendar', 'off'],
+    sound: ['off', 'quiet', 'normal'],
   };
   /** What each of the back wall's five places can hold, and what it holds unless set up otherwise. */
   const WALL_CHOICES = ['window', 'whiteboard', 'pinboard', 'poster', 'shelf', 'plant', 'bare'];
@@ -334,6 +337,8 @@
       this.nextMove = Infinity; // when an idle person next decides where to go
       this.arrivedAt = 0;
       this.toolSince = 0; // when their session's current tool started
+      this.askingSince = null;  // when they started waiting on you, as far as the office has seen
+      this.celebratedAt = null; // when they finished a turn of an hour or more
     }
 
     get isWalking() { return this.path.length > 0; }
@@ -344,6 +349,35 @@
       return this.desk !== null && !this.isWalking && !this.isLeaving && this.place === deskPlace(this.desk);
     }
   }
+
+  /**
+   * The office's pet, as set up: it wanders between places of its own, in
+   * straight lines, since it can climb and jump where people can't.
+   */
+  class Pet {
+    constructor(kind) {
+      this.kind = kind;
+      this.position = { x: DOOR.x, y: DOOR.y + 6 }; // in through the door
+      this.target = null;      // where it's going or staying: { x, y, depth, pose, follow, grab }
+      this.isWalking = false;
+      this.facing = -1;        // right, or left
+      this.nextMove = 0;
+      this.arrivedAt = 0;
+      this.carrying = false;   // a cup the monkey took from the counter
+    }
+  }
+
+  /** Each pet's pace, in art pixels a second, and how long it stays put, in seconds. */
+  const PETS = {
+    cat: { speed: 20, stay: [8, 20] },
+    dog: { speed: 30, stay: [5, 14] },
+    lizard: { speed: 6, stay: [15, 40] },
+    monkey: { speed: 38, stay: [5, 12] },
+  };
+  /** The lizard freezes while anyone is this close, in art pixels. */
+  const LIZARD_SHY = 14;
+  /** The dog follows someone walking for this long at most, in seconds. */
+  const FOLLOW_FOR = 8;
 
   /**
    * The people in the office and where they're going, moved on a little each
@@ -369,6 +403,7 @@
       this.nextStaffChange = 0;
       this.staffHired = 0; // numbers each new member of staff, for a face of their own
       this.interns = [];
+      this.pet = null;
     }
 
     /**
@@ -380,6 +415,7 @@
       const next = roomOf(given);
       if (JSON.stringify(next) === JSON.stringify(decor)) return;
       const cornerGone = next.corner !== decor.corner;
+      if (next.pet !== decor.pet) this.pet = next.pet === 'none' ? null : new Pet(next.pet);
       const boardGone = next.wall.indexOf('whiteboard') !== decor.wall.indexOf('whiteboard');
       decor = next;
       spots = [...LOUNGE_SPOTS, ...CORNER_SPOTS[decor.corner]];
@@ -435,6 +471,7 @@
 
       for (const placement of [...newcomers.values()].sort((a, b) => a.desk - b.desk)) {
         const person = new Person(placement.session, placement.desk);
+        if (placement.session.state === 'asking') person.askingSince = now;
         if (this.isOpen) {
           person.position = { ...DOOR };
           this.send(person, deskPlace(placement.desk));
@@ -555,6 +592,91 @@
       this.press(now);
       this.people = this.people.filter((p) => !(p.isLeaving && !p.isWalking));
       this.placeInterns(now);
+      if (this.pet) this.movePet(this.pet, this.elapsed, now);
+    }
+
+    /** The agent who has been working longest, at their desk, if anyone is. */
+    hardestWorker() {
+      const working = this.people.filter((p) => !p.isStaff && p.isAtDesk && p.session.state === 'thinking' && p.session.turnStartedAt);
+      return working.sort((a, b) => a.session.turnStartedAt - b.session.turnStartedAt)[0] || null;
+    }
+
+    /** Where the pet could go next: each kind has its own haunts. */
+    petPlaces(pet) {
+      const places = [];
+      const worker = this.hardestWorker();
+      const desk = worker && DESKS[worker.desk];
+      const taken = (spot) => this.people.some((p) => p.place === spotPlace(spot) && !p.isLeaving);
+      const tops = { arcade: { x: 271, y: 60 }, vending: { x: 271, y: 58 }, fishtank: { x: 272, y: 60 }, books: { x: 297, y: 57 } };
+      switch (pet.kind) {
+        case 'cat':
+          [3, 4, 5].forEach((spot) => { if (!taken(spot)) places.push({ x: LOUNGE_SPOTS[spot].x, y: 113, pose: 'sleep' }); });
+          for (const p of this.people) {
+            if (!p.isStaff && p.isAtDesk) places.push({ x: DESKS[p.desk].x + 36, y: DESKS[p.desk].y + 2, depth: DESKS[p.desk].y + 5.6, pose: 'sit' });
+          }
+          if (desk) places.push({ x: desk.x - 5, y: desk.y + 15, pose: 'sit' });
+          if (decor.corner === 'fishtank') places.push({ x: 262, y: 95, pose: 'sit' });
+          places.push({ x: 252, y: 33, depth: 47, pose: 'sit' });
+          break;
+        case 'dog': {
+          places.push({ x: 276, y: 138, pose: 'lie' }, { x: CORRIDOR_X, y: 72, pose: 'sit' }, { x: 290, y: 62, pose: 'sit' });
+          if (desk) places.push({ x: desk.x + DESK_WIDTH + 6, y: desk.y + 15, pose: 'lie' });
+          const walker = this.people.find((p) => p.isWalking && !p.isLeaving);
+          if (walker) places.push({ follow: walker, pose: 'stand' });
+          break;
+        }
+        case 'lizard':
+          decor.wall.forEach((piece, slot) => { if (piece === 'window') places.push({ x: WALL_SLOTS[slot] + 19, y: 22, depth: 41.5, pose: 'still' }); });
+          places.push({ x: 296, y: 24, depth: 41.5, pose: 'still' }, { x: 276, y: 58, pose: 'still' });
+          if (desk) places.push({ x: desk.x + 12, y: desk.y - 10, depth: desk.y + 5.6, pose: 'still' });
+          break;
+        case 'monkey':
+          places.push({ x: 308, y: 18, depth: 50.5, pose: 'sit' }, { x: CORRIDOR_X, y: 13, depth: 41.5, pose: 'sit' },
+            { x: 270, y: 102, depth: 110.5, pose: 'sit' }, { x: 247, y: 33, depth: 47, pose: 'sit', grab: true });
+          if (tops[decor.corner]) places.push({ ...tops[decor.corner], depth: 86.5, pose: 'sit' });
+          break;
+      }
+      return places;
+    }
+
+    movePet(pet, elapsed, now) {
+      const { speed, stay } = PETS[pet.kind];
+      const follow = pet.target && pet.target.follow;
+      if (follow && (follow.isLeaving || !follow.isWalking || now - pet.arrivedAt > FOLLOW_FOR)) {
+        pet.target = null;
+        pet.isWalking = false;
+        pet.nextMove = now;
+      }
+      if (!pet.isWalking && now >= pet.nextMove) {
+        const others = this.petPlaces(pet).filter((p) => !pet.target || p.x !== pet.target.x || p.y !== pet.target.y);
+        if (others.length) {
+          // The monkey leaves the counter with a cup, and keeps it until it moves on again.
+          pet.carrying = !!(pet.target && pet.target.grab);
+          pet.target = pick(others);
+          pet.isWalking = true;
+          pet.arrivedAt = now;
+        } else {
+          pet.nextMove = now + random(...stay);
+        }
+      }
+      if (!pet.isWalking) return;
+      // The lizard won't move while anyone is near.
+      if (pet.kind === 'lizard' && this.people.some((p) => Math.hypot(p.position.x - pet.position.x, p.position.y - pet.position.y) < LIZARD_SHY)) return;
+      const following = pet.target.follow;
+      const to = following ? { x: following.position.x - 7, y: following.position.y + 1 } : pet.target;
+      const dx = to.x - pet.position.x, dy = to.y - pet.position.y, distance = Math.hypot(dx, dy);
+      if (Math.abs(dx) > 0.5) pet.facing = dx > 0 ? 1 : -1;
+      const stride = speed * elapsed;
+      if (distance > stride) {
+        pet.position.x += (dx / distance) * stride;
+        pet.position.y += (dy / distance) * stride;
+        return;
+      }
+      pet.position = { x: to.x, y: to.y };
+      if (following) return; // keeps up until the person stops
+      pet.isWalking = false;
+      pet.arrivedAt = now;
+      pet.nextMove = now + random(...stay);
     }
 
     /**
@@ -621,10 +743,17 @@
     }
 
     update(person, placement, now) {
-      const wasIdle = person.session.state === 'idle';
+      const before = person.session;
+      const wasIdle = before.state === 'idle';
       const session = placement.session;
-      if (session.tool !== person.session.tool) person.toolSince = now;
+      if (session.tool !== before.tool) person.toolSince = now;
       person.session = session;
+
+      if (session.state !== 'asking') person.askingSince = null;
+      else if (person.askingSince === null) person.askingSince = now;
+      // A turn of an hour or more, finished: a little party.
+      const finished = before.state === 'thinking' && (session.state === 'unread' || session.state === 'idle');
+      if (finished && before.turnStartedAt && Date.now() - before.turnStartedAt >= LONG_HAUL * 1000) person.celebratedAt = now;
 
       // Only a press of ☢ Max sends them to the button; the dial reaching max
       // just repaints the desk. Turned back down before they get there, they
@@ -789,6 +918,28 @@
     return `${Math.min(Math.floor(minutes / 60), 99)}h`;
   }
 
+  /** Waiting on you longer than this, in seconds, an agent gets agitated, and more so the longer it goes on… */
+  const AGITATED_AFTER = 300;
+  /** …reaching its worst this much later. */
+  const AGITATION_RISE = 600;
+  /** A turn this long, in seconds, ends in confetti… */
+  const LONG_HAUL = 3600;
+  /** …for this long. */
+  const PARTY_LENGTH = 3;
+
+  /** How agitated someone waiting on you is, from 0 to 1, or 0 for anyone else. */
+  function agitationOf(person, now) {
+    if (person.askingSince === null || person.isLeaving) return 0;
+    const waited = now - person.askingSince - AGITATED_AFTER;
+    return waited < 0 ? 0 : Math.min(1, 0.3 + (0.7 * waited) / AGITATION_RISE);
+  }
+
+  /** The season of each month, January first, as the windows show it. */
+  const SEASONS = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'autumn', 'autumn', 'autumn', 'winter'];
+  /** In summer a bird crosses each window this often, in seconds, taking this long. */
+  const BIRD_EVERY = 23;
+  const BIRD_CROSSING = 4;
+
   /** After this long, a turn's timer shows its agent sweating, in seconds. */
   const LONG_TURN = 600;
   /** Digits and a few marks, three art pixels wide and five tall, for timers and counts. */
@@ -876,7 +1027,12 @@
     if (person.place.startsWith('clock:')) return { kind: 'tap', beat: Math.floor(now * 4) % 2 };
     if (person.place.startsWith('shred:')) return { kind: 'shred' };
     if (deskOf(person.place) !== null) {
-      if (person.session.state === 'asking') return { kind: 'wave', frame: Math.floor(now * 4) % 2 };
+      if (person.celebratedAt !== null && now - person.celebratedAt < PARTY_LENGTH) return { kind: 'cheer', frame: Math.floor(now * 6) % 2 };
+      if (person.session.state === 'asking') {
+        // Kept waiting, they wave harder and start to hop.
+        const agitation = agitationOf(person, now);
+        return { kind: 'wave', frame: Math.floor(now * (4 + 8 * agitation)) % 2, hop: agitation ? Math.floor(now * (3 + 5 * agitation)) % 2 : 0 };
+      }
       if (person.session.state === 'error') return { kind: 'slump' };
       return { kind: 'sit' };
     }
@@ -890,7 +1046,7 @@
     const feet = Math.round(person.position.y);
     if (pose.kind === 'sit') return feet - 15;
     if (pose.kind === 'slump') return feet - 14;
-    return feet - 17;
+    return feet - 17 - (pose.hop || 0);
   }
 
   /**
@@ -944,7 +1100,7 @@
    * speech bubbles and the name on each desk.
    */
   function drawOffice(ctx, office, frame) {
-    const { now, hour, minute, width, height, ratio, selected, mic, framed, floating } = frame;
+    const { now, hour, minute, month, width, height, ratio, selected, mic, framed, floating } = frame;
     const inset = floating ? FLOAT_MARGINS[floating] * ratio : 0;
     const room = fitRoom(width, height, inset);
     const { scale } = room;
@@ -1046,9 +1202,28 @@
         fill(x + 3 + drift, y + 4, 7, 2, WHITE, 0.85);
         fill(x + 5 + drift, y + 3, 3, 1, WHITE, 0.85);
       }
+      if (decor.season === 'calendar') drawSeason(x, y, w, h);
       fill(x + w / 2, y, 1, h, PALETTE.frame);
       fill(x, y + h / 2, w, 1, PALETTE.frame);
-      fill(x - 2, y + h + 1, w + 4, 1, PALETTE.sill);
+      fill(x - 2, y + h + 1, w + 4, 1, decor.season === 'calendar' && SEASONS[month] === 'winter' ? 0xf2f4f8 : PALETTE.sill);
+    }
+
+    /** What the season puts in a window: snow, falling leaves or blossom, or a bird crossing now and then in summer. */
+    function drawSeason(x, y, w, h) {
+      const season = SEASONS[month];
+      if (season === 'summer') {
+        const lap = ((now + x * 0.37) % BIRD_EVERY) / BIRD_CROSSING;
+        const bx = x - 2 + Math.round(lap * (w + 4)), by = y + 4 + Math.round(Math.sin(lap * 6));
+        if (lap < 1 && bx > x && bx < x + w - 3) for (const [dx, dy] of [[0, 0], [1, 1], [2, 0]]) dot(bx + dx, by + dy, PALETTE.frame);
+        return;
+      }
+      const falling = { winter: [WHITE], autumn: [0xd9893a, 0xb8562a, 0xe0b040], spring: [0xf6b8cc, WHITE] }[season];
+      const speed = season === 'winter' ? 5 : 8, sway = season === 'winter' ? 1 : 2;
+      for (let k = 0; k < Math.round(w / 5); k++) {
+        const px = x + ((k * 11 + x * 3) % w) + Math.round(Math.sin(now * 1.5 + k) * sway);
+        const py = y - 1 + ((now * speed + k * 7.3 + x) % (h + 2));
+        if (px >= x && px < x + w && py >= y && py < y + h) dot(px, py, falling[k % falling.length]);
+      }
     }
 
     /** The door stands open while someone passes through it. */
@@ -1097,6 +1272,15 @@
       fill(LOUNGE_LEFT, top, 1, WALL_BOTTOM - top, paint.top);
 
       decor.wall.forEach((piece, slot) => drawWallPiece(piece, WALL_SLOTS[slot]));
+      // String lights along the top of the wall through December
+      if (decor.season === 'calendar' && month === 11) {
+        fill(left, 3, across, 1, PALETTE.frame);
+        const bulbs = [0xff5a4a, 0xf2d35b, 0x6fd36f, 0x4c8bf5];
+        for (let bx = left - (left % 6) + 3, i = 0; bx < right; bx += 6, i++) {
+          const lit = (Math.floor(now * 1.5) + i) % 4 !== 0;
+          fill(bx, 4, 2, 2, bulbs[((i % 4) + 4) % 4], lit ? 1 : 0.35);
+        }
+      }
       drawWindow(260, 6, 30, 20, true);
 
       drawDoor();
@@ -1498,6 +1682,115 @@
       fill(265, 97, 18, 1, SHADOW);
     }
 
+    /* The pet */
+
+    /**
+     * The pet, a few pixels high, facing the way it's going: walking, or
+     * settled the way its place has it (sitting, lying, asleep, clinging).
+     */
+    function drawPet() {
+      const pet = office.pet;
+      const x = Math.round(pet.position.x), y = Math.round(pet.position.y);
+      // Drawn facing right; facing left mirrors it about x.
+      const p = (dx, dy, w, h, colour, alpha) => fill(pet.facing > 0 ? x + dx : x - dx - w + 1, y + dy, w, h, colour, alpha);
+      const step = pet.isWalking ? Math.floor(now * 8) % 2 : 0;
+      const pose = pet.isWalking ? 'walk' : pet.target ? pet.target.pose : 'sit';
+      const grounded = !pet.target || !pet.target.depth || pet.isWalking;
+      if (grounded) p(-4, 0, 9, 1, SHADOW);
+      switch (pet.kind) {
+        case 'cat': {
+          const fur = 0xb8b3a8, dark = 0x77726b;
+          if (pose === 'sleep') {
+            p(-3, -3, 7, 3, fur);
+            p(-3, -3, 7, 1, dark);
+            p(3, -4, 2, 1, fur);
+            const rise = (now * 0.4) % 1;
+            fill(x + 3 + Math.round(rise * 2), y - 6 - Math.round(rise * 5), 2, 1, WHITE, 1 - rise);
+            break;
+          }
+          if (pose === 'walk') {
+            p(-3, -4, 6, 3, fur);
+            p(2, -6, 3, 3, fur);
+            p(2, -7, 1, 1, fur);
+            p(4, -7, 1, 1, fur);
+            p(-4, -7, 1, 3, dark);
+            p(-3, -1, 1, 1, dark);
+            p(1 + step, -1, 1, 1, dark);
+            p(4, -5, 1, 1, PALETTE.eye);
+            break;
+          }
+          p(-2, -5, 4, 5, fur);
+          p(-1, -8, 4, 3, fur);
+          p(-1, -9, 1, 1, fur);
+          p(2, -9, 1, 1, fur);
+          p(2, -7, 1, 1, PALETTE.eye);
+          p(-4, -1, 3, 1, dark);
+          p(-4, -2 - (Math.floor(now * 1.2) % 2), 1, 1, dark);
+          break;
+        }
+        case 'dog': {
+          const fur = 0x9a6a3a, dark = 0x6e4a26;
+          const wag = Math.floor(now * 6) % 2;
+          if (pose === 'lie') {
+            p(-4, -3, 9, 3, fur);
+            p(4, -5, 3, 3, fur);
+            p(4, -5, 1, 3, dark);
+            p(7, -4, 1, 1, PALETTE.eye);
+            p(-5, -2 - wag, 1, 1, dark);
+            break;
+          }
+          p(-4, -6, 8, 3, fur);
+          p(3, -9, 4, 4, fur);
+          p(3, -9, 1, 3, dark);
+          p(7, -7, 1, 1, PALETTE.eye);
+          p(5, -8, 1, 1, PALETTE.eye);
+          p(-5, -8 - wag, 1, 2, dark);
+          if (pose === 'sit') {
+            p(-4, -3, 3, 3, fur);
+            p(2, -3, 1, 3, dark);
+          } else {
+            p(-3, -3, 1, 3 - step, dark);
+            p(-1, -3, 1, 2 + step, dark);
+            p(1, -3, 1, 3 - step, dark);
+            p(3, -3, 1, 2 + step, dark);
+          }
+          break;
+        }
+        case 'lizard': {
+          const skin = 0x5aa84a, dark = 0x3d7a33;
+          p(-3, -2, 6, 2, skin);
+          p(3, -2, 2, 2, skin);
+          p(4, -2, 1, 1, PALETTE.eye);
+          p(-6, -1, 3, 1, dark);
+          p(-2, 0 - step, 1, 1, dark);
+          p(2, -1 + step, 1, 1, dark);
+          p(-2, -3 + step, 1, 1, dark);
+          p(2, -3, 1, 1, dark);
+          break;
+        }
+        case 'monkey': {
+          const fur = 0x7a5232, face = 0xd9b48a;
+          p(-2, -6, 4, 5, fur);
+          p(-2, -9, 4, 3, fur);
+          p(-1, -8, 3, 2, face);
+          p(-3, -8, 1, 1, fur);
+          p(2, -8, 1, 1, fur);
+          p(1, -8, 1, 1, PALETTE.eye);
+          p(-3, -2, 1, 1, fur);
+          p(-4, -4, 1, 3, fur);
+          p(-4, -5, 2, 1, fur);
+          if (pose === 'walk') {
+            p(-2, -1, 1, 1 + step, fur);
+            p(1, -1, 1, 2 - step, fur);
+          } else {
+            p(-2, -1, 4, 1, fur);
+          }
+          if (pet.carrying) p(2, -5, 2, 2, PALETTE.mug);
+          break;
+        }
+      }
+    }
+
     /** What the lounge's corner piece is made of, each part at the depth it stands at. */
     const CORNER_PARTS = {
       arcade: [[86, drawArcade]], vending: [[86, drawVending]], foosball: [[89, drawFoosball]], fishtank: [[86, drawFishTank]],
@@ -1640,6 +1933,12 @@
         dot(x - 4, top + 12, look.skin);
         sleeve(x + 4, top + 4, 1, 4);
         dot(x + 4 + pose.frame, top + 3, look.skin);
+      } else if (pose.kind === 'cheer') {
+        // Both arms up, punching the air
+        sleeve(x - 4, top + 4 + pose.frame, 1, 4);
+        dot(x - 4, top + 3 + pose.frame, look.skin);
+        sleeve(x + 4, top + 5 - pose.frame, 1, 4);
+        dot(x + 4, top + 4 - pose.frame, look.skin);
       } else if (pose.kind === 'slump') {
         sleeve(x - 4, top + 6, 1, 3);
         sleeve(x + 4, top + 6, 1, 3);
@@ -1800,7 +2099,8 @@
       if (frame.choices && !person.isStaff && person.session.id === selected) return;
       const state = person.session.state;
       const pose = poseOf(person, now);
-      const x = Math.round(person.position.x), top = topOf(person, pose);
+      const top = topOf(person, pose);
+      let x = Math.round(person.position.x);
 
       if (mic.held && isListener(person)) {
         // Listening: sound lines coming in from the right.
@@ -1830,8 +2130,17 @@
         return;
       }
 
-      const bob = state === 'asking' && Math.floor(now * 3) % 2 === 0 ? -1 : 0;
+      // Kept waiting, the bubble shakes and turns red, and steam rises.
+      const agitation = state === 'asking' ? agitationOf(person, now) : 0;
+      const bob = state === 'asking' && Math.floor(now * (3 + 6 * agitation)) % 2 === 0 ? -1 : 0;
       const bottom = top - 3 + bob;
+      if (agitation) {
+        for (const side of [-1, 1]) {
+          const rise = (now * 1.4 + (side > 0 ? 0.5 : 0)) % 1;
+          fill(x + side * 5, top + 2 - Math.round(rise * 6), 2, 1, PALETTE.smoke, agitation * (1 - rise));
+        }
+        x += Math.floor(now * 14) % 2 ? 1 : -1;
+      }
       fill(x - 4, bottom - 7, 9, 9, PALETTE.bubbleEdge);
       fill(x - 5, bottom - 6, 11, 7, PALETTE.bubbleEdge);
       fill(x - 4, bottom - 6, 9, 7, PALETTE.bubble);
@@ -1847,7 +2156,23 @@
       const cells = state === 'thinking'
         ? Array.from({ length: Math.floor(now * 3 + person.look.phase * 3) % 4 }, (_, i) => [-2 + i * 2, 2])
         : marks[state] || [];
-      for (const [column, row] of cells) dot(x + column, bottom - 5 + row, colour(state));
+      for (const [column, row] of cells) dot(x + column, bottom - 5 + row, agitation ? PALETTE.alarm : colour(state));
+    }
+
+    /** Confetti over whoever just finished a turn of an hour or more, falling and fading. */
+    function drawConfetti(person) {
+      const since = person.celebratedAt === null ? Infinity : now - person.celebratedAt;
+      if (since >= PARTY_LENGTH || person.isLeaving) return;
+      const x = person.position.x, top = topOf(person, poseOf(person, now));
+      const colours = [0xf2d35b, 0xd96a5a, 0x4c8bf5, 0x4f9a5a, 0xf28fb0, 0x86d6bc];
+      for (let i = 0; i < 28; i++) {
+        // The same scatter every time, from the person's own look
+        const r = (k) => ((Math.sin((i + 1) * 12.9898 + k * 78.233 + person.look.phase * 43.1) * 43758.5453) % 1 + 1) % 1;
+        const vx = (r(1) - 0.5) * 50, vy = -35 - r(2) * 25, t = since + r(3) * 0.15;
+        const px = x + vx * t, py = top - 2 + vy * t + 45 * t * t;
+        const flutter = Math.floor((now * 8 + i) % 2);
+        fill(px, py, 1 + flutter, 2 - flutter, colours[i % colours.length], Math.min(1, (PARTY_LENGTH - since) / 0.8));
+      }
     }
 
     /**
@@ -2146,6 +2471,8 @@
       [134, drawCoffeeTable], [157, drawPingPong], [176, drawPlant], [176.5, drawButton], [177, drawMic],
       ...CORNER_PARTS[decor.corner],
     ];
+    const pet = office.pet;
+    if (pet) items.push([!pet.isWalking && pet.target && pet.target.depth ? pet.target.depth : pet.position.y, drawPet]);
     DESKS.forEach((d, desk) => {
       items.push([d.y + 5, () => drawDesk(desk)]);
       items.push([d.y + 3.5, () => drawChair(desk)]); // just behind whoever sits in it
@@ -2165,6 +2492,7 @@
     DESKS.forEach((_, desk) => drawScreenLight(desk));
     DESKS.forEach((_, desk) => drawTimer(desk));
     office.people.forEach(drawBubble);
+    office.people.forEach(drawConfetti);
     DESKS.forEach((_, desk) => drawLabel(desk));
     if (frame.chips) drawChips();
     if (frame.choices) drawChoices();
@@ -2191,6 +2519,153 @@
     ctx.arcTo(x, y + h, x, y, r);
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
+  }
+
+  /* -------------------------------------------------------------- sound */
+
+  /** How loud the office is, as set up: its master volume. */
+  const SOUND_LEVELS = { off: 0, quiet: 0.35, normal: 0.8 };
+  /** Key clicks a second for each agent typing at their desk. */
+  const CLICKS_PER_TYPIST = 4;
+
+  /**
+   * The office's sound: a low room tone, keys clicking while anyone types,
+   * the door, the coffee machine, the ping-pong ball, a thud for the red
+   * button and a little tune for a long turn done. All of it is made on the
+   * spot, with nothing to download. Browsers only let a page play sound once
+   * it's been tapped, so it wakes with the first tap, and it sleeps while the
+   * office is out of sight.
+   */
+  class Ambience {
+    constructor() {
+      this.audio = null;      // the sound's own context, once a tap allows it
+      this.master = null;
+      this.noise = null;      // a second of white noise, for clicks and gurgles
+      this.nextClick = 0;
+      this.doorOpen = false;
+      this.rally = null;      // the ping-pong ball's last bounce
+      this.blast = null;      // the red button's last press, heard
+      this.heard = new WeakMap(); // what's been played for each person: { arrived, celebrated }
+    }
+
+    /** From a tap: starts the sound, or carries it on. */
+    wake(win, level) {
+      if (!level) return;
+      if (this.audio) {
+        if (this.audio.state === 'suspended') this.audio.resume().catch(() => {});
+        return;
+      }
+      const Context = win.AudioContext || win.webkitAudioContext;
+      if (!Context) return;
+      const audio = new Context();
+      this.audio = audio;
+      this.master = audio.createGain();
+      this.master.gain.value = level;
+      this.master.connect(audio.destination);
+      this.noise = audio.createBuffer(1, audio.sampleRate, audio.sampleRate);
+      const white = this.noise.getChannelData(0);
+      for (let i = 0; i < white.length; i++) white[i] = Math.random() * 2 - 1;
+      // The room tone: brown noise, looped, low and soft.
+      const tone = audio.createBuffer(1, audio.sampleRate * 2, audio.sampleRate);
+      const brown = tone.getChannelData(0);
+      for (let i = 0, last = 0; i < brown.length; i++) brown[i] = last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      const hum = audio.createBufferSource();
+      hum.buffer = tone;
+      hum.loop = true;
+      const low = audio.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 280;
+      const soft = audio.createGain();
+      soft.gain.value = 0.6;
+      hum.connect(low).connect(soft).connect(this.master);
+      hum.start();
+      this.nextClick = audio.currentTime;
+    }
+
+    sleep() {
+      if (this.audio && this.audio.state === 'running') this.audio.suspend().catch(() => {});
+    }
+
+    /** A short burst of noise through a band, for a click, a bounce or a gurgle. */
+    burst(at, length, band, gain) {
+      const audio = this.audio;
+      const source = audio.createBufferSource();
+      source.buffer = this.noise;
+      const filter = audio.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = band;
+      const envelope = audio.createGain();
+      envelope.gain.setValueAtTime(gain, at);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      source.connect(filter).connect(envelope).connect(this.master);
+      source.start(at, Math.random() * 0.5, length);
+    }
+
+    /** A note sliding from one pitch to another, fading out. */
+    note(at, length, from, to, gain, wave = 'sine') {
+      const audio = this.audio;
+      const osc = audio.createOscillator();
+      osc.type = wave;
+      osc.frequency.setValueAtTime(from, at);
+      osc.frequency.exponentialRampToValueAtTime(to, at + length);
+      const envelope = audio.createGain();
+      envelope.gain.setValueAtTime(gain, at);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, at + length);
+      osc.connect(envelope).connect(this.master);
+      osc.start(at);
+      osc.stop(at + length);
+    }
+
+    /** Once a frame: the volume as set up, and a sound for whatever has just happened in the room. */
+    follow(office, now, level) {
+      const audio = this.audio;
+      if (!audio || audio.state !== 'running') return;
+      this.master.gain.setTargetAtTime(level, audio.currentTime, 0.2);
+      if (!level) return;
+      const t = audio.currentTime;
+
+      // Keys, at a rate that rises with the number of agents typing
+      const typists = office.people.filter((p) => !p.isStaff && p.isAtDesk && p.session.state === 'thinking').length;
+      if (!typists || this.nextClick < t) this.nextClick = t;
+      while (typists && this.nextClick < t + 0.12) {
+        this.burst(this.nextClick, 0.018, 2200 + Math.random() * 2400, 0.05 + Math.random() * 0.04);
+        this.nextClick += -Math.log(1 - Math.random()) / (typists * CLICKS_PER_TYPIST);
+      }
+
+      // The door, as someone comes through it
+      const doorOpen = office.people.some((p) => Math.hypot(p.position.x - DOOR.x, p.position.y - DOOR.y) < 14);
+      if (doorOpen && !this.doorOpen) this.note(t, 0.45, 210, 140, 0.035, 'triangle');
+      this.doorOpen = doorOpen;
+
+      // The ping-pong ball, at each end of the table during a rally
+      const playing = PING_PONG.every((spot) => office.people.some((p) => p.place === spotPlace(spot) && !p.isWalking && !p.isLeaving));
+      const bounce = playing ? Math.floor(now * 0.9) : null;
+      if (bounce !== null && this.rally !== null && bounce !== this.rally) this.note(t, 0.04, 1500, 1300, 0.06);
+      this.rally = bounce;
+
+      // The red button going down
+      const blast = office.detonation && office.detonation.at;
+      if (blast && blast !== this.blast) {
+        this.note(t, 0.9, 90, 30, 0.5);
+        this.burst(t, 0.6, 300, 0.4);
+      }
+      this.blast = blast || this.blast;
+
+      for (const person of office.people) {
+        const heard = this.heard.get(person) || {};
+        // The coffee machine, for whoever has just arrived at it
+        if (person.place === spotPlace(0) && !person.isWalking && heard.arrived !== person.arrivedAt) {
+          if (heard.arrived !== undefined) for (let k = 0; k < 6; k++) this.burst(t + 0.3 + k * 0.18, 0.2, 500 + Math.random() * 300, 0.04);
+          heard.arrived = person.arrivedAt;
+        }
+        // A long turn finished: a rising little tune
+        if (person.celebratedAt !== null && heard.celebrated !== person.celebratedAt) {
+          [523, 659, 784, 1047].forEach((f, k) => this.note(t + k * 0.09, 0.25, f, f, 0.07, 'triangle'));
+          heard.celebrated = person.celebratedAt;
+        }
+        this.heard.set(person, heard);
+      }
+    }
   }
 
   /* --------------------------------------------------------- on the page */
@@ -2240,6 +2715,8 @@
     let choiceDown = null;   // the last choice key tapped: { action, at, held }
     let chipDown = null;     // the last paint chip tapped: { level, at, held }
     let chipsFor = null;     // the session whose chips are out, after a finger held on its desk
+    const ambience = new Ambience();
+    const loudness = () => SOUND_LEVELS[decor.sound];
     let finger = null;       // the one finger on the room: { id }
     // The window the canvas is in, its page's or one it has moved to: the
     // room draws with that window's frames and pixels, and pauses only when
@@ -2265,10 +2742,15 @@
       resizing.observe(canvas);
       const seen = () => {
         if (win.document.hidden && finger) lift();
+        if (win.document.hidden) ambience.sleep();
+        else if (visible) ambience.wake(win, loudness()); // seen again: once tapped, it may carry on
         run();
       };
+      // Any tap on the page, not only on the room, may start the sound.
+      const tapped = () => { if (visible) ambience.wake(win, loudness()); };
       win.document.addEventListener('visibilitychange', seen);
-      host = { window: win, resizing, seen };
+      win.document.addEventListener('pointerdown', tapped, { capture: true });
+      host = { window: win, resizing, seen, tapped };
     }
 
     function unbind() {
@@ -2277,6 +2759,7 @@
       frame = null;
       host.resizing.disconnect();
       host.window.document.removeEventListener('visibilitychange', host.seen);
+      host.window.document.removeEventListener('pointerdown', host.tapped, { capture: true });
       host = null;
     }
 
@@ -2324,8 +2807,9 @@
         if (chips()) on.held?.();
       }
       office.step(now);
+      ambience.follow(office, now, loudness());
       drawOffice(ctx, office, {
-        now, hour: date.getHours(), minute: date.getMinutes(),
+        now, hour: date.getHours(), minute: date.getMinutes(), month: date.getMonth(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
         selected, mic, wobble: wobbling, buttonDown, framed, floating, choices: choices(), choiceDown, chips: chips(), chipDown,
       });
@@ -2475,7 +2959,14 @@
       select(id) { selected = id; },
       setVisible(shown) {
         visible = shown;
-        if (shown) { resize(); run(); } else if (finger) lift();
+        if (shown) {
+          resize();
+          run();
+          ambience.wake(host.window, loudness());
+        } else {
+          if (finger) lift();
+          ambience.sleep();
+        }
       },
       setFramed(shown) { framed = shown; },
       /** Floats the room's window in a 'window' of its own or a whole 'screen', or stops, with null. */
