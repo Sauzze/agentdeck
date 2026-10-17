@@ -47,8 +47,8 @@
   const lane = (desk) => DESKS[desk].y - 5;
   const laneNearest = (y) => DESK_ROWS.map((row) => row - 5).reduce((a, b) => (Math.abs(b - y) < Math.abs(a - y) ? b : a));
 
-  /** Where idle people spend their time. */
-  const SPOTS = [
+  /** Where idle people spend their time in the lounge, whatever its corner holds. */
+  const LOUNGE_SPOTS = [
     { x: 243, y: 50, pose: 'away' },  // the coffee machine
     { x: 274, y: 47, pose: 'away' },  // the window
     { x: 297, y: 55, pose: 'stand' }, // the water cooler
@@ -72,8 +72,55 @@
   /** The plant, moved to the lounge's bottom-left to make room for it: its leaves' left edge. */
   const PLANT_X = 226;
 
-  /** In front of the whiteboard, where a to-do list gets written up. */
-  const BOARD_SPOTS = [{ x: 72, y: 44 }, { x: 83, y: 44 }];
+  /**
+   * How the office is furnished, as set up on the setup page: the layout's
+   * `room`. Each part's choices, the first being what an office has when the
+   * layout says nothing. The apps' Layout.swift and layout.go keep the same.
+   */
+  const ROOM_CHOICES = {
+    mic: ['mic', 'megaphone'],
+    floor: ['wood', 'tiles', 'concrete', 'carpet'],
+    paint: ['slate', 'sage', 'clay', 'cream'],
+    lounge: ['navy', 'teal', 'plum', 'sand'],
+    corner: ['arcade', 'vending', 'foosball', 'fishtank', 'books', 'none'],
+    sky: ['live', 'day'],
+  };
+  /** What each of the back wall's five places can hold, and what it holds unless set up otherwise. */
+  const WALL_CHOICES = ['window', 'whiteboard', 'pinboard', 'poster', 'shelf', 'plant', 'bare'];
+  const STANDARD_WALL = ['window', 'whiteboard', 'window', 'pinboard', 'window'];
+  /** The middle of each of the back wall's places, left to right. */
+  const WALL_SLOTS = [44, 77, 110, 143, 176];
+
+  /** A room as the layout gives it: anything unknown or left out is as standard. */
+  function roomOf(given) {
+    const raw = given && typeof given === 'object' ? given : {};
+    const room = {};
+    for (const [part, choices] of Object.entries(ROOM_CHOICES)) room[part] = choices.includes(raw[part]) ? raw[part] : choices[0];
+    room.wall = STANDARD_WALL.map((standard, i) => (Array.isArray(raw.wall) && WALL_CHOICES.includes(raw.wall[i]) ? raw.wall[i] : standard));
+    return room;
+  }
+
+  /** Where idle people go round the lounge's corner piece: to play, to buy a snack, to watch the fish. */
+  const CORNER_SPOTS = {
+    arcade: [{ x: 272, y: 93, pose: 'away' }],
+    vending: [{ x: 272, y: 93, pose: 'away' }],
+    foosball: [{ x: 272, y: 76, pose: 'stand' }, { x: 272, y: 97, pose: 'away' }],
+    fishtank: [{ x: 272, y: 93, pose: 'away' }],
+    books: [{ x: 274, y: 94, pose: 'sit' }],
+    none: [],
+  };
+
+  /** In front of the first whiteboard on the back wall, if there is one: where a to-do list gets written up. */
+  function boardSpotsOf(room) {
+    const slot = room.wall.indexOf('whiteboard');
+    return slot < 0 ? [] : [{ x: WALL_SLOTS[slot] - 5, y: 44 }, { x: WALL_SLOTS[slot] + 6, y: 44 }];
+  }
+
+  // The office as it's furnished now. There is one to a page, so the
+  // drawing and the people's comings and goings read it from here.
+  let decor = roomOf(null);
+  let spots = [...LOUNGE_SPOTS, ...CORNER_SPOTS[decor.corner]];
+  let boardSpots = boardSpotsOf(decor);
   /** Under the clock by the door, where a rate-limited agent waits. */
   const CLOCK_SPOTS = [{ x: 202, y: 47 }, { x: 193, y: 47 }, { x: 184, y: 47 }];
   /** Where a desk's subagents stand round it: two on each side. */
@@ -96,8 +143,8 @@
     const desk = DESKS[Number(a)];
     switch (kind) {
       case 'desk': return seat(Number(a));
-      case 'spot': return SPOTS[Number(a)];
-      case 'board': return BOARD_SPOTS[Number(a)];
+      case 'spot': return spots[Number(a)];
+      case 'board': return boardSpots[Number(a)];
       case 'clock': return CLOCK_SPOTS[Number(a)];
       case 'shred': return { x: desk.x + SHREDDING.dx, y: desk.y + SHREDDING.dy };
       case 'near': return { x: desk.x + INTERN_SLOTS[Number(b)].dx, y: desk.y + INTERN_SLOTS[Number(b)].dy };
@@ -157,6 +204,19 @@
     terminal: 0x3ddc84, sea: 0x3f7fc0, sweat: 0x8fc6f0, marker: 0x3d4359, shredder: 0x4a4e5a, shredderTop: 0x5f6678,
   };
   const BLACK = 0x000000, WHITE = 0xffffff;
+  const MEGAPHONE = 0xe8e4da;
+
+  /** The wall's paint: the wall, its top edge, the panelling below the rail, the rail, and the lounge's own wall. */
+  const PAINTS = {
+    slate: { wall: 0x2f3446, top: 0x252a3a, wainscot: 0x272b3b, rail: 0x3d4359, lounge: 0x353447 },
+    sage: { wall: 0x34463d, top: 0x2a3931, wainscot: 0x2b3a32, rail: 0x485c50, lounge: 0x3b4a43 },
+    clay: { wall: 0x4b3631, top: 0x3e2c28, wainscot: 0x3c2b27, rail: 0x60463f, lounge: 0x51393b },
+    cream: { wall: 0xb5ad98, top: 0xa39b86, wainscot: 0x8f8773, rail: 0xcac2ad, lounge: 0xc0b6a0 },
+  };
+  /** The lounge's carpet, and its edge along the office's floor. */
+  const LOUNGES = {
+    navy: [0x3f4a5c, 0x353e4e], teal: [0x2f5656, 0x284a4a], plum: [0x513d50, 0x453444], sand: [0x7b6e58, 0x6a5f4c],
+  };
   /** The deck's text colour, for a theme that leaves it out: it marks the picked desk. */
   const INK = 0xececec;
   /** The edge of the deck's keys, for a theme that leaves it out: it rims the window onto the room. */
@@ -305,6 +365,38 @@
       this.interns = [];
     }
 
+    /**
+     * Furnishes the office as the layout says. Anyone at a spot by a corner
+     * piece that has gone, or at a whiteboard that has moved, goes elsewhere:
+     * an agent to their desk, staff to another spot, or home.
+     */
+    furnish(given) {
+      const next = roomOf(given);
+      if (JSON.stringify(next) === JSON.stringify(decor)) return;
+      const cornerGone = next.corner !== decor.corner;
+      const boardGone = next.wall.indexOf('whiteboard') !== decor.wall.indexOf('whiteboard');
+      decor = next;
+      spots = [...LOUNGE_SPOTS, ...CORNER_SPOTS[decor.corner]];
+      boardSpots = boardSpotsOf(decor);
+      for (const person of this.people) {
+        if (person.isLeaving) continue;
+        const spot = spotOf(person.place);
+        const stranded = (cornerGone && spot !== null && spot >= LOUNGE_SPOTS.length) || (boardGone && person.place.startsWith('board:'));
+        if (!stranded) continue;
+        if (!person.isStaff) {
+          this.send(person, deskPlace(person.desk));
+          continue;
+        }
+        const free = this.freeSpots(person);
+        if (free.length) {
+          this.send(person, spotPlace(pick(free)));
+        } else {
+          person.isLeaving = true;
+          this.send(person, 'door');
+        }
+      }
+    }
+
     apply(seats, colours, now) {
       this.seats = seats.slice(0, DESKS.length);
       this.colours = colours || {};
@@ -354,8 +446,8 @@
           const spot = pick(free);
           const member = this.hireStaff();
           member.place = spotPlace(spot);
-          member.position = { x: SPOTS[spot].x, y: SPOTS[spot].y };
-          member.isFacingAway = SPOTS[spot].pose === 'away';
+          member.position = { x: spots[spot].x, y: spots[spot].y };
+          member.isFacingAway = spots[spot].pose === 'away';
           member.arrivedAt = now - random(0, 20);
           member.nextMove = now + random(5, 25);
         }
@@ -511,7 +603,7 @@
     /** Lounge spots nobody else has taken. Agents don't count staff, who make way for them. */
     freeSpots(person) {
       const agent = person ? !person.isStaff : false;
-      return SPOTS.map((_, spot) => spot).filter((spot) => !this.people.some((other) =>
+      return spots.map((_, spot) => spot).filter((spot) => !this.people.some((other) =>
         other !== person && !other.isLeaving && other.place === spotPlace(spot) && !(agent && other.isStaff)));
     }
 
@@ -606,7 +698,7 @@
       if (s.compacting) return `shred:${person.desk}`;
       if (s.state === 'error' && s.errorKind === 'rate_limit') return this.wallSpot(person, 'clock', CLOCK_SPOTS.length) || desk;
       if (s.state === 'thinking' && toolKind(s.tool) === 'todo' && now - person.toolSince >= LONG_TOOL) {
-        return this.wallSpot(person, 'board', BOARD_SPOTS.length) || desk;
+        return this.wallSpot(person, 'board', boardSpots.length) || desk;
       }
       return s.state === 'idle' ? null : desk;
     }
@@ -645,7 +737,7 @@
       person.arrivedAt = now;
       const spot = spotOf(person.place);
       if (spot !== null) {
-        person.isFacingAway = SPOTS[spot].pose === 'away';
+        person.isFacingAway = spots[spot].pose === 'away';
         person.nextMove = now + random(12, 30);
       } else {
         person.isFacingAway = person.place.startsWith('board:');
@@ -762,7 +854,7 @@
       return { kind: 'sit' };
     }
     const spot = spotOf(person.place);
-    if (spot !== null) return { kind: SPOTS[spot].pose === 'sit' ? 'sit' : 'stand' };
+    if (spot !== null) return { kind: spots[spot].pose === 'sit' ? 'sit' : 'stand' };
     return { kind: 'stand' };
   }
 
@@ -796,11 +888,19 @@
   const WINDOW_SHADOW_DEPTH = 0.32;
 
   /**
-   * In the pop-out window, the room's window floats: this much of the
-   * deck's background all round it, and a soft shadow under it. In CSS
-   * pixels.
+   * Floating, the room's window fills its space but for a margin of the
+   * deck's background, with a soft shadow under it, and the office goes on
+   * past the room to the window's edges. The margin is wider in the pop-out
+   * window, which has its own edge round it, than on a whole screen, where
+   * every pixel counts. In CSS pixels.
    */
-  const FLOAT_MARGIN = 14;
+  const FLOAT_MARGINS = { window: 14, screen: 6 };
+  /**
+   * How far the office goes on past the room, at most: half the room's
+   * width or height each way. Beyond that, as on a phone held upright, it
+   * would be bare wall and floor.
+   */
+  const FLOAT_REACH = 1.5;
   const FLOAT_SHADOW = 16;
   const FLOAT_DROP = 3;
   /**
@@ -818,7 +918,8 @@
    */
   function drawOffice(ctx, office, frame) {
     const { now, hour, minute, width, height, ratio, selected, mic, framed, floating } = frame;
-    const room = fitRoom(width, height, floating ? FLOAT_MARGIN * ratio : 0);
+    const inset = floating ? FLOAT_MARGINS[floating] * ratio : 0;
+    const room = fitRoom(width, height, inset);
     const { scale } = room;
     let { ox, oy } = room;
 
@@ -855,7 +956,9 @@
       }
     }
 
-    const isNight = hour >= 20 || hour < 5;
+    // The sky keeps the computer's time, or it's always the middle of the day.
+    const daylight = decor.sky === 'day' ? 12 : hour;
+    const isNight = daylight >= 20 || daylight < 5;
     const alarm = sinceBlast >= 0 && sinceBlast < ALARM_LENGTH ? sinceBlast : null;
     const colour = (state) => fromCss(office.colours[state]) ?? fromCss(STANDARD_STATES[state]);
     const ink = fromCss(office.colours.ink) ?? INK;
@@ -869,7 +972,20 @@
     ctx.clearRect(0, 0, width, height);
 
     // Through a window, the room stays inside it, even while it shakes.
-    const glass = (framed || floating) && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    let glass = framed && { x: room.ox, y: room.oy, w: WIDTH * scale, h: HEIGHT * scale, r: WINDOW_CORNER * ratio };
+    if (floating) {
+      const w = Math.min(width - inset * 2, WIDTH * scale * FLOAT_REACH);
+      const h = Math.min(height - inset * 2, HEIGHT * scale * FLOAT_REACH);
+      glass = { x: Math.round((width - w) / 2), y: Math.round((height - h) / 2), w, h, r: WINDOW_CORNER * ratio };
+    }
+    // What can be seen of the office, in art pixels: the room, and floating,
+    // as much of the wall and floor round it as fills the window.
+    const seen = floating
+      ? { left: Math.floor((glass.x - ox) / scale), top: Math.floor((glass.y - oy) / scale),
+          right: Math.ceil((glass.x + glass.w - ox) / scale), bottom: Math.ceil((glass.y + glass.h - oy) / scale) }
+      : { left: 0, top: 0, right: WIDTH, bottom: HEIGHT };
+    seen.width = seen.right - seen.left;
+    seen.height = seen.bottom - seen.top;
     // Floating, the window glows while anyone waits on you.
     const calling = floating && office.seats.some((s) => s.session && s.session.state === 'asking');
     const glow = calling ? 0.5 - 0.5 * Math.cos((now / GLOW_PERIOD) * 2 * Math.PI) : 0;
@@ -883,6 +999,7 @@
     /* The room */
 
     function sky() {
+      const hour = daylight;
       if (hour >= 5 && hour < 7) return [0x4a5a9a, 0xe8b08a];
       if (hour >= 7 && hour < 17) return [0x7fb8e8, 0xa9d3f2];
       if (hour >= 17 && hour < 20) return [0x5b5aa0, 0xf0a070];
@@ -897,7 +1014,7 @@
       if (isNight) {
         for (const [sx, sy] of [[3, 2], [11, 6], [20, 3], [26, 8], [7, 12], [17, 14]]) if (sx < w) dot(x + sx, y + sy, WHITE, 0.75);
         if (moon) fill(x + w - 9, y + 3, 3, 3, 0xf1ead2);
-      } else if (hour >= 7 && hour < 17) {
+      } else if (daylight >= 7 && daylight < 17) {
         const drift = (x * 7) % (w - 12);
         fill(x + 3 + drift, y + 4, 7, 2, WHITE, 0.85);
         fill(x + 5 + drift, y + 3, 3, 1, WHITE, 0.85);
@@ -942,38 +1059,18 @@
     }
 
     function drawWall() {
-      fill(0, 0, WIDTH, WALL_BOTTOM, PALETTE.wall);
-      fill(LOUNGE_LEFT, 0, WIDTH - LOUNGE_LEFT, WALL_BOTTOM, PALETTE.loungeWall);
-      fill(0, 0, WIDTH, 2, PALETTE.wallTop);
-      fill(0, 30, WIDTH, 8, PALETTE.wainscot);
-      fill(0, 30, WIDTH, 1, PALETTE.rail);
-      fill(0, 38, WIDTH, 2, PALETTE.baseboard);
-      fill(LOUNGE_LEFT, 0, 1, WALL_BOTTOM, PALETTE.wallTop);
+      const { left, top, right, width: across } = seen;
+      const paint = PAINTS[decor.paint];
+      fill(left, top, LOUNGE_LEFT - left, WALL_BOTTOM - top, paint.wall);
+      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, WALL_BOTTOM - top, paint.lounge);
+      fill(left, top, across, 2, paint.top);
+      fill(left, 30, across, 8, paint.wainscot);
+      fill(left, 30, across, 1, paint.rail);
+      fill(left, 38, across, 2, PALETTE.baseboard);
+      fill(LOUNGE_LEFT, top, 1, WALL_BOTTOM - top, paint.top);
 
-      for (const x of [28, 94, 160]) drawWindow(x, 6, 32, 20, false);
+      decor.wall.forEach((piece, slot) => drawWallPiece(piece, WALL_SLOTS[slot]));
       drawWindow(260, 6, 30, 20, true);
-
-      // A whiteboard and a pinboard between the windows
-      fill(65, 9, 24, 16, 0xb8bfcc);
-      fill(66, 10, 22, 14, PALETTE.whiteboard);
-      fill(68, 12, 10, 1, 0x4c8bf5);
-      fill(68, 15, 14, 1, 0xd96a5a);
-      fill(68, 18, 8, 1, 0x4f9a5a);
-      fill(80, 18, 5, 1, 0x4c8bf5);
-      // A to-do list, written up line by line while someone stands at it
-      for (const person of office.people) {
-        const spot = numberAfter('board:', person.place);
-        if (spot === null || person.isWalking) continue;
-        const length = 1 + (Math.floor((now - person.arrivedAt) * 3) % 9);
-        fill(spot === 0 ? 67 : 78, 21, length, 1, PALETTE.marker);
-      }
-      fill(65, 25, 24, 1, PALETTE.frame);
-      fill(133, 10, 20, 16, PALETTE.doorPanel);
-      fill(134, 11, 18, 14, PALETTE.cork);
-      fill(136, 13, 4, 4, 0xf2d35b);
-      fill(142, 14, 5, 4, 0xf28fb0);
-      fill(137, 19, 5, 3, 0x8fc6f0);
-      fill(145, 20, 4, 3, PALETTE.paper);
 
       drawDoor();
       drawClock(CORRIDOR_X, 6);
@@ -985,20 +1082,130 @@
       fill(197, 23, 2, 1, WHITE, alarm === null ? 0.15 : 0.6);
     }
 
-    function drawFloor() {
-      const top = WALL_BOTTOM, depth = HEIGHT - top;
-      fill(0, top, LOUNGE_LEFT, depth, PALETTE.wood);
-      let row = 0;
-      for (let y = top + 4; y < HEIGHT; y += 5, row++) {
-        fill(0, y, LOUNGE_LEFT, 1, PALETTE.plankSeam);
-        for (let x = (row % 3) * 11; x < LOUNGE_LEFT; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
+    /** A shelf of books, `w` wide and six high, from `l`, `y`: `row` varies them from shelf to shelf. */
+    function drawBooks(l, y, w, row) {
+      const colours = [0xd96a5a, 0x4c8bf5, 0xf2d35b, 0x4f9a5a, 0xeae6dc, 0x9a6ad0, 0xe08a3a];
+      fill(l, y, w, 6, PALETTE.doorway);
+      for (let b = 0, bx = l + 1; bx < l + w - 2; b++) {
+        const width = Math.min(2 + ((b + row) % 2), l + w - 1 - bx), height = 4 + (((b * 3 + row) % 3) % 2);
+        fill(bx, y + 6 - height, width, height, colours[(b * 2 + row * 3) % colours.length]);
+        bx += width + (b % 4 === 3 ? 2 : 0);
       }
-      fill(LOUNGE_LEFT, top, WIDTH - LOUNGE_LEFT, depth, PALETTE.carpet);
-      fill(LOUNGE_LEFT, top, 1, depth, PALETTE.carpetEdge);
+      fill(l, y + 6, w, 1, PALETTE.deskEdge);
+    }
+
+    /** One of the back wall's places, as set up, around its middle `x`. */
+    function drawWallPiece(piece, x) {
+      switch (piece) {
+        case 'window':
+          return drawWindow(x - 16, 6, 32, 20, false);
+        case 'whiteboard': {
+          const l = x - 12;
+          fill(l, 9, 24, 16, 0xb8bfcc);
+          fill(l + 1, 10, 22, 14, PALETTE.whiteboard);
+          fill(l + 3, 12, 10, 1, 0x4c8bf5);
+          fill(l + 3, 15, 14, 1, 0xd96a5a);
+          fill(l + 3, 18, 8, 1, 0x4f9a5a);
+          fill(l + 15, 18, 5, 1, 0x4c8bf5);
+          // A to-do list, written up line by line while someone stands at the first whiteboard
+          if (x === WALL_SLOTS[decor.wall.indexOf('whiteboard')]) {
+            for (const person of office.people) {
+              const spot = numberAfter('board:', person.place);
+              if (spot === null || person.isWalking) continue;
+              const length = 1 + (Math.floor((now - person.arrivedAt) * 3) % 9);
+              fill(spot === 0 ? l + 2 : l + 13, 21, length, 1, PALETTE.marker);
+            }
+          }
+          return fill(l, 25, 24, 1, PALETTE.frame);
+        }
+        case 'pinboard': {
+          const l = x - 10;
+          fill(l, 10, 20, 16, PALETTE.doorPanel);
+          fill(l + 1, 11, 18, 14, PALETTE.cork);
+          fill(l + 3, 13, 4, 4, 0xf2d35b);
+          fill(l + 9, 14, 5, 4, 0xf28fb0);
+          fill(l + 4, 19, 5, 3, 0x8fc6f0);
+          return fill(l + 12, 20, 4, 3, PALETTE.paper);
+        }
+        case 'poster': {
+          // Mountains at sunset, framed
+          const l = x - 8;
+          fill(l, 7, 16, 20, PALETTE.frame);
+          fill(l + 1, 8, 14, 9, 0xf0a070);
+          fill(l + 1, 17, 14, 9, 0x5b5aa0);
+          fill(l + 9, 10, 3, 3, 0xffe08a);
+          for (let k = 0; k < 6; k++) fill(l + 2 + k, 20 - k, 1, 6 + k, 0x3e7a6a);
+          for (let k = 0; k < 6; k++) fill(l + 8 + k, 15 + k, 1, 11 - k, 0x356b5c);
+          fill(l + 6, 15, 2, 1, WHITE, 0.8);
+          return fill(l + 1, 24, 14, 2, 0x2f5a4c);
+        }
+        case 'shelf': {
+          // Books on three shelves, down to the rail
+          const l = x - 13;
+          fill(l, 7, 26, 23, PALETTE.counter);
+          [8, 15, 22].forEach((shelf, row) => drawBooks(l + 1, shelf, 24, row));
+          return;
+        }
+        case 'plant': {
+          // A planter on a bracket, trailing leaves
+          fill(x - 6, 20, 12, 1, PALETTE.frame);
+          fill(x - 5, 15, 10, 5, PALETTE.pot);
+          fill(x - 5, 15, 10, 1, 0x8a4f32);
+          fill(x - 7, 11, 5, 4, PALETTE.leaf);
+          fill(x - 2, 9, 5, 6, PALETTE.leafDark);
+          fill(x + 3, 11, 5, 4, PALETTE.leaf);
+          fill(x - 7, 15, 2, 9, PALETTE.leaf);
+          fill(x + 6, 15, 2, 7, PALETTE.leafDark);
+          return fill(x + 2, 20, 2, 5, PALETTE.leaf);
+        }
+        default:
+          return; // bare
+      }
+    }
+
+    function drawFloor() {
+      const { left, right, bottom } = seen;
+      const top = WALL_BOTTOM, depth = bottom - top, across = LOUNGE_LEFT - left;
+      /** Squares of `size` from the room's corner outwards, cut at the lounge: `paint(x, y, column, row, width)` for each. */
+      const squares = (size, paint) => {
+        for (let y = top, r = 0; y < bottom; y += size, r++) {
+          for (let x = Math.floor(left / size) * size; x < LOUNGE_LEFT; x += size) paint(x, y, Math.floor(x / size), r, Math.min(size, LOUNGE_LEFT - x));
+        }
+      };
+      if (decor.floor === 'tiles') {
+        fill(left, top, across, depth, 0x777a81);
+        squares(9, (x, y, c, r, w) => fill(x, y, w - 1, 8, (c + r) % 2 === 0 ? 0x9c9fa6 : 0x8c8f96));
+      } else if (decor.floor === 'concrete') {
+        fill(left, top, across, depth, 0x73767b);
+        squares(36, (x, y, c, r, w) => {
+          fill(x, y, w, 1, 0x67696e);
+          fill(x, y, 1, 36, 0x67696e);
+          for (let k = 0; k < 7; k++) dot(x + ((c * 13 + r * 7 + k * 11) % 33) + 1, y + ((c * 5 + r * 17 + k * 9) % 33) + 2, 0x80838a);
+        });
+      } else if (decor.floor === 'carpet') {
+        fill(left, top, across, depth, 0x4b5065);
+        squares(12, (x, y, c, r, w) => {
+          if ((c + r) % 2 === 0) fill(x, y, w, 12, 0x474c60);
+          dot(x + ((c * 5 + r * 3) % 10) + 1, y + ((c * 7 + r) % 10) + 1, 0x565b71);
+        });
+      } else {
+        fill(left, top, across, depth, PALETTE.wood);
+        let row = 0;
+        for (let y = top + 4; y < bottom + 4; y += 5, row++) {
+          fill(left, y, across, 1, PALETTE.plankSeam);
+          // The planks' ends, staggered from row to row, from the room's left edge outwards
+          let x = (row % 3) * 11;
+          while (x > left) x -= 33;
+          for (; x < LOUNGE_LEFT; x += 33) fill(x, y - 4, 1, 4, PALETTE.plankSeam);
+        }
+      }
+      const [carpet, carpetEdge] = LOUNGES[decor.lounge];
+      fill(LOUNGE_LEFT, top, right - LOUNGE_LEFT, depth, carpet);
+      fill(LOUNGE_LEFT, top, 1, depth, carpetEdge);
       fill(244, 124, 64, 20, PALETTE.rugEdge);
       fill(246, 126, 60, 16, PALETTE.rug);
       fill(207, 40, 14, 2, PALETTE.mat);
-      fill(0, top, WIDTH, 1, SHADOW);
+      fill(left, top, right - left, 1, SHADOW);
     }
 
     /* Furniture */
@@ -1143,6 +1350,133 @@
       fill(278, 129, 5, 2, PALETTE.paper);
     }
 
+    /* The lounge's corner piece, as set up, and whoever is at it */
+
+    const atCorner = (i) => office.people.some((p) => p.place === spotPlace(LOUNGE_SPOTS.length + i) && !p.isWalking && !p.isLeaving);
+
+    /** An arcade cabinet: invaders march across its screen, and a ship fires back while someone plays. */
+    function drawArcade() {
+      const l = 265, playing = atCorner(0);
+      fill(l - 1, 86, 16, 1, SHADOW);
+      fill(l, 60, 14, 26, 0x2b2350);
+      fill(l, 60, 1, 26, 0x8a5cf0);
+      fill(l + 13, 60, 1, 26, 0x8a5cf0);
+      fill(l + 1, 61, 12, 4, 0x6a3fb5);
+      fill(l + 3, 62, 8, 2, 0xffd36b, 0.6 + 0.4 * Math.sin(now * 4));
+      fill(l + 2, 66, 10, 9, PALETTE.doorway);
+      fill(l + 3, 67, 8, 7, playing ? 0x14204a : 0x0b1022);
+      const march = Math.floor(now * 2) % 4;
+      for (let i = 0; i < 3; i++) dot(l + 4 + i * 2 + (march < 2 ? 0 : 1), 68 + (march % 2), 0x6fd36f);
+      if (playing) {
+        const ship = l + 4 + Math.round((Math.sin(now * 2.5) + 1) * 2.5);
+        dot(ship, 73, WHITE);
+        const shot = (now * 2.5) % 1;
+        dot(ship, 72 - Math.round(shot * 4), 0xffd36b, 1 - shot * 0.5);
+      }
+      fill(l + 1, 75, 12, 3, 0x3d3470);
+      fill(l + 4, 74, 1, 2, PALETTE.frame);
+      dot(l + 4, 73, 0xd4140b);
+      dot(l + 8, 76, 0xf2d35b);
+      dot(l + 10, 76, 0x4c8bf5);
+      fill(l + 5, 80, 4, 2, PALETTE.frame);
+      dot(l + 6, 80, 0xd96a5a);
+    }
+
+    /** A vending machine, lit up: a snack drops now and then for whoever is at it. */
+    function drawVending() {
+      const l = 263;
+      fill(l - 1, 86, 20, 1, SHADOW);
+      fill(l, 58, 18, 28, 0xb8322a);
+      fill(l, 58, 18, 2, 0xd9493f);
+      fill(l + 2, 61, 11, 17, 0x9fd3e8);
+      const snacks = [0xf2d35b, 0xd96a5a, 0x4f9a5a, 0x4c8bf5, 0xe08a3a, 0x9a6ad0];
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 3; c++) fill(l + 3 + c * 4, 62 + r * 4, 2, 2, snacks[(r * 4 + c * 5) % snacks.length]);
+        fill(l + 2, 64 + r * 4, 11, 1, 0x7fb3c8);
+      }
+      fill(l + 2, 61, 2, 17, WHITE, 0.2);
+      fill(l + 14, 61, 3, 9, PALETTE.machine);
+      for (let r = 0; r < 3; r++) dot(l + 15, 62 + r * 2, r === 0 ? 0x6fd36f : PALETTE.keys);
+      fill(l + 14, 72, 3, 2, PALETTE.frame);
+      fill(l + 2, 80, 11, 4, PALETTE.frame);
+      const fall = (now % 3) / 1.2;
+      if (atCorner(0) && fall < 1) fill(l + 7, 62 + Math.round(fall * 18), 2, 2, 0xf2d35b);
+    }
+
+    /** A foosball table: its men twitch while someone's at it, and a match starts when both sides are taken. */
+    function drawFoosball() {
+      const busy = atCorner(0) || atCorner(1), match = atCorner(0) && atCorner(1);
+      fill(255, 90, 34, 1, SHADOW);
+      fill(257, 90, 2, 5, PALETTE.tableLeg);
+      fill(285, 90, 2, 5, PALETTE.tableLeg);
+      fill(256, 78, 32, 12, PALETTE.counter);
+      fill(258, 80, 28, 8, 0x2f7a4a);
+      fill(271, 80, 1, 8, WHITE, 0.5);
+      fill(257, 82, 1, 4, PALETTE.frame);
+      fill(286, 82, 1, 4, PALETTE.frame);
+      [261, 265, 269, 274, 278, 282].forEach((x, i) => {
+        fill(x, 76, 1, 16, 0xc9c3b8);
+        fill(x, 75, 1, 2, PALETTE.frame);
+        fill(x, 91, 1, 2, PALETTE.frame);
+        const shift = busy ? Math.round(Math.sin(now * 5 + i * 1.7)) : 0;
+        for (const y of [81, 85]) fill(x, y + shift, 1, 2, i % 2 ? 0x4c8bf5 : 0xd96a5a);
+      });
+      if (!match) return;
+      const lap = (now * 0.8) % 2, across = lap < 1 ? lap : 2 - lap;
+      dot(260 + Math.round(across * 24), 83 + Math.round(Math.sin(now * 3)), WHITE);
+    }
+
+    /** A fish tank on a cabinet: fish swim to and fro, and bubbles rise. */
+    function drawFishTank() {
+      fill(257, 86, 31, 1, SHADOW);
+      fill(258, 76, 29, 10, PALETTE.counter);
+      fill(260, 78, 11, 6, PALETTE.doorPanel);
+      fill(274, 78, 11, 6, PALETTE.doorPanel);
+      fill(258, 60, 29, 1, PALETTE.monitorOn);
+      fill(258, 61, 29, 15, PALETTE.frame);
+      fill(259, 62, 27, 13, 0x2f7fb0);
+      fill(259, 62, 27, 2, 0x6fb6e0);
+      fill(259, 72, 27, 3, 0xd9c38a);
+      fill(262, 66, 1, 6, PALETTE.leaf);
+      fill(263, 68, 1, 4, PALETTE.leafDark);
+      fill(282, 67, 1, 5, PALETTE.leaf);
+      for (const [speed, phase, y, colour] of [[0.13, 0, 66, 0xff8a3d], [0.09, 0.6, 69, 0xf2d35b], [0.17, 1.3, 64, 0xf28fb0]]) {
+        const swim = (now * speed + phase) % 2, across = swim < 1 ? swim : 2 - swim, right = swim < 1;
+        const x = 261 + Math.round(across * 20);
+        fill(x, y, 3, 2, colour);
+        dot(right ? x - 1 : x + 3, y, colour);
+        dot(right ? x - 1 : x + 3, y + 1, colour);
+        dot(right ? x + 2 : x, y, PALETTE.eye);
+      }
+      const rise = (now * 0.6) % 1;
+      dot(284, 71 - Math.round(rise * 8), WHITE, 0.7 * (1 - rise));
+      dot(283, 71 - Math.round(((rise + 0.5) % 1) * 8), WHITE, 0.5);
+    }
+
+    /** A bookcase, and a beanbag to read in, drawn round whoever sits in it. */
+    function drawBookcase() {
+      fill(287, 86, 21, 1, SHADOW);
+      fill(288, 57, 19, 29, PALETTE.counter);
+      [59, 66, 73, 80].forEach((y, row) => drawBooks(289, y, 17, row));
+    }
+
+    function drawBeanbagBack() {
+      fill(266, 87, 16, 6, 0xc0584a);
+      fill(268, 86, 12, 1, 0xd96a5a);
+    }
+
+    function drawBeanbagFront() {
+      fill(265, 92, 18, 4, 0xd96a5a);
+      fill(266, 96, 16, 1, 0xa84a3e);
+      fill(265, 97, 18, 1, SHADOW);
+    }
+
+    /** What the lounge's corner piece is made of, each part at the depth it stands at. */
+    const CORNER_PARTS = {
+      arcade: [[86, drawArcade]], vending: [[86, drawVending]], foosball: [[89, drawFoosball]], fishtank: [[86, drawFishTank]],
+      books: [[86, drawBookcase], [90, drawBeanbagBack], [94.5, drawBeanbagFront]], none: [],
+    };
+
     /** A rally starts whenever both ends of the table are taken. */
     function drawPingPong() {
       fill(246, 148, 46, 9, PALETTE.table);
@@ -1187,11 +1521,23 @@
       fill(x - 3, y - 1, 7, 1, PALETTE.machine, a);
       fill(x - 1, y - 2, 3, 1, PALETTE.machine, a);
       fill(x, y - 17, 1, 15, PALETTE.monitorStand, a);
-      // The head: a grille in a rounded case
-      fill(x - 1, y - 24, 3, 1, PALETTE.sill, a);
-      fill(x - 2, y - 23, 5, 5, PALETTE.sill, a);
-      for (const row of [-22, -20]) fill(x - 1, y + row, 3, 1, PALETTE.monitor, a);
-      fill(x - 1, y - 18, 3, 1, PALETTE.monitorStand, a);
+      if (decor.mic === 'megaphone') {
+        // A megaphone on the stand, its horn to the room, a red rim on its mouth
+        fill(x - 1, y - 22, 4, 5, MEGAPHONE, a);
+        fill(x + 2, y - 22, 1, 5, PALETTE.dome, a);
+        fill(x, y - 18, 2, 2, PALETTE.machine, a);
+        for (let k = 1; k <= 6; k++) {
+          const half = 2 + Math.floor(k / 2);
+          fill(x - 1 - k, y - 20 - half, 1, half * 2 + 1, k === 6 ? PALETTE.dome : MEGAPHONE, a);
+        }
+        fill(x - 6, y - 23, 4, 1, WHITE, 0.5 * a);
+      } else {
+        // The head: a grille in a rounded case
+        fill(x - 1, y - 24, 3, 1, PALETTE.sill, a);
+        fill(x - 2, y - 23, 5, 5, PALETTE.sill, a);
+        for (const row of [-22, -20]) fill(x - 1, y + row, 3, 1, PALETTE.monitor, a);
+        fill(x - 1, y - 18, 3, 1, PALETTE.monitorStand, a);
+      }
       // The on-air light, on the stand's clip
       fill(x - 1, y - 15, 3, 2, PALETTE.frame, a);
       if (mic.held) {
@@ -1358,9 +1704,10 @@
       if (alarm === null) return;
       const since = alarm;
       const fade = Math.min(1, (ALARM_LENGTH - since) / 0.5);
-      if (since < 0.08) fill(0, 0, WIDTH, HEIGHT, WHITE, 0.5);
-      if (since < FLASH_LENGTH) fill(0, 0, WIDTH, HEIGHT, PALETTE.alarm, 0.35 * (1 - since / FLASH_LENGTH));
-      fill(0, 0, WIDTH, HEIGHT, PALETTE.alarm, 0.07 * (0.5 + 0.5 * Math.sin(since * 12)) * fade);
+      const all = (color, alpha) => fill(seen.left, seen.top, seen.width, seen.height, color, alpha);
+      if (since < 0.08) all(WHITE, 0.5);
+      if (since < FLASH_LENGTH) all(PALETTE.alarm, 0.35 * (1 - since / FLASH_LENGTH));
+      all(PALETTE.alarm, 0.07 * (0.5 + 0.5 * Math.sin(since * 12)) * fade);
 
       // Two rings, flattened onto the floor
       for (const delay of [0, 0.15]) {
@@ -1447,7 +1794,7 @@
       if (state === 'idle') {
         // A nap, after a while on the couch
         const spot = spotOf(person.place);
-        if (person.isWalking || spot === null || SPOTS[spot].pose !== 'sit' || now - person.arrivedAt <= 20) return;
+        if (person.isWalking || spot === null || spots[spot].pose !== 'sit' || now - person.arrivedAt <= 20) return;
         const rise = (now * 0.35 + person.look.phase) % 1;
         const zx = x + 3 + Math.round(rise * 3), zy = top - 3 - Math.round(rise * 8);
         fill(zx, zy, 3, 1, WHITE, 1 - rise);
@@ -1631,6 +1978,7 @@
     function drawMicWaves() {
       if (!mic.held) return;
       const heldFor = now - mic.heldAt;
+      const mouth = decor.mic === 'megaphone' ? { x: MIC.x - 8, y: MIC.y - 20 } : { x: MIC.x, y: MIC.y - 21 };
       for (let k = 0; k < 3; k++) {
         const age = (heldFor - k * WAVE_EVERY) % (WAVE_EVERY * 3) / (WAVE_EVERY * 3);
         if (heldFor < k * WAVE_EVERY) continue;
@@ -1639,7 +1987,7 @@
         for (let i = 0; i <= count; i++) {
           // A quarter turn, out into the room from the corner
           const angle = Math.PI + (i / count) * (Math.PI / 2);
-          dot(Math.round(MIC.x + Math.cos(angle) * radius), Math.round(MIC.y - 21 + Math.sin(angle) * radius * 0.8),
+          dot(Math.round(mouth.x + Math.cos(angle) * radius), Math.round(mouth.y + Math.sin(angle) * radius * 0.8),
             PALETTE.alarm, 0.6 * (1 - age));
         }
       }
@@ -1734,6 +2082,7 @@
     const items = [
       [46.5, drawCounter], [50, drawCooler], [110, drawCouchBack], [117, drawCouchFront],
       [134, drawCoffeeTable], [157, drawPingPong], [176, drawPlant], [176.5, drawButton], [177, drawMic],
+      ...CORNER_PARTS[decor.corner],
     ];
     DESKS.forEach((d, desk) => {
       items.push([d.y + 5, () => drawDesk(desk)]);
@@ -1747,7 +2096,7 @@
     }
     items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
 
-    if (isNight) fill(0, 0, WIDTH, HEIGHT, PALETTE.night, 0.3);
+    if (isNight) fill(seen.left, seen.top, seen.width, seen.height, PALETTE.night, 0.3);
     drawSelectionCorners();
     drawDetonation();
     drawMicWaves();
@@ -1815,7 +2164,7 @@
     const clock = () => performance.now() / 1000;
     let visible = true;
     let framed = false;  // seen through a window, beside the phone's controls
-    let floating = false; // in the pop-out window, its own window floating in it
+    let floating = null;  // floating in a 'window' of its own or a whole 'screen', or not
     let frame = null;
     let last = 0;
     let selected = null; // the session the deck's controls act on
@@ -1918,7 +2267,7 @@
     function targetAt(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
       const ratio = host.window.devicePixelRatio || 1;
-      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGIN * ratio : 0);
+      const { scale, ox, oy } = fitRoom(canvas.width, canvas.height, floating ? FLOAT_MARGINS[floating] * ratio : 0);
       const x = ((clientX - rect.left) * (canvas.width / rect.width) - ox) / scale;
       const y = ((clientY - rect.top) * (canvas.height / rect.height) - oy) / scale;
       const reach = (SMALLEST_TARGET * ratio) / scale;
@@ -1943,7 +2292,7 @@
           { left: px - 5, right: px + 8, top: top - 11, bottom: Math.round(person.position.y) + 1 }, 0);
       }
       consider({ kind: 'button' }, { left: BUTTON.x - 7, right: BUTTON.x + 8, top: BUTTON.y - 1, bottom: BUTTON.y + 16 }, 1);
-      consider({ kind: 'mic' }, { left: MIC.x - 5, right: MIC.x + 6, top: MIC.y - 25, bottom: MIC.y + 1 }, 1);
+      consider({ kind: 'mic' }, { left: MIC.x - (decor.mic === 'megaphone' ? 9 : 5), right: MIC.x + 6, top: MIC.y - 25, bottom: MIC.y + 1 }, 1);
       office.seats.forEach((seat, desk) => {
         const target = seat.session ? { kind: 'session', id: seat.session.id } : seat.pin ? { kind: 'pinned', name: seat.pin } : null;
         // The desk, its chair and monitor, and its label
@@ -2019,6 +2368,7 @@
     return {
       show(snapshot) {
         latest = snapshot;
+        office.furnish(snapshot.layout && snapshot.layout.room);
         office.apply(seatsOf(snapshot), snapshot.theme, clock());
       },
       close() {
@@ -2031,7 +2381,8 @@
         if (shown) { resize(); run(); } else if (finger) lift();
       },
       setFramed(shown) { framed = shown; },
-      setFloating(shown) { floating = shown; },
+      /** Floats the room's window in a 'window' of its own or a whole 'screen', or stops, with null. */
+      setFloating(how) { floating = how; },
       /**
        * The canvas is in another window now, or back on its page. Moving it
        * takes the finger off without a word to the canvas, so the mic is let
@@ -2047,7 +2398,7 @@
   }
 
   /** The pop-out window's size, in CSS pixels: two to each of the room's, and the margin round it. */
-  const popOutSize = { width: WIDTH * 2 + FLOAT_MARGIN * 2, height: HEIGHT * 2 + FLOAT_MARGIN * 2 };
+  const popOutSize = { width: WIDTH * 2 + FLOAT_MARGINS.window * 2, height: HEIGHT * 2 + FLOAT_MARGINS.window * 2 };
 
   window.AgentOffice = { create, popOutSize };
 })();

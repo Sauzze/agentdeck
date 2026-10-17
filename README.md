@@ -3,7 +3,7 @@
 [![CI](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml)
 
 <p align="center">
-  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: an agent's key blinks orange and a tap on ✓ approves it, the stick answers its question, the dial raises Claude's effort, and the mic dictates the next prompt" width="800">
+  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: the phone's keys become a pixel-art office, which goes full screen sideways; an agent waiting on you is answered from the room with ▼ and ✓, the big red button sends another to max effort, and the office pops out into a window on a Mac" width="800">
 </p>
 
 A control pad on your phone for the AI coding agents in your terminal: Claude
@@ -163,6 +163,8 @@ control Terminal. Click **Allow**.
    Screen**; on Android, open the browser's menu and tap **Add to Home
    screen**. SauzzeDeck Pro now opens full screen and stays paired.
 
+While the deck is open, your phone's screen stays on, from your first tap.
+
 Each phone you pair appears under **Paired phones** on the setup page, with
 when it was last used. **Revoke** cuts one phone off straight away;
 **Unpair All Phones** does it for every phone, and is also in SauzzeDeck
@@ -243,6 +245,21 @@ There's more to see while they work:
   and slams it.
 - When few sessions are running, the office's own staff hang around the lounge.
 
+**Furnish it your way** under *Office* in the setup page's Layout:
+
+- **Talk into** a microphone or a megaphone.
+- **The back wall:** five places, each a window, a whiteboard, a pinboard, a
+  poster, a bookshelf, a plant or bare wall. The to-do lists go up on the
+  first whiteboard.
+- **The floor** in wood, tiles, concrete or carpet, **the walls** in slate,
+  sage, clay or cream, and **the lounge's carpet** in navy, teal, plum or sand.
+- **In the lounge:** an arcade machine, a vending machine, a foosball table, a
+  fish tank, or a bookcase and a beanbag. Idle agents go and play, grab a
+  snack, or read.
+- **Daylight** that follows the clock, with night falling at 8 pm, or always day.
+
+It's kept with the layout, so each profile can have an office of its own.
+
 **On your phone**, choose **Office** under *Sessions* in the setup page's
 Layout, or tap **OFFICE** above the keys to switch on the phone itself (and
 **KEYS** to switch back). The dial, stick and buttons stay where they are, and
@@ -268,6 +285,9 @@ shows the office alone, full screen, and can be tapped too.
 corner. The office moves into a small window that stays above everything else,
 and can still be clicked. Other browsers, and the address your phone uses,
 don't offer it.
+
+In full screen, on a spare screen and in the pop-out window, the office fills
+a rounded window, and its edge glows while an agent is waiting on you.
 
 ## Voice
 

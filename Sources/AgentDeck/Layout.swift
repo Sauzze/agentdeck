@@ -2,13 +2,15 @@ import CoreGraphics
 import Foundation
 
 /// How the phone's deck is laid out, as set up on the setup page: how many
-/// session keys, whether the office shows in their place, whether the dial
-/// and stick show, and the rows of buttons under them. It is checked before it's kept: the phone draws it, and its
+/// session keys, whether the office shows in their place and how it's
+/// furnished, whether the dial and stick show, and the rows of buttons under
+/// them. It is checked before it's kept: the phone draws it, and its
 /// buttons type into sessions. The Windows and Linux app's layout.go matches.
 struct Layout: Codable, Equatable {
     var keys = KeyCount.auto
     /// The Agent Office in place of the keys: a desk for each, in the same order.
     var office = false
+    var room = Room()
     var dial = true
     var stick = true
     var rows: [ButtonRow] = []
@@ -23,21 +25,24 @@ struct Layout: Codable, Equatable {
         ButtonRow(tall: false, buttons: ["esc", "send", "clear"].map { Button(id: $0) }),
     ])
 
-    init(keys: KeyCount = .auto, office: Bool = false, dial: Bool = true, stick: Bool = true, rows: [ButtonRow] = []) {
+    init(keys: KeyCount = .auto, office: Bool = false, room: Room = Room(), dial: Bool = true, stick: Bool = true, rows: [ButtonRow] = []) {
         self.keys = keys
         self.office = office
+        self.room = room
         self.dial = dial
         self.stick = stick
         self.rows = rows
     }
 
-    /// What's left out is the default: Auto keys, no office, the dial and
-    /// the stick showing, no buttons. A value of the wrong kind refuses the
-    /// layout.
+    /// What's left out is the default: Auto keys, no office, a standard
+    /// room, the dial and the stick showing, no buttons. A value of the wrong
+    /// kind refuses the layout, except in the room, which only changes how
+    /// the office looks.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         keys = try c.decodeIfPresent(KeyCount.self, forKey: .keys) ?? .auto
         office = try c.decodeIfPresent(Bool.self, forKey: .office) ?? false
+        room = (try? c.decodeIfPresent(Room.self, forKey: .room)) ?? Room()
         dial = try c.decodeIfPresent(Bool.self, forKey: .dial) ?? true
         stick = try c.decodeIfPresent(Bool.self, forKey: .stick) ?? true
         rows = try c.decodeIfPresent([ButtonRow].self, forKey: .rows) ?? []
@@ -61,7 +66,7 @@ struct Layout: Codable, Equatable {
             }
             return buttons.isEmpty ? nil : ButtonRow(tall: row.tall, buttons: buttons)
         }
-        return Layout(keys: keys, office: office, dial: dial, stick: stick, rows: kept)
+        return Layout(keys: keys, office: office, room: room, dial: dial, stick: stick, rows: kept)
     }
 
     /// The button made in setup with `id`, if the layout has it.
@@ -72,6 +77,60 @@ struct Layout: Codable, Equatable {
     /// As JSON's own types, for a reply built with JSONSerialization.
     var jsonObject: Any {
         (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(self))) ?? [:]
+    }
+}
+
+/// How the office is furnished: the microphone or a megaphone, what each of
+/// the back wall's five places holds, the floor, the walls' paint, the
+/// lounge's carpet and the piece in its corner, and whether the sky keeps the
+/// computer's time or it's always day. office.js draws it, with the same
+/// choices. Anything unknown, or of the wrong kind, is as standard: it only
+/// changes how the room looks.
+struct Room: Codable, Equatable {
+    var mic = "mic"
+    var wall = Room.standardWall
+    var floor = "wood"
+    var paint = "slate"
+    var lounge = "navy"
+    var corner = "arcade"
+    var sky = "live"
+
+    /// Each part's choices; the first is the standard one.
+    static let choices = [
+        "mic": ["mic", "megaphone"],
+        "floor": ["wood", "tiles", "concrete", "carpet"],
+        "paint": ["slate", "sage", "clay", "cream"],
+        "lounge": ["navy", "teal", "plum", "sand"],
+        "corner": ["arcade", "vending", "foosball", "fishtank", "books", "none"],
+        "sky": ["live", "day"],
+    ]
+    static let wallChoices = ["window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"]
+    static let standardWall = ["window", "whiteboard", "window", "pinboard", "window"]
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        func choice(_ key: CodingKeys) -> String? {
+            let given = (try? c?.decodeIfPresent(String.self, forKey: key)) ?? nil
+            return given.flatMap { Room.choices[key.stringValue]?.contains($0) == true ? $0 : nil }
+        }
+        mic = choice(.mic) ?? mic
+        floor = choice(.floor) ?? floor
+        paint = choice(.paint) ?? paint
+        lounge = choice(.lounge) ?? lounge
+        corner = choice(.corner) ?? corner
+        sky = choice(.sky) ?? sky
+        let given = ((try? c?.decodeIfPresent([Loose].self, forKey: .wall)) ?? nil) ?? []
+        wall = Room.standardWall.enumerated().map { i, standard in
+            i < given.count ? given[i].text.flatMap { Room.wallChoices.contains($0) ? $0 : nil } ?? standard : standard
+        }
+    }
+
+    /// One of the wall's places as given: text, or nothing for any other kind of value.
+    private struct Loose: Decodable {
+        let text: String?
+        init(from decoder: Decoder) throws { text = try? decoder.singleValueContainer().decode(String.self) }
     }
 }
 
