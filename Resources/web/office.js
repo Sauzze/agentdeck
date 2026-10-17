@@ -5077,20 +5077,21 @@
   /**
    * One of the room's choices on its own, for the setup page to show it by:
    * `what` is { corner } with someone at each of its places, or
-   * { workspace } with an agent at work at it. It's drawn by the room's own
-   * code, `now` seconds in, and cut to the piece, as big as fits `canvas`
-   * in whole pixels. `tall` shows it where the room held upright has it.
+   * { workspace } with an agent at it. It's drawn by the room's own code in
+   * the layout's `room` (its floor, paint and finishes), `now` seconds in,
+   * and cut to the piece, as big as fits `canvas` in whole pixels. `tall`
+   * shows it where the room held upright has it.
    */
-  function preview(canvas, what, now = 0, tall = false) {
+  function preview(canvas, what, { room = null, now = 0, tall = false } = {}) {
     const kept = { decor, spots, boardSpots, shape };
     try {
       shape = tall ? TALL : WIDE;
-      decor = roomOf({ corner: what.corner || 'none', workspace: what.workspace || 'desk', staff: 'none', sky: 'day' });
+      decor = roomOf({ ...room, ...what, team: null, staff: 'none', sky: 'day', pet: 'none' });
       spots = spotsOf(decor);
       boardSpots = boardSpotsOf(decor);
       const office = new Office();
       office.apply(what.workspace ? [{ pin: null, session: PREVIEW_AGENT }] : [], {}, now);
-      CORNER_SPOTS[decor.corner].forEach((_, i) => {
+      if (what.corner) CORNER_SPOTS[decor.corner].forEach((_, i) => {
         const spot = LOUNGE_SPOTS.length + i, member = office.hireStaff();
         member.place = spotPlace(spot);
         member.position = { x: spots[spot].x, y: spots[spot].y };
@@ -5099,19 +5100,18 @@
       const crop = { ...PREVIEW_CROPS[what.workspace ? 'workspace' : 'corner'] };
       if (what.corner) Object.assign(crop, placed('corner', crop));
       const scale = Math.max(1, Math.floor(Math.min(canvas.width / crop.w, canvas.height / crop.h)));
-      const room = canvas.ownerDocument.createElement('canvas');
-      room.width = shape.width * scale;
-      room.height = shape.height * scale;
-      const roomCtx = room.getContext('2d');
-      drawOffice(roomCtx, office, {
-        now, hour: 12, minute: 0, month: 5, width: room.width, height: room.height, ratio: 1, selected: null,
+      const whole = canvas.ownerDocument.createElement('canvas');
+      whole.width = shape.width * scale;
+      whole.height = shape.height * scale;
+      drawOffice(whole.getContext('2d'), office, {
+        now, hour: 12, minute: 0, month: 5, width: whole.width, height: whole.height, ratio: 1, selected: null,
         mic: { held: false, heldAt: null, releasedAt: null, listener: null, usable: true }, framed: false, floating: null,
       });
       const ctx = canvas.getContext('2d');
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       const w = crop.w * scale, h = crop.h * scale;
-      ctx.drawImage(room, crop.x * scale, crop.y * scale, w, h,
+      ctx.drawImage(whole, crop.x * scale, crop.y * scale, w, h,
         Math.floor((canvas.width - w) / 2), Math.floor((canvas.height - h) / 2), w, h);
     } finally {
       ({ decor, spots, boardSpots, shape } = kept);

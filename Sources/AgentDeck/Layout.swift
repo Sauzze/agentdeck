@@ -84,8 +84,9 @@ struct Layout: Codable, Equatable {
 /// the back wall's five places holds, the floor, the walls' paint, the
 /// lounge's carpet and the piece in its corner, whether the sky keeps the
 /// computer's time or it's always day, its pet, whether the windows follow
-/// the seasons, how loud it is, the desks' finish and the chairs' colour, how
-/// many of its own staff hang about, your team, and the dress code. office.js
+/// the seasons, how loud it is, the desks' finish, what everyone works at (a
+/// desk, a tent, a throne…) and the chairs' colour, how many of its own staff
+/// hang about, your team, and the dress code. office.js
 /// draws it, with the same choices. Anything unknown, or of the wrong kind, is
 /// as standard: it only changes how the room looks.
 struct Room: Codable, Equatable {
@@ -100,6 +101,7 @@ struct Room: Codable, Equatable {
     var season = "calendar"
     var sound = "off"
     var desk = "wood"
+    var workspace = "desk"
     var chair = "teal"
     var staff = "some"
     /// How each project's agent looks, by the project's name.
@@ -117,15 +119,22 @@ struct Room: Codable, Equatable {
         "floor": ["wood", "tiles", "concrete", "carpet"],
         "paint": ["slate", "sage", "clay", "cream"],
         "lounge": ["navy", "teal", "plum", "sand"],
-        "corner": ["arcade", "vending", "foosball", "fishtank", "books", "none"],
+        "corner": ["arcade", "vending", "foosball", "fishtank", "books", "dragon", "pinball", "jukebox", "pool", "piano", "drums",
+                   "telescope", "jellyfish", "bonsai", "jungle", "coffee", "servers", "printer", "boxing", "treadmill", "hottub",
+                   "ballpit", "campfire", "none"],
         "sky": ["live", "day"],
         "pet": ["none", "cat", "dog", "lizard", "monkey"],
         "season": ["calendar", "off"],
         "sound": ["off", "quiet", "normal"],
         "desk": ["wood", "walnut", "white", "black"],
+        "workspace": Room.workspaces,
         "chair": ["teal", "black", "red", "grey", "green"],
         "staff": ["some", "none", "many"],
     ]
+    /// What an agent can work at: the office's choice for everyone, and a
+    /// team member's own, which can also be "auto".
+    static let workspaces = ["desk", "standing", "gaming", "tent", "box", "beanbag", "igloo", "van", "cockpit", "ship", "throne",
+                             "greenhouse"]
     static let wallChoices = ["window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"]
     static let standardWall = ["window", "whiteboard", "window", "pinboard", "window"]
 
@@ -147,6 +156,7 @@ struct Room: Codable, Equatable {
         season = choice(.season) ?? season
         sound = choice(.sound) ?? sound
         desk = choice(.desk) ?? desk
+        workspace = choice(.workspace) ?? workspace
         chair = choice(.chair) ?? chair
         staff = choice(.staff) ?? staff
         let given = ((try? c?.decodeIfPresent([Loose].self, forKey: .wall)) ?? nil) ?? []
@@ -168,9 +178,9 @@ struct Room: Codable, Equatable {
 
 /// How one project's agent looks in the office: skin, hair, a hairstyle,
 /// something extra such as glasses or a cap, an outfit and its colour, what's
-/// on its desk, and a nickname for it. "auto" is as the project's name picks
-/// it, and the clothes as its model's. office.js draws it, with the same
-/// choices.
+/// on its desk, what it works at, and a nickname for it. "auto" is as the
+/// project's name picks it, the clothes as its model's, and what it works at
+/// as everyone does. office.js draws it, with the same choices.
 struct TeamMember: Codable, Equatable {
     var skin = "auto"
     var hair = "auto"
@@ -179,6 +189,7 @@ struct TeamMember: Codable, Equatable {
     var outfit = "auto"
     var colour = "auto"
     var desk = "auto"
+    var workspace = "auto"
     var name = ""
 
     /// Each part's choices; the first is the standard one.
@@ -192,6 +203,7 @@ struct TeamMember: Codable, Equatable {
                    "tracksuit", "overalls", "waistcoat"],
         "colour": ["auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"],
         "desk": ["auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"],
+        "workspace": ["auto"] + Room.workspaces,
     ]
     /// The most a nickname can be, in characters.
     static let nicknameLimit = 16
@@ -209,6 +221,7 @@ struct TeamMember: Codable, Equatable {
         outfit = choice(.outfit) ?? outfit
         colour = choice(.colour) ?? colour
         desk = choice(.desk) ?? desk
+        workspace = choice(.workspace) ?? workspace
         name = (((try? c?.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? "").oneLine(TeamMember.nicknameLimit)
     }
 }

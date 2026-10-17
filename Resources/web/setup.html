@@ -141,13 +141,22 @@
   .field.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
   .wall { display: flex; gap: 6px; }
   .wall select { flex: 1; min-width: 0; max-width: none; padding: 5px 4px; }
+  /* Choices shown by a picture of each, drawn by the office itself. */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  .tiles.small { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+  .tile { display: grid; gap: 5px; align-content: start; padding: 6px; background: var(--cap); color: var(--ink); border: 1px solid var(--edge);
+    border-radius: 10px; font-size: 12px; line-height: 1.25; text-align: center; }
+  .tile:hover { background: var(--cap-top); }
+  .tile.on { border-color: var(--ink); background: var(--cap-top); }
+  .tile canvas, .member canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; border-radius: 6px; }
+  .member canvas { max-width: 116px; }
   /* Your team: a card for each project, its choices in a grid. */
   .team { display: grid; gap: 10px; }
   .member { border: 1px solid var(--edge); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
   .member .top { display: flex; align-items: center; gap: 10px; }
   .member .top b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .member .looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; }
-  .member .looks label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
+  .member .looks label { display: grid; gap: 3px; align-content: start; font-size: 12px; color: var(--dim); }
   .member input, .member select { min-width: 0; background: var(--cap); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px;
     padding: 5px 8px; font: 13px ui-monospace, "SF Mono", Menlo, monospace; }
   .team .empty { color: var(--dim); font-size: 13px; }
@@ -347,15 +356,16 @@
         <div class="field"><span>Floor</span><div class="choices" id="room-floor"></div></div>
         <div class="field"><span>Walls</span><div class="choices" id="room-paint"></div></div>
         <div class="field"><span>Lounge</span><div class="choices" id="room-lounge"></div></div>
-        <label class="field"><span>In the lounge</span><select id="room-corner"></select></label>
+        <div class="field stacked"><span>In the lounge</span><div class="tiles" id="room-corner"></div></div>
         <div class="field"><span>Daylight</span><div class="choices" id="room-sky"></div></div>
         <div class="field"><span>Seasons in the windows</span><div class="choices" id="room-season"></div></div>
         <div class="field"><span>Pet</span><div class="choices" id="room-pet"></div></div>
         <div class="field"><span>Sound</span><div class="choices" id="room-sound"></div></div>
+        <div class="field stacked"><span>Everyone works at</span><div class="tiles small" id="room-workspace"></div></div>
         <div class="field"><span>Desks</span><div class="choices" id="room-desk"></div></div>
         <div class="field"><span>Chairs</span><div class="choices" id="room-chair"></div></div>
         <div class="field"><span>Office staff</span><div class="choices" id="room-staff"></div></div>
-        <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Sound starts with your first tap. The preview shows the office while you change it.</p>
+        <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Point at a piece to see it move. A project can work somewhere of its own, on its card under Your team. Sound starts with your first tap. The preview shows the office while you change it.</p>
         <h3>Your team</h3>
         <div class="team" id="room-team"></div>
         <p class="hint">Each project's agent, your way. Anything on Auto is as the project's name picks it, and clothes on Auto follow the dress code below.</p>
@@ -404,6 +414,7 @@
   </section>
 </main>
 
+<script src="/office.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   let state = null;
@@ -811,6 +822,59 @@
     return b;
   }
 
+  /* Pictures of the office's choices, drawn by office.js in the room as
+     it's furnished: a still, and moving while the pointer is on one. */
+
+  /** How much of the office each picture shows, in its art pixels, at three of the canvas's pixels to each. */
+  const PICTURE_SIZES = { corner: [80, 51], workspace: [58, 45] };
+  /** How far into a piece's moving its still is taken, in seconds: far enough in for something to be going on. */
+  const PICTURE_STILL = 3.3;
+  let moving = null; // the picture under the pointer: { canvas, what, room, start }
+  let looping = false;
+
+  /** A picture of one of the office's choices, moving while the pointer is on `host`. */
+  function picture(kind, id, room, host = null) {
+    const canvas = document.createElement('canvas');
+    [canvas.width, canvas.height] = PICTURE_SIZES[kind].map((n) => n * 3);
+    const what = { [kind]: id };
+    const still = () => AgentOffice.preview(canvas, what, { room, now: PICTURE_STILL });
+    still();
+    const over = host || canvas;
+    over.onpointerenter = () => {
+      moving = { canvas, what, room, start: performance.now() / 1000 - PICTURE_STILL };
+      if (!looping) {
+        looping = true;
+        requestAnimationFrame(move);
+      }
+    };
+    over.onpointerleave = () => {
+      if (moving && moving.canvas === canvas) moving = null;
+      still();
+    };
+    return canvas;
+  }
+
+  function move(time) {
+    if (!moving || !moving.canvas.isConnected) {
+      looping = false;
+      return;
+    }
+    AgentOffice.preview(moving.canvas, moving.what, { room: moving.room, now: time / 1000 - moving.start });
+    requestAnimationFrame(move);
+  }
+
+  /** A choice shown by its picture, with its name under it. */
+  function tile(kind, id, label, on, onclick, room) {
+    const b = document.createElement('button');
+    b.className = 'tile' + (on ? ' on' : '');
+    b.setAttribute('aria-pressed', String(on));
+    const name = document.createElement('span');
+    name.textContent = label;
+    b.append(picture(kind, id, room, b), name);
+    b.onclick = onclick;
+    return b;
+  }
+
   /* The office's furnishing: the choices office.js draws and the apps keep. */
 
   const ROOM_CHOICES = {
@@ -819,12 +883,19 @@
     paint: [['slate', 'Slate', '#2f3446'], ['sage', 'Sage', '#34463d'], ['clay', 'Clay', '#4b3631'], ['cream', 'Cream', '#b5ad98']],
     lounge: [['navy', 'Navy', '#3f4a5c'], ['teal', 'Teal', '#2f5656'], ['plum', 'Plum', '#513d50'], ['sand', 'Sand', '#7b6e58']],
     corner: [['arcade', 'An arcade machine'], ['vending', 'A vending machine'], ['foosball', 'A foosball table'],
-      ['fishtank', 'A fish tank'], ['books', 'A bookcase and a beanbag'], ['none', 'Nothing']],
+      ['fishtank', 'A fish tank'], ['books', 'A bookcase and a beanbag'], ['dragon', 'A dragon on its gold'], ['pinball', 'Pinball'],
+      ['jukebox', 'A jukebox'], ['pool', 'A pool table'], ['piano', 'A piano'], ['drums', 'A drum kit'], ['telescope', 'A telescope'],
+      ['jellyfish', 'Jellyfish'], ['bonsai', 'A bonsai'], ['jungle', 'A jungle'], ['coffee', 'A coffee bar'], ['servers', 'Servers'],
+      ['printer', 'A 3D printer'], ['boxing', 'A punching bag'], ['treadmill', 'A treadmill'], ['hottub', 'A hot tub'],
+      ['ballpit', 'A ball pit'], ['campfire', 'A campfire'], ['none', 'Nothing']],
     sky: [['live', 'Follows the clock'], ['day', 'Always day']],
     season: [['calendar', 'Follow the calendar'], ['off', 'Off']],
     pet: [['none', 'None'], ['cat', 'Cat'], ['dog', 'Dog'], ['lizard', 'Lizard'], ['monkey', 'Monkey']],
     sound: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
     desk: [['wood', 'Wood', '#c49a6c'], ['walnut', 'Walnut', '#7e5536'], ['white', 'White', '#e9e6de'], ['black', 'Black', '#3c404a']],
+    workspace: [['desk', 'A desk'], ['standing', 'A standing desk'], ['gaming', 'A gaming desk'], ['tent', 'A tent'],
+      ['box', 'A cardboard box'], ['beanbag', 'A beanbag'], ['igloo', 'An igloo'], ['van', 'A camper van'], ['cockpit', 'A spaceship'],
+      ['ship', 'A pirate ship'], ['throne', 'A throne'], ['greenhouse', 'A greenhouse']],
     chair: [['teal', 'Teal', '#3f7080'], ['black', 'Black', '#353842'], ['red', 'Red', '#9a3c3a'], ['grey', 'Grey', '#737987'],
       ['green', 'Green', '#3f7a4c']],
     staff: [['some', 'A few'], ['none', 'None'], ['many', 'Lots']],
@@ -832,8 +903,8 @@
   const WALL_CHOICES = [['window', 'Window'], ['whiteboard', 'Whiteboard'], ['pinboard', 'Pinboard'], ['poster', 'Poster'],
     ['shelf', 'Bookshelf'], ['plant', 'Plant'], ['bare', 'Bare wall']];
   const STANDARD_ROOM = { mic: 'mic', wall: ['window', 'whiteboard', 'window', 'pinboard', 'window'], floor: 'wood', paint: 'slate',
-    lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off', desk: 'wood', chair: 'teal',
-    staff: 'some' };
+    lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off', desk: 'wood', workspace: 'desk',
+    chair: 'teal', staff: 'some' };
   let peekOffice = false; // the preview shows the office while it's being furnished
 
   /* Your team: how each project's agent looks, the choices office.js draws
@@ -856,6 +927,7 @@
       ['teal', 'Teal'], ['green', 'Green'], ['yellow', 'Yellow'], ['grey', 'Grey'], ['black', 'Black'], ['white', 'White']]],
     desk: ['On the desk', [['auto', 'Auto'], ['plant', 'A plant'], ['papers', 'Papers'], ['lamp', 'A lamp'], ['cactus', 'A cactus'],
       ['duck', 'A rubber duck'], ['trophy', 'A trophy'], ['photo', 'A photo'], ['mug', 'A mug'], ['none', 'Nothing']]],
+    workspace: ['Works at', [['auto', 'Where everyone does'], ...ROOM_CHOICES.workspace]],
   };
   const NICKNAME_LIMIT = 16;
   let teamShown = ''; // the projects the team's cards were drawn for
@@ -910,6 +982,11 @@
         const field = document.createElement('label');
         field.textContent = label;
         field.append(select(options, member[part], (value) => dress(project, (m) => { m[part] = value; })));
+        // Where they work, as a picture: their own, or where everyone does
+        if (part === 'workspace') {
+          const workspace = member.workspace === 'auto' ? room.workspace || STANDARD_ROOM.workspace : member.workspace;
+          field.append(picture('workspace', workspace, room));
+        }
         looks.append(field);
       }
       card.append(top, looks);
@@ -1025,9 +1102,10 @@
       el.setAttribute('aria-label', `The back wall, place ${i + 1} from the left`);
       return el;
     }));
-    const corner = $('room-corner');
-    corner.replaceChildren(...ROOM_CHOICES.corner.map(([id, label]) => new Option(label, id, false, id === room.corner)));
-    corner.onchange = () => furnish(() => { room.corner = corner.value; });
+    for (const part of ['corner', 'workspace']) {
+      $(`room-${part}`).replaceChildren(...ROOM_CHOICES[part].map(([id, label]) =>
+        tile(part, id, label, (room[part] || STANDARD_ROOM[part]) === id, () => furnish(() => { room[part] = id; }), room)));
+    }
     drawTeam(room);
     drawDress(room);
   }

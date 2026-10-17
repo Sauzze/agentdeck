@@ -441,7 +441,7 @@ func TestTheRoomKeepsOnlyChoicesItHas(t *testing.T) {
 		t.Errorf("floor %q, pet %q, sky %q; want wood, cat and live", room.Floor, room.Pet, room.Sky)
 	}
 	want := TeamMember{Skin: "auto", Hair: "blue", Hairstyle: "auto", Extra: "none", Outfit: "auto", Colour: "auto", Desk: "auto",
-		Name: "a nickname far l"}
+		Workspace: "auto", Name: "a nickname far l"}
 	if got := room.Team["api"]; got != want {
 		t.Errorf("api's agent is %+v, want %+v", got, want)
 	}
@@ -454,6 +454,29 @@ func TestTheRoomKeepsOnlyChoicesItHas(t *testing.T) {
 		if err := json.Unmarshal([]byte(`{"team": `+team+`}`), &room); err != nil || room.Team == nil || len(room.Team) != 0 {
 			t.Errorf("a team of %s gave %v, %v; want an empty team", team, room.Team, err)
 		}
+	}
+}
+
+func TestEveryoneWorksAtTheOfficesChoiceOrTheirOwn(t *testing.T) {
+	var room Room
+	if err := json.Unmarshal([]byte(`{"workspace": "tent", "corner": "dragon", "team": {
+		"api": {"workspace": "igloo"}, "web": {"workspace": "hammock"}, "docs": {"workspace": 5}}}`), &room); err != nil {
+		t.Fatal(err)
+	}
+	if room.Workspace != "tent" || room.Corner != "dragon" {
+		t.Errorf("workspace %q, corner %q; want tent and dragon", room.Workspace, room.Corner)
+	}
+	for project, want := range map[string]string{"api": "igloo", "web": "auto", "docs": "auto"} {
+		if got := room.Team[project].Workspace; got != want {
+			t.Errorf("%s works at %q, want %q", project, got, want)
+		}
+	}
+	var unknown Room
+	if err := json.Unmarshal([]byte(`{"workspace": "auto", "corner": "volcano"}`), &unknown); err != nil {
+		t.Fatal(err)
+	}
+	if unknown.Workspace != "desk" || unknown.Corner != "arcade" {
+		t.Errorf("workspace %q, corner %q; want the standard desk and arcade", unknown.Workspace, unknown.Corner)
 	}
 }
 
