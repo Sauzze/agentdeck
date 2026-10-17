@@ -420,6 +420,11 @@
       if (phase === 'down') tick();
       talk(phase);
     },
+    // The keys over an agent waiting on you, as the stick's choices: in turn.
+    choose(action) {
+      if (action === 'accept') tick();
+      choose(action);
+    },
     hint(text) {
       tick();
       flash(text);

@@ -699,6 +699,44 @@
   const WAVE_EVERY = 0.5;
   const WAVE_REACH = 110;
 
+  /**
+   * Where the deck's own controls are out of sight (full screen, /office, the
+   * pop-out window), the picked agent waiting on you gets keys in place of
+   * its bubble: ▲ ▼ through the options, ✓ to accept, ✕ to reject. Each key,
+   * in art pixels…
+   */
+  const CHOICE_KEY = { w: 16, h: 14 };
+  /** …the gap between keys, and the wider one between the arrows and the answers… */
+  const CHOICE_GAP = 3;
+  const CHOICE_SPLIT = 6;
+  /** …and from the panel's edge to the keys. */
+  const CHOICE_INSET = 3;
+  /** A tapped key stays down at least this long, so even a quick tap shows. */
+  const CHOICE_PRESS_LENGTH = 0.15;
+  /** Each key's mark, a row of art pixels at a time. */
+  const CHOICE_MARKS = {
+    up: ['0001000', '0011100', '0111110', '1111111'],
+    down: ['1111111', '0111110', '0011100', '0001000'],
+    accept: ['0000011', '0000110', '1101100', '0111000', '0010000'],
+    reject: ['11011', '01110', '00100', '01110', '11011'],
+  };
+
+  /** The choice keys for the agent at `desk`: a panel just above its head, pointing down at it, kept inside the room. */
+  function choicePanel(desk) {
+    const w = CHOICE_INSET * 2 + CHOICE_KEY.w * 4 + CHOICE_GAP * 2 + CHOICE_SPLIT;
+    const h = CHOICE_INSET * 2 + CHOICE_KEY.h;
+    const tip = { x: seat(desk).x - 1, y: DESKS[desk].y - 15 };
+    const left = Math.max(1, Math.min(WIDTH - 1 - w, tip.x - Math.floor(w / 2)));
+    const top = tip.y - 1 - h;
+    let x = left + CHOICE_INSET;
+    const keys = ['up', 'down', 'accept', 'reject'].map((action, i) => {
+      const key = { action, x, y: top + CHOICE_INSET };
+      x += CHOICE_KEY.w + (i === 1 ? CHOICE_SPLIT : CHOICE_GAP);
+      return key;
+    });
+    return { left, top, w, h, tip, keys };
+  }
+
   /** What a person is doing with their body, at `now`. */
   function poseOf(person, now) {
     if (person.isWalking) return { kind: 'walk', step: Math.floor(now * 6) % 2 };
@@ -1350,8 +1388,10 @@
     }
 
     function drawBubble(person) {
-      // Going nuclear says enough on its own.
+      // Going nuclear says enough on its own, and the choice keys stand in
+      // for the bubble of the agent they answer.
       if (person.isLeaving || person.isGoingNuclear) return;
+      if (frame.choices && !person.isStaff && person.session.id === selected) return;
       const state = person.session.state;
       const pose = poseOf(person, now);
       const x = Math.round(person.position.x), top = topOf(person, pose);
@@ -1574,6 +1614,38 @@
     }
 
     /**
+     * The choice keys over the picked agent: dark keys on a speech bubble's
+     * paper, each sinking a pixel while it's pressed.
+     */
+    function drawChoices() {
+      const { left, top, w, h, tip, keys } = frame.choices;
+      fill(left + 1, top, w - 2, h, PALETTE.bubbleEdge);
+      fill(left, top + 1, w, h - 2, PALETTE.bubbleEdge);
+      fill(left + 1, top + 1, w - 2, h - 2, PALETTE.bubble);
+      // The tail, down to the agent's head
+      fill(tip.x - 1, top + h - 1, 3, 1, PALETTE.bubble);
+      dot(tip.x - 1, top + h, PALETTE.bubbleEdge);
+      dot(tip.x, top + h, PALETTE.bubble);
+      dot(tip.x + 1, top + h, PALETTE.bubbleEdge);
+      dot(tip.x, tip.y, PALETTE.bubbleEdge);
+
+      const down = frame.choiceDown;
+      const marks = { up: PALETTE.bubble, down: PALETTE.bubble, accept: colour('unread'), reject: colour('error') };
+      for (const { action, x, y } of keys) {
+        const { w: kw, h: kh } = CHOICE_KEY;
+        const sunk = down && down.action === action && (down.held || now - down.at < CHOICE_PRESS_LENGTH) ? 1 : 0;
+        fill(x + 1, y, kw - 2, kh, PALETTE.frame);
+        fill(x, y + 1, kw, kh - 2, PALETTE.frame);
+        fill(x + 1, y + 1, kw - 2, kh - 2, PALETTE.wainscot);
+        fill(x + 1, y + 1 + sunk, kw - 2, kh - 4, PALETTE.rail);
+        fill(x + 2, y + 1 + sunk, kw - 4, 1, PALETTE.monitorOn);
+        const rows = CHOICE_MARKS[action];
+        const mx = x + Math.floor((kw - rows[0].length) / 2), my = y + 1 + sunk + Math.floor((kh - 4 - rows.length) / 2);
+        rows.forEach((row, r) => [...row].forEach((on, column) => { if (on === '1') dot(mx + column, my + r, marks[action]); }));
+      }
+    }
+
+    /**
      * The window onto the room: rings of shadow from its edge inwards, each
      * fainter than the last, then the edge in the keys' colour.
      */
@@ -1624,6 +1696,7 @@
     DESKS.forEach((_, desk) => drawTimer(desk));
     office.people.forEach(drawBubble);
     DESKS.forEach((_, desk) => drawLabel(desk));
+    if (frame.choices) drawChoices();
 
     if (glass) {
       ctx.restore();
@@ -1692,6 +1765,7 @@
     const mic = { held: false, heldAt: null, releasedAt: null, listener: null, usable: true };
     let wobbling = null;     // the button or the mic, tapped with no desk picked: { what, at }
     let buttonDown = false;  // a finger on the nuclear button
+    let choiceDown = null;   // the last choice key tapped: { action, at, held }
     let finger = null;       // the one finger on the room: { id }
     // The window the canvas is in, its page's or one it has moved to: the
     // room draws with that window's frames and pixels, and pauses only when
@@ -1737,6 +1811,13 @@
       return seat ? seat.session : null;
     }
 
+    /** The choice keys, while the picked agent waits on you and the deck's own controls are out of sight. */
+    function choices() {
+      if (framed) return null;
+      const desk = office.seats.findIndex((s) => s.session && s.session.id === selected);
+      return desk >= 0 && office.seats[desk].session.state === 'asking' ? choicePanel(desk) : null;
+    }
+
     function tick() {
       frame = null;
       if (!visible || host.window.document.hidden) return;
@@ -1759,7 +1840,7 @@
       drawOffice(ctx, office, {
         now, hour: date.getHours(), minute: date.getMinutes(),
         width: canvas.width, height: canvas.height, ratio: host.window.devicePixelRatio || 1,
-        selected, mic, wobble: wobbling, buttonDown, framed,
+        selected, mic, wobble: wobbling, buttonDown, framed, choices: choices(), choiceDown,
       });
     }
 
@@ -1770,8 +1851,9 @@
     /**
      * What's under a point on the page, if it can be tapped. Each target
      * reaches at least SMALLEST_TARGET round its middle; of those in reach,
-     * the nearest wins, and on a tie people come before things, and things
-     * before desks.
+     * the nearest wins, and on a tie choice keys come before people, people
+     * before things, and things before desks. The choice keys' panel covers
+     * what's under it: a tap on it goes to a key or nowhere.
      */
     function targetAt(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
@@ -1807,11 +1889,24 @@
         const { x: dx, y: dy } = DESKS[desk];
         if (target) consider(target, { left: dx - 2, right: dx + DESK_WIDTH + 2, top: dy - 14, bottom: dy + 27 }, 2);
       });
+      const panel = choices();
+      if (panel) {
+        for (const key of panel.keys) {
+          consider({ kind: 'choice', action: key.action },
+            { left: key.x, right: key.x + CHOICE_KEY.w, top: key.y, bottom: key.y + CHOICE_KEY.h }, -1);
+        }
+        const onPanel = x >= panel.left && x <= panel.left + panel.w && y >= panel.top && y <= panel.tip.y;
+        if (onPanel) return best && best.target.kind === 'choice' ? best.target : null;
+      }
       return best && best.target;
     }
 
     /** Everything a key or button does on the deck, done by tapping the room. */
     function press(target) {
+      if (target.kind === 'choice') {
+        choiceDown = { action: target.action, at: clock(), held: true };
+        return on.choose?.(target.action);
+      }
       if (target.kind === 'session') return on.select?.(target.id);
       if (target.kind === 'pinned') return on.hint?.(`Nothing running in ${target.name}`);
       const session = selectedSession();
@@ -1834,6 +1929,7 @@
     function lift() {
       finger = null;
       buttonDown = false;
+      if (choiceDown) choiceDown.held = false;
       if (!mic.held) return;
       mic.held = false;
       mic.releasedAt = clock();

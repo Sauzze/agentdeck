@@ -252,6 +252,7 @@ the room works like the keys:
 | A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
 | The red button | ☢ Max for the selected session |
 | The microphone, held | Talks to the selected session, like 🎙 |
+| ▲ ▼ ✓ ✕ over an agent waiting on you | In full screen, on `/office` and in the pop-out window, where the deck's controls are out of sight, select an agent waiting on you and these keys appear over its desk: ▲ ▼ move through its options, ✓ accepts, ✕ rejects |
 
 **Full screen:** tap **⛶** above the room, and the dial and buttons step aside
 for it. The desks, the red button and the microphone work as above, and the
