@@ -422,6 +422,11 @@
       if (phase === 'down') tick();
       talk(phase);
     },
+    // The paint chips on the picked desk, as the dial.
+    effort(level) {
+      tick();
+      setEffort(level);
+    },
     // The keys over an agent waiting on you, as the stick's choices: in turn.
     choose(action) {
       if (action === 'accept') tick();
