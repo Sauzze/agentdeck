@@ -163,6 +163,8 @@ control Terminal. Click **Allow**.
    Screen**; on Android, open the browser's menu and tap **Add to Home
    screen**. SauzzeDeck Pro now opens full screen and stays paired.
 
+While the deck is open, your phone's screen stays on, from your first tap.
+
 Each phone you pair appears under **Paired phones** on the setup page, with
 when it was last used. **Revoke** cuts one phone off straight away;
 **Unpair All Phones** does it for every phone, and is also in SauzzeDeck
@@ -242,6 +244,21 @@ There's more to see while they work:
   max. Press ☢ Max, and the agent runs to the big red button in the corridor
   and slams it.
 - When few sessions are running, the office's own staff hang around the lounge.
+
+**Furnish it your way** under *Office* in the setup page's Layout:
+
+- **Talk into** a microphone or a megaphone.
+- **The back wall:** five places, each a window, a whiteboard, a pinboard, a
+  poster, a bookshelf, a plant or bare wall. The to-do lists go up on the
+  first whiteboard.
+- **The floor** in wood, tiles, concrete or carpet, **the walls** in slate,
+  sage, clay or cream, and **the lounge's carpet** in navy, teal, plum or sand.
+- **In the lounge:** an arcade machine, a vending machine, a foosball table, a
+  fish tank, or a bookcase and a beanbag. Idle agents go and play, grab a
+  snack, or read.
+- **Daylight** that follows the clock, with night falling at 8 pm, or always day.
+
+It's kept with the layout, so each profile can have an office of its own.
 
 **On your phone**, choose **Office** under *Sessions* in the setup page's
 Layout, or tap **OFFICE** above the keys to switch on the phone itself (and

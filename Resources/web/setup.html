@@ -129,6 +129,12 @@
   .choices { display: flex; gap: 6px; }
   .choices .btn { padding: 4px 12px; }
   .choices .btn.on, .chip.on { border-color: var(--ink); background: var(--cap-top); }
+  .choices .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+  /* The back wall's five places, a row of their own under their name. */
+  .field.stacked { flex-direction: column; align-items: stretch; gap: 8px; }
+  .wall { display: flex; gap: 6px; }
+  .wall select { flex: 1; min-width: 0; max-width: none; padding: 5px 4px; }
   .rows { display: grid; gap: 8px; }
   .line { display: flex; gap: 10px; align-items: center; }
   .chips { flex: 1; min-width: 0; display: flex; gap: 6px; }
@@ -297,6 +303,15 @@
         <p class="hint" id="key-hint"></p>
         <div class="field"><span>Effort dial</span><button class="switch" id="show-dial" aria-label="Show the effort dial"></button></div>
         <div class="field"><span>Stick</span><button class="switch" id="show-stick" aria-label="Show the stick"></button></div>
+        <h3>Office</h3>
+        <div class="field"><span>Talk into</span><div class="choices" id="room-mic"></div></div>
+        <div class="field stacked"><span>Back wall, left to right</span><div class="wall" id="room-wall"></div></div>
+        <div class="field"><span>Floor</span><div class="choices" id="room-floor"></div></div>
+        <div class="field"><span>Walls</span><div class="choices" id="room-paint"></div></div>
+        <div class="field"><span>Lounge</span><div class="choices" id="room-lounge"></div></div>
+        <label class="field"><span>In the lounge</span><select id="room-corner"></select></label>
+        <div class="field"><span>Daylight</span><div class="choices" id="room-sky"></div></div>
+        <p class="hint">How the office looks on your phone and on a screen of its own. The preview shows it while you change it.</p>
         <h3>Buttons</h3>
         <div class="rows" id="rows"></div>
         <p class="note" id="stick-note" hidden>Without the stick, add ▲ and ▼ to answer your agents' questions.</p>
@@ -648,8 +663,13 @@
     drawLayout();
   }
 
-  /** Makes a change, shows it here and on the preview, and sends it on. */
-  function change(edit) {
+  /**
+   * Makes a change, shows it here and on the preview, and sends it on. A
+   * change to the office's furnishing shows the office on the preview, even
+   * for a phone that shows keys, until something else changes.
+   */
+  function change(edit, furnishing = false) {
+    peekOffice = furnishing;
     const before = JSON.stringify(layout);
     edit();
     if (JSON.stringify(layout) === before) return; // already so, like Auto clicked again
@@ -682,17 +702,65 @@
     $('show-stick').classList.toggle('on', layout.stick);
     $('stick-note').hidden = layout.stick || (uses('up') && uses('down'));
     $('add-row').disabled = layout.rows.length >= MAX_ROWS;
+    drawRoom();
     drawRows();
     drawInspector();
     showPreview();
   }
 
-  function choice(label, on, onclick) {
+  function choice(label, on, onclick, swatch) {
     const b = document.createElement('button');
     b.className = 'btn' + (on ? ' on' : '');
     b.textContent = label;
+    if (swatch) {
+      const dot = document.createElement('span');
+      dot.className = 'swatch';
+      dot.style.background = swatch;
+      b.prepend(dot);
+    }
     b.onclick = onclick;
     return b;
+  }
+
+  /* The office's furnishing: the choices office.js draws and the apps keep. */
+
+  const ROOM_CHOICES = {
+    mic: [['mic', 'Microphone'], ['megaphone', 'Megaphone']],
+    floor: [['wood', 'Wood', '#6f5440'], ['tiles', 'Tiles', '#9c9fa6'], ['concrete', 'Concrete', '#73767b'], ['carpet', 'Carpet', '#4b5065']],
+    paint: [['slate', 'Slate', '#2f3446'], ['sage', 'Sage', '#34463d'], ['clay', 'Clay', '#4b3631'], ['cream', 'Cream', '#b5ad98']],
+    lounge: [['navy', 'Navy', '#3f4a5c'], ['teal', 'Teal', '#2f5656'], ['plum', 'Plum', '#513d50'], ['sand', 'Sand', '#7b6e58']],
+    corner: [['arcade', 'An arcade machine'], ['vending', 'A vending machine'], ['foosball', 'A foosball table'],
+      ['fishtank', 'A fish tank'], ['books', 'A bookcase and a beanbag'], ['none', 'Nothing']],
+    sky: [['live', 'Follows the clock'], ['day', 'Always day']],
+  };
+  const WALL_CHOICES = [['window', 'Window'], ['whiteboard', 'Whiteboard'], ['pinboard', 'Pinboard'], ['poster', 'Poster'],
+    ['shelf', 'Bookshelf'], ['plant', 'Plant'], ['bare', 'Bare wall']];
+  const STANDARD_ROOM = { mic: 'mic', wall: ['window', 'whiteboard', 'window', 'pinboard', 'window'], floor: 'wood', paint: 'slate',
+    lounge: 'navy', corner: 'arcade', sky: 'live' };
+  let peekOffice = false; // the preview shows the office while it's being furnished
+
+  function select(options, value, onchange) {
+    const el = document.createElement('select');
+    for (const [id, label] of options) el.add(new Option(label, id, false, id === value));
+    el.onchange = () => onchange(el.value);
+    return el;
+  }
+
+  function drawRoom() {
+    const room = layout.room || (layout.room = structuredClone(STANDARD_ROOM));
+    const furnish = (edit) => change(edit, true);
+    for (const part of ['mic', 'floor', 'paint', 'lounge', 'sky']) {
+      $(`room-${part}`).replaceChildren(...ROOM_CHOICES[part].map(([id, label, swatch]) =>
+        choice(label, room[part] === id, () => furnish(() => { room[part] = id; }), swatch)));
+    }
+    $('room-wall').replaceChildren(...room.wall.map((piece, i) => {
+      const el = select(WALL_CHOICES, piece, (value) => furnish(() => { room.wall[i] = value; }));
+      el.setAttribute('aria-label', `The back wall, place ${i + 1} from the left`);
+      return el;
+    }));
+    const corner = $('room-corner');
+    corner.replaceChildren(...ROOM_CHOICES.corner.map(([id, label]) => new Option(label, id, false, id === room.corner)));
+    corner.onchange = () => furnish(() => { room.corner = corner.value; });
   }
 
   /** Each row as the phone draws it, with its own tools. */
@@ -893,7 +961,8 @@
       return { pin: null, session: s && { id: s.name, project: s.name, dial: false, mic: false, effort: '', ...s } };
     });
     page.postMessage({
-      keys, overflow: Math.max(0, samples - count), theme: colours, scroll: true, layout,
+      keys, overflow: Math.max(0, samples - count), theme: colours, scroll: true,
+      layout: peekOffice ? { ...layout, office: true } : layout,
     }, location.origin);
     $('samples').textContent = `${samples} session${samples === 1 ? '' : 's'}`;
     $('fewer').disabled = samples === 0;
