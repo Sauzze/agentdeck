@@ -274,6 +274,9 @@ func (d *Deck) snapshot() []byte {
 		// What the office's held desks offer: firing here; hiring is the Mac app's for now.
 		"hiring": map[string]bool{"fire": d.config.HiringEnabled, "hire": false},
 		"layout": d.config.Layout,
+		// This computer's clock, so the office can count turns on the phone's,
+		// whichever of the two is right.
+		"now": int64(nowMillis()),
 	})
 	return state
 }

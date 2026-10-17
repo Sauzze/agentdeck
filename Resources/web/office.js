@@ -2761,8 +2761,13 @@
    */
   const STALE_AFTER = 2000;
 
-  /** The deck's snapshot, as the office reads it: a seat per key, its session if it has one. */
-  function seatsOf(snapshot) {
+  /**
+   * The deck's snapshot, as the office reads it: a seat per key, its session
+   * if it has one. Turns are timed on this device's clock, `ahead` of the
+   * computer's by however much, so a computer set wrong doesn't make every
+   * turn look an hour old.
+   */
+  function seatsOf(snapshot, ahead) {
     return (snapshot.keys || []).map((key) => ({
       pin: key.pin || null,
       session: key.session && {
@@ -2771,6 +2776,7 @@
         name: key.session.project || key.session.name || '',
         effort: key.session.effort || '',
         maxPressedAt: key.session.maxPressedAt ?? null,
+        turnStartedAt: key.session.turnStartedAt ? key.session.turnStartedAt + ahead : null,
       },
     }));
   }
@@ -2789,6 +2795,7 @@
     let last = 0;
     let selected = null; // the session the deck's controls act on
     let latest = null;   // the deck's last snapshot
+    let ahead = 0;       // how far this device's clock was ahead of the computer's when it came, in ms
     // The mic: whether a finger holds it, when it last went on and off, and
     // who it talks to.
     const mic = { held: false, heldAt: null, releasedAt: null, listener: null, usable: true };
@@ -2886,7 +2893,7 @@
       if (time - last < FRAME_TIME - 1) return;
       if (last && time - last > STALE_AFTER && latest) {
         office.close();
-        office.apply(seatsOf(latest), latest.theme, time / 1000);
+        office.apply(seatsOf(latest, ahead), latest.theme, time / 1000);
       }
       last = time;
       const now = time / 1000, date = new Date();
@@ -3086,10 +3093,11 @@
     return {
       show(snapshot) {
         latest = snapshot;
+        ahead = snapshot.now ? Date.now() - snapshot.now : 0;
         hiring = snapshot.hiring || { fire: false, hire: false };
         if (!hiring.fire) firing = null;
         office.furnish(snapshot.layout && snapshot.layout.room);
-        office.apply(seatsOf(snapshot), snapshot.theme, clock());
+        office.apply(seatsOf(snapshot, ahead), snapshot.theme, clock());
       },
       close() {
         latest = null;
