@@ -290,7 +290,7 @@ follow the model.
 **The dress code**, under the team, chooses the outfit and colour for each size
 of model, and for each agent while its model isn't known. Add your own rules
 for models the office doesn't know, such as "a model whose name contains
-`qwen-max` is large". Fourteen outfits to choose from, there and on the team
+`qwen-max` is large". Thirteen outfits to choose from, there and on the team
 cards, from a T-shirt to a lab coat, overalls or a Hawaiian shirt.
 
 It's all kept with the layout, so each profile can have an office of its own.
