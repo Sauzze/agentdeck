@@ -3,7 +3,7 @@
 [![CI](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Sauzze/agentdeck/actions/workflows/ci.yml)
 
 <p align="center">
-  <img src="docs/demo.gif" alt="SauzzeDeck Pro in use: the phone's keys become a pixel-art office, which goes full screen sideways; an agent waiting on you is answered from the room with ▼ and ✓, the big red button sends another to max effort, and the office pops out into a window on a Mac" width="800">
+  <img src="docs/demo.gif" alt="SauzzeDeck Pro 1.6 in use: an agent's outfit changes with its model from a T-shirt to a suit; the office is refurnished from the floor to the lounge, a pet and the seasons; a held desk shows paint chips for effort and the big red button sends another agent to max; then one agent is fired and walks out with a box, and a new hire walks in" width="800">
 </p>
 
 A control pad on your phone for the AI coding agents in your terminal: Claude
@@ -217,7 +217,7 @@ SauzzeDeck Pro again from Applications.
 ## The office
 
 <p align="center">
-  <img src="docs/office.png" alt="The office: an agent at each of nine desks, one writing on the whiteboard, one feeding a shredder, one waiting under the clock, three interns round a desk, and the big red button in the corridor" width="800">
+  <img src="docs/office.png" alt="The office: nine agents at their desks, dressed for their models from a T-shirt to a suit, one waving for attention as the room's edge glows, interns round a desk, a dog lying by the web-app desk, an arcade machine in the lounge, and the big red button in the corridor" width="800">
 </p>
 
 Your sessions can also be people in a little pixel-art office. Each key is a
