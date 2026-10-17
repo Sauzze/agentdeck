@@ -88,7 +88,7 @@ struct Response {
 
     static func file(_ url: URL) -> Response {
         guard let data = try? Data(contentsOf: url) else { return .status(404) }
-        let type = url.pathExtension == "png" ? "image/png" : "text/html; charset=utf-8"
+        let type = ["png": "image/png", "js": "text/javascript; charset=utf-8"][url.pathExtension] ?? "text/html; charset=utf-8"
         return Response(contentType: type, body: data)
     }
 

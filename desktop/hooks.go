@@ -76,6 +76,7 @@ func entriesFor(agent Agent) *hookEntries {
 		return &hookEntries{file: filepath.Join(agentFolder(Claude), "settings.json"), events: []string{
 			"SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse",
 			"PostToolUseFailure", "Notification", "Stop", "StopFailure", "SessionEnd",
+			"SubagentStart", "SubagentStop", "PreCompact", "PostCompact",
 		}, handler: map[string]any{"type": "command", "command": command, "async": true}}
 	case Codex:
 		return &hookEntries{file: filepath.Join(agentFolder(Codex), "hooks.json"), events: []string{
@@ -148,7 +149,7 @@ func connectAgents() error {
 	}
 	var unreadable []string
 	for _, agent := range found {
-		if err := connect(agent); errors.Is(err, errUnreadable) {
+		if err := connect(agent, true); errors.Is(err, errUnreadable) {
 			unreadable = append(unreadable, entriesFor(agent).file)
 		} else if err != nil {
 			return err
@@ -162,10 +163,10 @@ func connectAgents() error {
 
 var errUnreadable = errors.New("settings aren't valid JSON")
 
-// connect adds the deck's entries for agent, replacing any it had. Claude
-// Code's voice input is turned on in tap mode — which the mic key needs —
-// unless voice is already set up some other way.
-func connect(agent Agent) error {
+// connect adds the deck's entries for agent, replacing any it had. With
+// turnOnVoice, Claude Code's voice input is turned on in tap mode — which the
+// mic key needs — unless voice is already set up some other way.
+func connect(agent Agent, turnOnVoice bool) error {
 	entries := entriesFor(agent)
 	if entries == nil {
 		return writePlugin()
@@ -184,7 +185,7 @@ func connect(agent Agent) error {
 		hooks[event] = append(groups, map[string]any{"hooks": []any{entries.handler}})
 	}
 	settings["hooks"] = hooks
-	if _, set := settings["voice"]; agent == Claude && !set {
+	if _, set := settings["voice"]; turnOnVoice && agent == Claude && !set {
 		settings["voice"] = map[string]any{"enabled": true, "mode": "tap"}
 	}
 	return writeSettings(settings, entries.file, !entries.isOwnFile)
@@ -220,13 +221,34 @@ func disconnectAgents() error {
 }
 
 // refreshHooks rewrites the entries of the agents already connected, so they
-// point at this copy of the program wherever it has been moved or updated to.
+// point at this copy of the program wherever it has been moved or updated to,
+// and follow every event this version does, even those an earlier version
+// didn't. Voice is left alone: only connecting turns it on.
 func refreshHooks() {
 	for _, agent := range foundAgents() {
-		if isConnected(agent) {
-			_ = connect(agent)
+		if hasEntries(agent) {
+			_ = connect(agent, false)
 		}
 	}
+}
+
+// hasEntries: the deck is in agent's hooks for at least one event.
+func hasEntries(agent Agent) bool {
+	entries := entriesFor(agent)
+	if entries == nil {
+		return isConnected(agent)
+	}
+	settings, err := readSettings(entries.file)
+	if err != nil {
+		return false
+	}
+	hooks, _ := settings["hooks"].(map[string]any)
+	for _, groups := range hooks {
+		if hasOurs(groups) {
+			return true
+		}
+	}
+	return false
 }
 
 // writePlugin writes OpenCode's plugin, which runs the hook: OpenCode has no

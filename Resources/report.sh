@@ -7,7 +7,7 @@
 # The event JSON arrives on stdin and is passed on as it is. The hook's key
 # comes from hook-header, which the app writes next to this script: curl
 # reads it from the file, so it never appears on a command line, where any
-# process on the Mac could see it with `ps`. Three more things are added as
+# process on the Mac could see it with `ps`. Four more things are added as
 # headers:
 #   - the agent, so the app reads the event in that agent's terms.
 #   - the time the event was raised. Hooks run in the background, so two events
@@ -15,6 +15,9 @@
 #   - the agent's tty. Hooks have no terminal of their own, so this walks up
 #     the process tree to the first ancestor that has one. The app uses it to
 #     find the Terminal tab.
+#   - the folder the agent was started in, where the agent says. The event's
+#     cwd follows the agent into subfolders; the app names the session's
+#     project from this instead.
 #
 # It never blocks or fails the session. If the app isn't running, the event
 # is simply dropped.
@@ -66,6 +69,7 @@ curl -s -m 2 -o /dev/null \
   -H @"$DIR/hook-header" \
   -H "X-AgentDeck-Agent: $AGENT" \
   -H "X-AgentDeck-TTY: $tty" \
+  -H "X-AgentDeck-Project: ${CLAUDE_PROJECT_DIR:-$GEMINI_PROJECT_DIR}" \
   -H "X-AgentDeck-At: $AT" \
   --data-binary @- \
   "http://127.0.0.1:{{PORT}}/hook"

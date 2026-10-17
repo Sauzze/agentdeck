@@ -2,11 +2,13 @@ import CoreGraphics
 import Foundation
 
 /// How the phone's deck is laid out, as set up on the setup page: how many
-/// session keys, whether the dial and stick show, and the rows of buttons
-/// under them. It is checked before it's kept: the phone draws it, and its
+/// session keys, whether the office shows in their place, whether the dial
+/// and stick show, and the rows of buttons under them. It is checked before it's kept: the phone draws it, and its
 /// buttons type into sessions. The Windows and Linux app's layout.go matches.
 struct Layout: Codable, Equatable {
     var keys = KeyCount.auto
+    /// The Agent Office in place of the keys: a desk for each, in the same order.
+    var office = false
     var dial = true
     var stick = true
     var rows: [ButtonRow] = []
@@ -21,18 +23,21 @@ struct Layout: Codable, Equatable {
         ButtonRow(tall: false, buttons: ["esc", "send", "clear"].map { Button(id: $0) }),
     ])
 
-    init(keys: KeyCount = .auto, dial: Bool = true, stick: Bool = true, rows: [ButtonRow] = []) {
+    init(keys: KeyCount = .auto, office: Bool = false, dial: Bool = true, stick: Bool = true, rows: [ButtonRow] = []) {
         self.keys = keys
+        self.office = office
         self.dial = dial
         self.stick = stick
         self.rows = rows
     }
 
-    /// What's left out is the default: Auto keys, the dial and the stick
-    /// showing, no buttons. A value of the wrong kind refuses the layout.
+    /// What's left out is the default: Auto keys, no office, the dial and
+    /// the stick showing, no buttons. A value of the wrong kind refuses the
+    /// layout.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         keys = try c.decodeIfPresent(KeyCount.self, forKey: .keys) ?? .auto
+        office = try c.decodeIfPresent(Bool.self, forKey: .office) ?? false
         dial = try c.decodeIfPresent(Bool.self, forKey: .dial) ?? true
         stick = try c.decodeIfPresent(Bool.self, forKey: .stick) ?? true
         rows = try c.decodeIfPresent([ButtonRow].self, forKey: .rows) ?? []
@@ -56,7 +61,7 @@ struct Layout: Codable, Equatable {
             }
             return buttons.isEmpty ? nil : ButtonRow(tall: row.tall, buttons: buttons)
         }
-        return Layout(keys: keys, dial: dial, stick: stick, rows: kept)
+        return Layout(keys: keys, office: office, dial: dial, stick: stick, rows: kept)
     }
 
     /// The button made in setup with `id`, if the layout has it.

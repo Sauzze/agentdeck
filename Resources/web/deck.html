@@ -58,8 +58,9 @@
      on a grid of six columns: one key fills the space, two stack, three are
      one over two, up to a 3×3 of nine, and no cell is ever left empty.
      What's written on a key grows with it. */
+  .view { position: relative; height: 44dvh; flex: none; min-height: 0; }
   .keys { display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(var(--rows, 2), 1fr);
-    gap: var(--gap); height: 44dvh; flex: none; }
+    gap: var(--gap); height: 100%; }
   .key { grid-column: span var(--span, 2); min-width: 0; min-height: 0; display: flex; flex-direction: column;
     justify-content: space-between; padding: 11px 12px; container-type: inline-size; }
   .key .row { display: flex; justify-content: space-between; align-items: center; }
@@ -80,6 +81,36 @@
   .key[data-state="unread"]   { --c: var(--unread); }
   .key[data-state="error"]    { --c: var(--error); }
   .key.selected { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  /* The office in place of the keys: the same sessions, as people at desks. */
+  /* The canvas is laid over the space, not sized by it: its own pixels would
+     otherwise feed back into its size. */
+  .office { position: relative; height: 100%; touch-action: none; }
+  .office canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .keys[hidden], .office[hidden], .away[hidden] { display: none; }
+  /* Keys or office, flipped on this phone like the stick's legend. */
+  .view-switch { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); display: flex; gap: 14px;
+    padding: 6px 12px; background: none; border: 0; font-family: inherit; font-size: 10px; font-weight: 700; line-height: 1;
+    letter-spacing: .14em; color: var(--faint); }
+  .view-switch .on { color: var(--dim); }
+  /* /office on the computer, where the browser can: the room in a window of
+     its own, kept on top of the others. The page says where it went. */
+  .pop-out { position: absolute; top: 8px; right: 8px; padding: 6px 8px; background: none; border: 0; cursor: pointer;
+    font-family: inherit; font-size: 10px; font-weight: 700; line-height: 1; letter-spacing: .14em; color: var(--dim); }
+  .pop-out:hover { color: var(--ink); }
+  .away { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; color: var(--dim); font-size: 15px; text-align: center; }
+  .away button { padding: 12px 20px; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+  /* The phone's office alone, full screen: asked for above the room, at the
+     legend's height, and left from the screen's corner. */
+  .full-switch { position: absolute; bottom: 100%; right: -6px; padding: 4px 6px; background: none; border: 0;
+    line-height: 0; color: var(--faint); }
+  .full-switch svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.2;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .full-switch .shrink, .full .full-switch .grow { display: none; }
+  .full .full-switch .shrink { display: inline; }
+  .full .full-switch { position: fixed; bottom: auto; top: calc(env(safe-area-inset-top) + 4px);
+    right: calc(env(safe-area-inset-right) + 4px); padding: 12px; color: var(--dim); }
 
   @keyframes pulse { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 30%, var(--cap-top)), color-mix(in srgb, var(--c) 20%, var(--cap))); } }
   @keyframes blink { 50% { background: linear-gradient(color-mix(in srgb, var(--c) 38%, var(--cap-top)), color-mix(in srgb, var(--c) 28%, var(--cap))); } }
@@ -186,11 +217,21 @@
   .status.off { color: var(--error); }
   .status.flash { color: var(--ink); }
 
+  /* /office, and the phone's office full screen: the office alone, filling
+     the screen. What the status line has to say floats over it, and only
+     while it says it. */
+  .whole .deck, .full .deck { display: flex;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .whole .view, .full .view { flex: 1; height: auto; }
+  .whole .controls, .whole .view-switch, .full .controls, .full .view-switch, .full .install { display: none; }
+  .whole .status, .full .status { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 12px); font-size: 13px; }
+  .whole .status:not(.flash):not(.off), .full .status:not(.flash):not(.off) { visibility: hidden; }
+
   /* Sideways: keys on the left, everything else on the right. */
   @media (orientation: landscape) {
     .deck { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; column-gap: 20px;
       padding-top: calc(env(safe-area-inset-top) + 24px); }
-    .keys { height: 100%; }
+    .view { height: 100%; }
     .controls { grid-row: 1; grid-column: 2; }
     .status { grid-column: 1 / -1; }
     .analog { min-height: 0; }
@@ -201,7 +242,16 @@
 </head>
 <body>
 <main class="deck">
-  <section class="keys" id="keys"></section>
+  <div class="view">
+    <button class="view-switch" id="view-switch" aria-label="Switch between keys and office"><span>KEYS</span><span>OFFICE</span></button>
+    <section class="keys" id="keys"></section>
+    <section class="office" id="office" hidden>
+      <canvas id="office-canvas"></canvas>
+      <button class="full-switch" id="full-switch" aria-label="Full screen" hidden><svg viewBox="0 0 24 24"><path class="grow" d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><path class="shrink" d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
+      <button class="pop-out" id="pop-out" title="Keep the office on top of your other windows" hidden>POP OUT</button>
+      <div class="away" id="away" hidden>The office is in its own window.<button class="cap" id="bring-back">Bring it back</button></div>
+    </section>
+  </div>
 
   <section class="controls">
     <div class="target"><span id="target">no session selected</span><span id="target-state"></span></div>
@@ -243,6 +293,7 @@
 </div>
 <label id="haptic" aria-hidden="true"><input type="checkbox" switch></label>
 
+<script src="/office.js"></script>
 <script>
   /** Today's controls, for a computer that sends no layout of its own. The
       keys are whatever it sends: one per session, or a fixed number. */
@@ -279,6 +330,8 @@
   // On the setup page, the deck is a preview: that page sends it what to
   // draw, and its controls say what they would do instead of doing it.
   const preview = location.pathname === '/setup/preview';
+  // /office: the office alone, for a spare screen.
+  const whole = location.pathname === '/office';
   const $ = (id) => document.getElementById(id);
 
   let keyData = [];    // the keys as the server lays them out
@@ -300,6 +353,7 @@
     $('analog').hidden = !layout.dial && !layout.stick;
     $('analog').classList.toggle('single', layout.dial !== layout.stick);
     buildButtons(layout.rows);
+    showView();
   }
 
   /**
@@ -345,6 +399,167 @@
       });
       return el;
     }));
+  }
+
+  /* ------------------------------------------------------------- office */
+
+  // Tapping the room does what the keys and buttons do, with the deck's tick.
+  // Without its script, lost on a bad connection, the keys still work.
+  const office = !window.AgentOffice ? { show() {}, close() {}, select() {}, setVisible() {}, setFramed() {}, moved() {} } : AgentOffice.create($('office-canvas'), {
+    select(id) {
+      tick();
+      selected = id;
+      render();
+      post('/focus', { session: id });
+    },
+    max() {
+      tick();
+      setEffort('max', 'max');
+    },
+    mic(phase) {
+      if (phase === 'down') tick();
+      talk(phase);
+    },
+    // The keys over an agent waiting on you, as the stick's choices: in turn.
+    choose(action) {
+      if (action === 'accept') tick();
+      choose(action);
+    },
+    hint(text) {
+      tick();
+      flash(text);
+    },
+  });
+
+  /**
+   * The keys or the office, as chosen in setup's layout. The legend above
+   * them flips it on this phone, until the layout's choice changes.
+   */
+  function showView() {
+    const chosen = !!(layout && layout.office);
+    let flipped = null;
+    try { flipped = JSON.parse(localStorage.getItem('view')); } catch {}
+    const showOffice = whole || (!preview && flipped && flipped.chosen === chosen ? flipped.office : chosen);
+    $('keys').hidden = showOffice;
+    $('office').hidden = !showOffice;
+    office.setVisible(showOffice);
+    // Full screen is the phone's office alone: with the keys back, it ends.
+    $('full-switch').hidden = whole || preview || !showOffice;
+    if (full && !showOffice) setFull(false);
+    const [keys, room] = $('view-switch').children;
+    keys.classList.toggle('on', !showOffice);
+    room.classList.toggle('on', showOffice);
+  }
+
+  $('view-switch').addEventListener('click', () => {
+    const chosen = !!(layout && layout.office);
+    try { localStorage.setItem('view', JSON.stringify({ chosen, office: $('office').hidden })); } catch {}
+    tick();
+    showView();
+  });
+
+  /* --------------------------------------------------------- full screen */
+
+  /**
+   * The phone's office alone, filling the screen as /office does: the dial
+   * and buttons step aside, and the room's desks, red button and microphone
+   * do their work. Where the browser can, its own bars go too; iPhone
+   * Safari keeps them, having no full screen for a page. The room is wide,
+   * so it's biggest sideways. A reload brings the controls back.
+   */
+  let full = false;
+  // Beside the controls, the room is seen through a window, rounded like the
+  // keys; on a screen of its own, it fills it.
+  office.setFramed(!whole);
+
+  function setFull(on) {
+    full = on;
+    document.body.classList.toggle('full', on);
+    office.setFramed(!on);
+    $('full-switch').setAttribute('aria-label', on ? 'Leave full screen' : 'Full screen');
+    const page = document.documentElement;
+    if (on && page.requestFullscreen && !document.fullscreenElement) page.requestFullscreen().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (on && matchMedia('(orientation: portrait)').matches) flash('Turn your phone sideways for a bigger office');
+  }
+
+  $('full-switch').addEventListener('click', () => {
+    tick();
+    setFull(!full);
+  });
+
+  // Leaving the browser's full screen, by its back gesture or a key, leaves the office's too.
+  document.addEventListener('fullscreenchange', () => {
+    if (full && !document.fullscreenElement) setFull(false);
+  });
+
+  /* ------------------------------------------------------------ pop out */
+
+  /** The room's own shape, two screen pixels to each of its own: sharp, and small enough for a corner. */
+  const POP_OUT_SIZE = { width: 640, height: 360 };
+  let popped = null; // the office's own window, while the room is in it
+
+  // Chrome and Edge can keep a window of the page on top of the others, but
+  // only for a secure page, such as localhost on the computer. The button
+  // shows only where that works: never on a phone, which reaches the
+  // computer over plain http.
+  if (whole && window.documentPictureInPicture) $('pop-out').hidden = false;
+
+  $('pop-out').addEventListener('click', async () => {
+    $('pop-out').hidden = true;
+    let win;
+    try {
+      win = await documentPictureInPicture.requestWindow(POP_OUT_SIZE);
+    } catch {
+      $('pop-out').hidden = false;
+      return flash("Couldn't open the office's window");
+    }
+    popOut(win);
+  });
+
+  $('bring-back').addEventListener('click', () => popped && popped.close());
+
+  /**
+   * Moves the room into a window of its own, still drawn and tapped as on
+   * the page. The page keeps the stream; the window only shows what it has.
+   * It opens empty, so it takes the page's styles, and follows its colours
+   * and status line, to say what /office says: a hint, or that the
+   * computer can't be reached.
+   */
+  function popOut(win) {
+    popped = win;
+    const canvas = $('office-canvas');
+    const doc = win.document;
+    doc.title = document.title;
+    doc.head.append(document.querySelector('style').cloneNode(true));
+    doc.body.className = 'whole';
+    const room = doc.createElement('section');
+    room.className = 'office';
+    const status = doc.createElement('div');
+    status.className = 'status';
+    room.append(canvas);
+    doc.body.append(room, status);
+    const mirror = () => {
+      doc.documentElement.style.cssText = document.documentElement.style.cssText;
+      status.className = $('status').className;
+      status.textContent = $('status').textContent;
+    };
+    const watching = new MutationObserver(mirror);
+    watching.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    watching.observe($('status'), { attributes: true, childList: true, characterData: true, subtree: true });
+    mirror();
+    office.moved();
+    $('away').hidden = false;
+
+    // However the window closes, the room comes back to the page.
+    win.addEventListener('pagehide', () => {
+      watching.disconnect();
+      $('office').prepend(canvas);
+      office.moved();
+      popped = null;
+      $('away').hidden = true;
+      $('pop-out').hidden = false;
+    }, { once: true });
   }
 
   /* --------------------------------------------------------------- dial */
@@ -440,17 +655,7 @@
   function act(el, phase) {
     const action = el.dataset.action;
 
-    // The Mac stops recording in the tab where it started, so a release has
-    // to arrive even if the selection has gone in the meantime. It goes after
-    // its press: one that overtook it would stop nothing, and the press would
-    // then start a recording nothing stops.
-    if (action === 'mic' && (phase === 'up' || selected)) {
-      const params = { session: selected || '', action, phase };
-      listening = listening
-        .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
-        .catch(() => {}); // one that fails mustn't stop those after it
-      return listening;
-    }
+    if (action === 'mic') return talk(phase);
     if (!selected) return;
 
     // /clear throws the conversation away, and a made button can ask twice
@@ -462,7 +667,7 @@
 
     if (action === 'max') {
       el.querySelector('.dome').animate({ filter: ['brightness(1.7) drop-shadow(0 0 14px #ff2a1a)', 'none'] }, { duration: 700, easing: 'ease-out' });
-      setEffort('max');
+      setEffort('max', 'max');
     } else if (action === 'button') {
       send('/act', { session: selected, action, button: el.dataset.button });
     } else {
@@ -470,10 +675,27 @@
     }
   }
 
-  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it. */
-  function setEffort(level) {
+  /**
+   * The mic, from the 🎙 button or the office's: pressed to start listening,
+   * let go to send. The Mac stops recording in the tab where it started, so
+   * a release has to arrive even if the selection has gone in the meantime.
+   * It goes after its press: one that overtook it would stop nothing, and
+   * the press would then start a recording nothing stops.
+   */
+  function talk(phase) {
+    if (phase === 'down' && !selected) return;
+    const params = { session: selected || '', action: 'mic', phase };
+    listening = listening
+      .then(() => send('/act', params, AbortSignal.timeout && AbortSignal.timeout(MIC_WAIT)))
+      .catch(() => {}); // one that fails mustn't stop those after it
+    return listening;
+  }
+
+  /** Claude Code's thinking effort, from the Max button or the steps, as the dial sets it.
+   *  ☢ Max names itself as the source, so the office can tell a press from the dial. */
+  function setEffort(level, source) {
     if (!selected) return;
-    send('/act', { session: selected, action: 'effort', level });
+    send('/act', { session: selected, action: 'effort', level, ...(source && { source }) });
   }
 
   let armed = null; // the button waiting for its second tap
@@ -702,6 +924,7 @@
     // Nothing chosen: whoever is waiting on you, else the first.
     if (!selected && sessions.length) selected = (sessions.find((s) => s.state === 'asking') || sessions[0]).id;
     const sel = sessions.find((s) => s.id === selected);
+    office.select(selected);
 
     [...$('keys').children].forEach((el, i) => {
       const k = keyData[i] || {};
@@ -713,12 +936,12 @@
       else { delete el.dataset.state; delete el.dataset.session; }
       // A pinned project with nothing running keeps its name on its key.
       // Claude Code's keys show its effort; every other agent's, its name.
-      el.querySelector('.name').textContent = s ? s.name : k.pin || '—';
+      el.querySelector('.name').textContent = s ? s.project : k.pin || '—';
       el.querySelector('.effort').textContent = s ? (s.dial ? s.effort : s.agentName) : k.pin ? 'not running' : '';
     });
 
     $('target').innerHTML = sel ? `→ <b></b>` : 'no session selected';
-    if (sel) $('target').querySelector('b').textContent = sel.name;
+    if (sel) $('target').querySelector('b').textContent = sel.project;
     $('target-state').textContent = !sel ? ''
       : sel.pending ? `${STATE_WORDS[sel.state] || sel.state} · effort queued`
       : STATE_WORDS[sel.state] || sel.state;
@@ -808,13 +1031,14 @@
     scrollEnabled = data.scroll;
     applyTheme(data.theme);
     applyLayout(data.layout || STANDARD_LAYOUT);
+    office.show(data);
     $('status').classList.remove('off');
     render();
   }
 
   /** In the preview, what a control would have done to the selected session. */
   function rehearse(params) {
-    const name = current() ? ` · ${current().name}` : '';
+    const name = current() ? ` · ${current().project}` : '';
     if (params.action === 'button') {
       const b = layout.rows.flatMap((row) => row.buttons).find((x) => x.id === params.button);
       const does = b.text ? `types ${b.text}` : b.key ? `presses ${KEY_NAMES[b.key]}` : 'types nothing yet';
@@ -831,7 +1055,7 @@
 
   /** Unpaired on the computer: the pairing page takes over, without the old key. */
   function unpaired() {
-    location.replace('/');
+    location.replace(location.pathname);
   }
 
   // Installed, it runs standalone; in a browser it is a tab worth upgrading.
@@ -849,6 +1073,10 @@
     };
   }
 
+  if (whole) {
+    document.body.classList.add('whole');
+    document.title = 'Agent Office';
+  }
   buildKeys(6);
   applyLayout(STANDARD_LAYOUT);
   if (preview) {
@@ -863,10 +1091,11 @@
       // Closed for good means the computer answered, but not with the deck: it no
       // longer knows this phone. Unreachable, the stream keeps retrying.
       if (stream.readyState === EventSource.CLOSED) return unpaired();
+      office.close();
       $('status').classList.add('off');
       $('status').textContent = "Can't reach your computer. Is SauzzeDeck Pro running?";
     };
-    installHint();
+    if (!whole) installHint();
   }
   render();
 </script>

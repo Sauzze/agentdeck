@@ -62,6 +62,9 @@ final class Phones {
     /// What the setup page calls a phone. The User-Agent is all there is to
     /// go on, and a broad name is all it can honestly give.
     static func name(forUserAgent userAgent: String) -> String {
+        // Agent Office pairs like a phone. Its app is named with a space, so
+        // the system may write it either way.
+        if userAgent.contains("AgentOffice") || userAgent.contains("Agent%20Office") { return "Agent Office" }
         if userAgent.contains("iPhone") { return "iPhone" }
         if userAgent.contains("iPad") { return "iPad" }
         if userAgent.contains("Android") { return "Android phone" }

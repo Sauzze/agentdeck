@@ -39,6 +39,7 @@ enum Hooks {
             return Entries(file: Paths.claudeSettings, events: [
                 "SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse",
                 "PostToolUseFailure", "Notification", "Stop", "StopFailure", "SessionEnd",
+                "SubagentStart", "SubagentStop", "PreCompact", "PostCompact",
             ], handler: ["type": "command", "command": command, "async": true])
         case .codex:
             return Entries(file: Paths.codexHooks, events: [
@@ -101,26 +102,50 @@ enum Hooks {
         try updateFiles()
         var unreadable: [URL] = []
         for agent in agents {
-            guard let entries = entries(for: agent) else {
-                try writePlugin()
-                continue
-            }
             do {
-                var settings = entries.isOwnFile ? [:] : try read(entries.file)
-                var hooks = withoutOurs(settings["hooks"] as? [String: Any] ?? [:])
-                for event in entries.events {
-                    hooks[event] = (hooks[event] as? [[String: Any]] ?? []) + [["hooks": [entries.handler]]]
-                }
-                settings["hooks"] = hooks
-                if agent == .claude && settings["voice"] == nil {
-                    settings["voice"] = ["enabled": true, "mode": "tap"]
-                }
-                try write(settings, to: entries.file, backup: !entries.isOwnFile)
-            } catch HookError.unreadableSettings {
-                unreadable.append(entries.file)
+                try add(agent, turningOnVoice: true)
+            } catch HookError.unreadableSettings(let files) {
+                unreadable += files
             }
         }
         if !unreadable.isEmpty { throw HookError.unreadableSettings(unreadable) }
+    }
+
+    /// Brings agents connected by an earlier version up to this one's list
+    /// of events, so an update that follows more of them works without
+    /// connecting again. Agents the deck isn't in are left alone, and so is
+    /// voice: only connecting turns it on.
+    static func refresh() throws {
+        let connected = found.filter(hasEntries)
+        guard !connected.isEmpty else { return }
+        try updateFiles()
+        for agent in connected where !isConnected(agent) { try? add(agent, turningOnVoice: false) }
+    }
+
+    /// The deck is in `agent`'s hooks for at least one event.
+    private static func hasEntries(_ agent: Agent) -> Bool {
+        guard let entries = entries(for: agent) else { return isConnected(agent) }
+        guard let hooks = (try? read(entries.file))?["hooks"] as? [String: Any] else { return false }
+        return hooks.values.contains { value in
+            (value as? [[String: Any]] ?? []).contains { group in
+                ((group["hooks"] as? [[String: Any]]) ?? []).contains(where: isOurs)
+            }
+        }
+    }
+
+    /// Adds the deck's entries for `agent`, replacing any it had.
+    private static func add(_ agent: Agent, turningOnVoice: Bool) throws {
+        guard let entries = entries(for: agent) else { return try writePlugin() }
+        var settings = entries.isOwnFile ? [:] : try read(entries.file)
+        var hooks = withoutOurs(settings["hooks"] as? [String: Any] ?? [:])
+        for event in entries.events {
+            hooks[event] = (hooks[event] as? [[String: Any]] ?? []) + [["hooks": [entries.handler]]]
+        }
+        settings["hooks"] = hooks
+        if turningOnVoice && agent == .claude && settings["voice"] == nil {
+            settings["voice"] = ["enabled": true, "mode": "tap"]
+        }
+        try write(settings, to: entries.file, backup: !entries.isOwnFile)
     }
 
     static func disconnect() throws {

@@ -292,6 +292,7 @@
     <h2>Layout</h2>
     <div class="layout-body">
       <div class="editor">
+        <div class="field"><span>Sessions</span><div class="choices" id="view"></div></div>
         <div class="field"><span>Session keys</span><div class="choices" id="key-count"></div></div>
         <p class="hint" id="key-hint"></p>
         <div class="field"><span>Effort dial</span><button class="switch" id="show-dial" aria-label="Show the effort dial"></button></div>
@@ -615,8 +616,9 @@
   const AGENTS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode', grok: 'Grok' };
   /** Who the preview shows on its keys, as many as you choose under it. */
   const SAMPLES = [
-    { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true },
-    { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking' },
+    { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true,
+      activity: 'Waiting for you: Bash' },
+    { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking', tool: 'Bash', activity: 'Run the tests' },
     { name: 'docs', agent: 'gemini', agentName: 'Gemini CLI', state: 'unread' },
     { name: 'infra', agent: 'opencode', agentName: 'OpenCode', state: 'idle' },
     { name: 'mobile', agent: 'grok', agentName: 'Grok', state: 'thinking' },
@@ -667,11 +669,15 @@
   }
 
   function drawLayout() {
+    $('view').replaceChildren(
+      choice('Keys', !layout.office, () => change(() => { layout.office = false; })),
+      choice('Office', layout.office, () => change(() => { layout.office = true; })));
     $('key-count').replaceChildren(...KEY_COUNTS.map((n) =>
       choice(n === 'auto' ? 'Auto' : n, layout.keys === n, () => change(() => { layout.keys = n; }))));
-    $('key-hint').textContent = layout.keys === 'auto'
+    $('key-hint').textContent = (layout.keys === 'auto'
       ? 'A key for each running session, up to nine. The fewer there are, the bigger they get.'
-      : `Always ${layout.keys} keys, each in the same place.`;
+      : `Always ${layout.keys} keys, each in the same place.`)
+      + (layout.office ? ' In the office, each key is a desk, with its session at work there. Tap a desk to pick it.' : '');
     $('show-dial').classList.toggle('on', layout.dial);
     $('show-stick').classList.toggle('on', layout.stick);
     $('stick-note').hidden = layout.stick || (uses('up') && uses('down'));
@@ -884,7 +890,7 @@
     const count = layout.keys === 'auto' ? Math.max(1, samples) : layout.keys;
     const keys = Array.from({ length: count }, (_, i) => {
       const s = i < samples && SAMPLES[i];
-      return { pin: null, session: s && { id: s.name, dial: false, mic: false, effort: '', ...s } };
+      return { pin: null, session: s && { id: s.name, project: s.name, dial: false, mic: false, effort: '', ...s } };
     });
     page.postMessage({
       keys, overflow: Math.max(0, samples - count), theme: colours, scroll: true, layout,

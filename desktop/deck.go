@@ -82,7 +82,7 @@ func NewDeck() *Deck {
 
 // Ingest takes an event from the hook. reported is the agent the hook was
 // set up for; see agentOf for why that isn't always the sender.
-func (d *Deck) Ingest(event map[string]any, reported, tab string, at float64) {
+func (d *Deck) Ingest(event map[string]any, reported, tab, startedIn string, at float64) {
 	agent := agentOf(event, reported)
 	canonical := agent.canonical(event)
 	if canonical == nil {
@@ -93,7 +93,7 @@ func (d *Deck) Ingest(event map[string]any, reported, tab string, at float64) {
 	if tab == "" {
 		tab = d.launcherFor(canonical, agent)
 	}
-	if d.sessions.Apply(canonical, agent, tab, at) {
+	if d.sessions.Apply(canonical, agent, tab, startedIn, at) {
 		d.changed()
 	}
 }
@@ -187,7 +187,7 @@ func (d *Deck) layout() ([]deckKey, []*Session) {
 		}
 		var candidates []*Session
 		for _, s := range remaining {
-			if s.Folder == *keys[i].pin {
+			if s.Project == *keys[i].pin {
 				candidates = append(candidates, s)
 			}
 		}
@@ -259,8 +259,12 @@ func (d *Deck) snapshot() []byte {
 				effort = s.PendingEffort
 			}
 			entry["session"] = map[string]any{
-				"id": s.ID, "name": s.Name(), "state": s.State, "effort": effort, "pending": s.PendingEffort != "",
-				"agent": s.Agent, "agentName": s.Agent.Name(), "dial": s.Agent.HasEffortDial(), "mic": s.Agent.HasVoice(),
+				"id": s.ID, "name": s.Name(), "project": s.ProjectName(), "state": s.State, "effort": effort,
+				"pending": s.PendingEffort != "", "agent": s.Agent, "agentName": s.Agent.Name(),
+				"dial": s.Agent.HasEffortDial(), "mic": s.Agent.HasVoice(),
+				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "subagents": append([]Subagent{}, s.Subagents...),
+				"maxPressedAt": millisOrNull(s.MaxPressedAt), "compacting": s.Compacting,
+				"turnStartedAt": millisOrNull(s.TurnStartedAt), "errorKind": orNull(s.ErrorKind),
 			}
 		}
 		entries[i] = entry
@@ -270,6 +274,21 @@ func (d *Deck) snapshot() []byte {
 		"layout": d.config.Layout,
 	})
 	return state
+}
+
+// orNull and millisOrNull write nothing as null, as the Mac app does.
+func orNull(text string) any {
+	if text == "" {
+		return nil
+	}
+	return text
+}
+
+func millisOrNull(at float64) any {
+	if at == 0 {
+		return nil
+	}
+	return int64(at)
 }
 
 // MARK: Phones
@@ -488,6 +507,11 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 		defer d.mu.Unlock()
 		if session = d.sessions.Get(id); session == nil {
 			return http.StatusNotFound, "Session not found"
+		}
+		// ☢ Max says so, where the dial reaching max doesn't: the office only
+		// sends its agent to the button for a press.
+		if query.Get("source") == "max" && level == "max" {
+			session.MaxPressedAt = nowMillis()
 		}
 		session.PendingEffort = level
 		if level == session.Effort {

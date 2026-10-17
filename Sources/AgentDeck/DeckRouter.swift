@@ -43,7 +43,8 @@ final class DeckRouter: Router {
             guard deck.access.isHookKey(request.headers["x-agentdeck-token"]) else { return respond(.status(401)) }
             let time = Double(request.headers["x-agentdeck-at"] ?? "") ?? Date().timeIntervalSince1970 * 1000
             deck.ingest(request.json, reportedAs: request.headers["x-agentdeck-agent"] ?? "",
-                        tty: request.headers["x-agentdeck-tty"] ?? "", at: time)
+                        tty: request.headers["x-agentdeck-tty"] ?? "",
+                        startedIn: request.headers["x-agentdeck-project"] ?? "", at: time)
             return respond(.status(204))
         }
 
@@ -59,10 +60,18 @@ final class DeckRouter: Router {
             return respond(.json(["key": key]))
         }
 
+        // The office's drawing, shared by the deck and the pages that show it.
+        // It holds nothing of yours, so it needs no key.
+        if request.method == "GET" && request.path == "/office.js" {
+            return respond(.file(Paths.web.appendingPathComponent("office.js")))
+        }
+
         let phone = deck.access.phones.phone(withKey: request.query["t"] ?? request.headers["x-agentdeck-token"])
         if let phone { deck.access.phones.markSeen(phone.id) }
 
-        if request.method == "GET" && request.path == "/" {
+        // The deck, or the office on a screen of its own: the same page, and
+        // the same pairing first.
+        if request.method == "GET" && (request.path == "/" || request.path == "/office") {
             return respond(.file(Paths.web.appendingPathComponent(phone == nil ? "pair.html" : "deck.html")))
         }
         guard let phone else { return respond(.status(401)) }
@@ -279,7 +288,7 @@ final class DeckRouter: Router {
             "phoneKeys": keys.count,
             "sessions": deck.sessions.all.map { session -> [String: Any] in
                 [
-                    "id": session.id, "folder": session.folder, "name": session.name, "agentName": session.agent.name,
+                    "id": session.id, "folder": session.project, "name": session.projectName, "agentName": session.agent.name,
                     "state": session.state.rawValue, "key": keyOf[session.id] ?? NSNull(),
                 ]
             },

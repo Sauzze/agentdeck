@@ -12,7 +12,8 @@ Code, Codex, Gemini CLI, OpenCode and Grok.
 A key lights up for each of your agent sessions to show what it's doing. You
 can approve a permission request from across the room, interrupt an agent, turn
 a dial to change how hard Claude thinks, or hold a button and talk to it. Lay
-the deck out your way, with buttons of your own. SauzzeDeck Pro runs in
+the deck out your way, with buttons of your own, or watch your agents at work
+as people in [a little pixel-art office](#the-office). SauzzeDeck Pro runs in
 your Mac's menu bar, or in the tray on [Windows and Linux](#windows-and-linux-preview).
 Your phone connects to it over your Wi-Fi, so there's nothing to install from
 an app store.
@@ -29,7 +30,7 @@ SauzzeDeck Pro was called AgentDeck up to version 1.0.1.
 
 | Control | What it does |
 |---|---|
-| **Session keys** | One per agent session, up to nine, sharing the same space: one fills it, four make a 2×2. The colour shows its state, and the line underneath its agent, or Claude Code's thinking effort. Tap a key to select that session and bring its Terminal window to the front. |
+| **Session keys** | One per agent session, up to nine, sharing the same space: one fills it, four make a 2×2. Each is named after its project: the folder the agent started in, or the top of its git repository. The colour shows its state, and the line underneath its agent, or Claude Code's thinking effort. Tap a key to select that session and bring its Terminal window to the front. |
 | **Dial** | Claude Code's thinking effort: low, medium, high, extra high, max. If Claude is mid-task, the change waits until it finishes. |
 | **Stick** | When the agent asks you something, slide up or down to choose an answer and tap to confirm. The rest of the time it's a scroll wheel for that session's Terminal window: roll it to scroll, tap to jump back to the bottom. Scrolling is off until you turn on **Let the stick scroll Terminal** on the setup page. Tap the stick's SCROLL / CHOICES label to switch by hand. |
 | **✓ and ✕** | Accept or reject a permission request. |
@@ -182,14 +183,14 @@ The setup page also has:
 - **Logo.** The Sauzze logo or the original six keys, in the menu bar, on the
   setup page and on your phone's Home Screen. A phone picks up a new logo the
   next time you add the deck to its Home Screen.
-- **Layout.** How many keys (Auto, one per running session, or always 3, 6
-  or 9), whether the dial and stick show, and up to four rows of buttons, tall
-  or short, each button one to three widths wide. Use the deck's own buttons,
-  the ☢ Max button or the effort steps, or make your own: a button that types
-  a command, such as `/compact`, or presses a key, such as Shift+Tab to switch
-  Claude Code's mode. It can wait until the agent isn't busy, ask for a second
-  tap, or be for some agents only. A live preview of your phone sits beside
-  the editor.
+- **Layout.** Keys or [the office](#the-office), how many keys (Auto, one per
+  running session, or always 3, 6 or 9), whether the dial and stick show, and
+  up to four rows of buttons, tall or short, each button one to three widths
+  wide. Use the deck's own buttons, the ☢ Max button or the effort steps, or
+  make your own: a button that types a command, such as `/compact`, or presses
+  a key, such as Shift+Tab to switch Claude Code's mode. It can wait until the
+  agent isn't busy, ask for a second tap, or be for some agents only. A live
+  preview of your phone sits beside the editor.
 - **Colours.** Pick any colour for the background, keys, text and each state,
   or start from a preset (Default, Midnight, High contrast, Light). Your
   phone updates as you pick.
@@ -205,6 +206,68 @@ The setup page also has:
 
 Open the setup page any time from the menu bar (**Open Setup…**), or by opening
 SauzzeDeck Pro again from Applications.
+
+## The office
+
+<p align="center">
+  <img src="docs/office.png" alt="The office: an agent at each of nine desks, one writing on the whiteboard, one feeding a shredder, one waiting under the clock, three interns round a desk, and the big red button in the corridor" width="800">
+</p>
+
+Your sessions can also be people in a little pixel-art office. Each key is a
+desk, in the same order, and the person at it acts out what their session is
+doing:
+
+| On the deck | In the office |
+|---|---|
+| Working | Typing, the screen lit, dots rising from it |
+| Waiting on you | Standing up and waving, with a blinking **!** |
+| Done, unread | Leaning back with a coffee and a ✓ |
+| Idle | Off to the coffee machine, the window, the water cooler, the couch or a game of ping-pong |
+| Error | Head in hands, smoke from the screen. A rate limit has them waiting under the clock instead. |
+| A new session, an ended one | Someone walks in through the door, or out of it |
+
+There's more to see while they work:
+
+- **Under each desk**, the project's name and what its agent is doing, such as
+  *Editing Settings.swift* or *Waiting for you: Bash*.
+- **On the monitor**, how long the turn has run. After ten minutes, the agent
+  starts to sweat.
+- **What they're working with.** Reading files, they leaf through papers; a
+  command turns the screen terminal-green; the web spins a globe on the desk;
+  a to-do list sends them to the whiteboard. Compacting the conversation, they
+  feed it into a shredder.
+- **Interns**, one for each of Claude Code's subagents, gather round the desk
+  while they work: up to four, then a "+n".
+- **The desk's colour** is Claude Code's effort, from white for low to red for
+  max. Press ☢ Max, and the agent runs to the big red button in the corridor
+  and slams it.
+- When few sessions are running, the office's own staff hang around the lounge.
+
+**On your phone**, choose **Office** under *Sessions* in the setup page's
+Layout, or tap **OFFICE** above the keys to switch on the phone itself (and
+**KEYS** to switch back). The dial, stick and buttons stay where they are, and
+the room works like the keys:
+
+| Tap | What it does |
+|---|---|
+| A desk, or its person | Selects that session and brings its Terminal window to the front, like its key |
+| The red button | ☢ Max for the selected session |
+| The microphone, held | Talks to the selected session, like 🎙 |
+| ▲ ▼ ✓ ✕, over an agent waiting on you | Move through its options, accept or reject, like the stick and ✓ ✕. Select the agent, and the keys appear over its desk wherever the deck's controls are out of sight: in full screen, on `/office` and in the pop-out window. |
+
+**Full screen:** tap **⛶** above the room, and the dial and buttons step aside
+for it. The desks, the red button and the microphone work as above, and the
+corner brings the controls back. Turn the phone sideways for the biggest room.
+
+**On a spare screen**, such as an old tablet, a TV or a second monitor, open the
+address your phone uses with `/office` at the end. It pairs like a phone, then
+shows the office alone, full screen, and can be tapped too.
+
+**On top of your other windows:** on the computer running SauzzeDeck Pro, open
+`http://localhost:7710/office` in Chrome or Edge and click **POP OUT** in its
+corner. The office moves into a small window that stays above everything else,
+and can still be clicked. Other browsers, and the address your phone uses,
+don't offer it.
 
 ## Voice
 
@@ -244,6 +307,9 @@ hears it.
   can't drive the deck.
 - **Scrolling is off until you turn it on.** Out of the box, a paired phone
   can only use the deck's buttons, dial and choices.
+- **The office says what your agents are doing in a few words.** They're made
+  from a file's name, a web page's site or the description the agent gave a
+  step, never from a command or a file's path.
 - **SauzzeDeck Pro listens on port 7710 on your network,** so your phone can
   reach it. Without a key, all another device gets is the pairing page. Its
   pages can't be shown inside other websites, and it turns away connections
@@ -338,7 +404,7 @@ a single web page, shared by both.
 Sources/AgentDeck/   the Mac app
 desktop/             the Windows and Linux app, file for file where they match
 cmd/sauzzedeck/      its command: the app, the launcher and the hook
-Resources/web/       the phone page, the pairing page and the setup page, shared
+Resources/web/       the phone page, the office, the pairing page and the setup page, shared
 Resources/           the Mac's hook script, and the OpenCode plugin
 install.sh           build and install on a Mac
 packaging/linux/     the Linux installer

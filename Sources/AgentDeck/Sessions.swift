@@ -12,7 +12,12 @@ enum SessionState: String {
 final class Session {
     let id: String
     let agent: Agent
+    /// Where the agent is now: it moves as the agent changes folders.
     var folder: String
+    /// The project the session belongs to, settled when it starts: see
+    /// `Sessions.project(startedIn:)`. Keys show its name and pins match it,
+    /// so neither changes as the agent moves into a subfolder.
+    var project: String
     var tty = ""
     var state = SessionState.idle
     var effort = ""
@@ -21,20 +26,87 @@ final class Session {
     var startedAt: Double
     var lastEventAt: Double = 0
 
-    init(id: String, agent: Agent, folder: String, startedAt: Double) {
+    /// Claude Code's subagents still running, oldest first.
+    var subagents: [Subagent] = []
+    /// Subagents seen stopping this turn. Hooks can arrive out of order, and
+    /// a start that comes in after its stop must not bring the helper back.
+    var stoppedSubagents: Set<String> = []
+    /// The tool running, by name, and its call's id: with tools run side by
+    /// side, only the end of the one shown clears it.
+    var tool = ""
+    var toolUseID = ""
+    /// What that tool call is doing, in a few words: see `Activity`.
+    var toolActivity = ""
+    /// The tool a permission prompt is asking about.
+    var waitingFor = ""
+    /// When ☢ Max was last pressed for this session, in ms. Only the button
+    /// sets it, never the dial, so the office knows which one was used.
+    var maxPressedAt: Double?
+    var compacting = false
+    var turnStartedAt: Double?
+    /// Why the last turn failed, as Claude Code names it: "rate_limit",
+    /// "overloaded"… Kept while the session shows the error.
+    var errorKind = ""
+
+    struct Subagent {
+        let id: String
+        let type: String
+    }
+
+    init(id: String, agent: Agent, folder: String, project: String, startedAt: Double) {
         self.id = id
         self.agent = agent
         self.folder = folder
+        self.project = project
         self.startedAt = startedAt
     }
 
-    var name: String {
-        let last = (folder as NSString).lastPathComponent
-        return last.isEmpty ? folder : last
+    var name: String { Session.lastPart(of: folder) }
+    var projectName: String { Session.lastPart(of: project) }
+
+    private static func lastPart(of path: String) -> String {
+        let last = (path as NSString).lastPathComponent
+        return last.isEmpty ? path : last
     }
 
     /// Typing into a busy session would land in the middle of its turn.
     var isBusy: Bool { state == .thinking || state == .asking }
+
+    /// What the agent is doing right now, in a few words, or nil when it's
+    /// doing nothing.
+    var activity: String? {
+        if compacting { return "Compacting the conversation" }
+        switch state {
+        case .thinking:
+            return toolActivity.isEmpty ? "Thinking" : toolActivity
+        case .asking:
+            if !waitingFor.isEmpty { return Activity.cut("Waiting for you: \(waitingFor)") }
+            return toolActivity.isEmpty ? "Waiting for you" : toolActivity
+        default:
+            return nil
+        }
+    }
+
+    func clearTool() {
+        tool = ""
+        toolUseID = ""
+        toolActivity = ""
+        waitingFor = ""
+    }
+
+    /// A turn is over: nothing runs any more, except subagents of the types
+    /// still working in the background.
+    func endTurn(keepingSubagentsOf types: [String] = []) {
+        clearTool()
+        compacting = false
+        turnStartedAt = nil
+        var left = types
+        subagents = subagents.filter { subagent in
+            guard let i = left.firstIndex(of: subagent.type) else { return false }
+            left.remove(at: i)
+            return true
+        }
+    }
 }
 
 /// Every agent session reporting in, kept current from its hook events, in
@@ -60,7 +132,9 @@ final class Sessions {
 
     func contains(_ state: SessionState) -> Bool { byID.values.contains { $0.state == state } }
 
-    func apply(_ event: [String: Any], agent: Agent, tty: String, at time: Double) {
+    /// `startedIn` is the folder the agent was started in, when the hook
+    /// knows it: an event's cwd is wherever the agent is now.
+    func apply(_ event: [String: Any], agent: Agent, tty: String, startedIn: String, at time: Double) {
         guard let id = event["session_id"] as? String, let name = event["hook_event_name"] as? String else { return }
         let folder = event["cwd"] as? String ?? ""
 
@@ -74,30 +148,122 @@ final class Sessions {
         // A session the deck can't find a Terminal tab for would be a key
         // that lights up but can't be controlled.
         guard byID[id] != nil || !tty.isEmpty else { return }
-        let session = byID[id] ?? adopt(id: id, agent: agent, folder: folder, tty: tty, at: time)
-        guard time >= session.lastEventAt else { return }
+        let session = byID[id] ?? adopt(id: id, agent: agent, folder: folder, startedIn: startedIn, tty: tty, at: time)
+        // Subagents come and go by id, so the order their events arrive in
+        // doesn't matter.
+        let subagentsChanged = trackSubagents(name, event, of: session)
+        guard time >= session.lastEventAt else {
+            if subagentsChanged { onChange() }
+            return
+        }
         session.lastEventAt = time
         if !folder.isEmpty { session.folder = folder }
         if !tty.isEmpty { session.tty = tty }
         if let effort = event["effort"] as? [String: Any], let level = effort["level"] as? String {
             session.effort = level
         }
-        if let next = transition(for: name, event: event) { session.state = next }
+        follow(name, event, in: session, at: time)
+        if let next = transition(for: name, event: event) {
+            session.state = next
+            if next != .error { session.errorKind = "" }
+        }
         onChange()
     }
 
     /// A new session. One tab runs one agent, so a new session on a tty that
     /// already has one is that agent after /clear, or a fresh one in the same
-    /// tab: it replaces the old session and inherits its place on the deck.
-    private func adopt(id: String, agent: Agent, folder: String, tty: String, at time: Double) -> Session {
-        let session = Session(id: id, agent: agent, folder: folder, startedAt: time)
-        if !tty.isEmpty, let previous = byID.values.first(where: { $0.tty == tty }) {
+    /// tab: it replaces the old session and inherits its place on the deck,
+    /// and its project when the hook doesn't say.
+    private func adopt(id: String, agent: Agent, folder: String, startedIn: String, tty: String, at time: Double) -> Session {
+        let previous = tty.isEmpty ? nil : byID.values.first(where: { $0.tty == tty })
+        let project = startedIn.isEmpty ? previous?.project ?? Sessions.project(startedIn: folder)
+                                        : Sessions.project(startedIn: startedIn)
+        let session = Session(id: id, agent: agent, folder: folder, project: project, startedAt: time)
+        if let previous {
             session.startedAt = previous.startedAt
             session.effort = previous.effort
             end(previous.id, at: time)
         }
         byID[id] = session
         return session
+    }
+
+    /// The project of a session started in `folder`: the top folder of the
+    /// git repository holding it, or the folder itself. The home folder is
+    /// never a project's top, even when it holds a repository of its own.
+    static func project(startedIn folder: String) -> String {
+        let home = Paths.home.standardizedFileURL.path
+        var url = URL(fileURLWithPath: folder).standardizedFileURL
+        while url.path != home && url.path != "/" {
+            if FileManager.default.fileExists(atPath: url.appendingPathComponent(".git").path) { return url.path }
+            url.deleteLastPathComponent()
+        }
+        return folder
+    }
+
+    /// Claude Code's subagents, which the office shows at their agent's desk.
+    private func trackSubagents(_ name: String, _ event: [String: Any], of session: Session) -> Bool {
+        guard name == "SubagentStart" || name == "SubagentStop", let id = event["agent_id"] as? String else { return false }
+        if name == "SubagentStop" {
+            session.stoppedSubagents.insert(id)
+            let before = session.subagents.count
+            session.subagents.removeAll { $0.id == id }
+            return session.subagents.count != before
+        }
+        guard !session.stoppedSubagents.contains(id), !session.subagents.contains(where: { $0.id == id }) else { return false }
+        session.subagents.append(.init(id: id, type: event["agent_type"] as? String ?? ""))
+        return true
+    }
+
+    /// What the office shows besides the state: the tool running and what
+    /// it's doing, a compaction, when the turn started and why it failed.
+    private func follow(_ name: String, _ event: [String: Any], in session: Session, at time: Double) {
+        // A subagent's tools are its own: its agent is still on the call
+        // that started it.
+        let isAgentsOwn = event["agent_id"] == nil
+        switch name {
+        case "UserPromptSubmit":
+            session.turnStartedAt = time
+            session.stoppedSubagents = []
+            session.clearTool()
+            // A compaction that never said it ended is over by now.
+            session.compacting = false
+        case "PreToolUse" where isAgentsOwn:
+            let tool = event["tool_name"] as? String ?? ""
+            session.tool = tool
+            session.toolUseID = event["tool_use_id"] as? String ?? ""
+            session.toolActivity = Activity.of(tool: tool, input: event["tool_input"] as? [String: Any] ?? [:])
+            session.waitingFor = ""
+        case "PostToolUse", "PostToolUseFailure":
+            session.waitingFor = ""
+            let call = event["tool_use_id"] as? String ?? ""
+            if isAgentsOwn && (call.isEmpty || session.toolUseID.isEmpty || call == session.toolUseID) {
+                session.clearTool()
+            }
+        case "PermissionRequest":
+            session.waitingFor = event["tool_name"] as? String ?? ""
+        case "PreCompact":
+            session.compacting = true
+        case "PostCompact":
+            session.compacting = false
+        case "SessionStart":
+            let source = event["source"] as? String
+            if source == "compact" { session.compacting = false }
+            if source == "startup" || source == "clear" { session.endTurn() }
+        case "Stop":
+            // Subagents sent to the background outlive the turn.
+            let background = (event["background_tasks"] as? [[String: Any]] ?? [])
+                .filter { $0["type"] as? String == "subagent" }
+                .compactMap { $0["agent_type"] as? String }
+            session.endTurn(keepingSubagentsOf: background)
+        case "StopFailure":
+            session.endTurn()
+            session.errorKind = event["error"] as? String ?? ""
+        case "Interrupt":
+            session.endTurn()
+        default:
+            break
+        }
     }
 
     private func end(_ id: String, at time: Double) {
