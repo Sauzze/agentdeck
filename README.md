@@ -242,6 +242,9 @@ There's more to see while they work:
   feed it into a shredder.
 - **Interns**, one for each of Claude Code's subagents, gather round the desk
   while they work: up to four, then a "+n".
+- **What they wear** is Claude Code's model: Haiku dresses casual, in a striped
+  T-shirt and jeans, Sonnet wears a shirt, Opus a jacket, and Fable a suit and
+  tie. Interns dress for their own model.
 - **The desk's colour** is Claude Code's effort, from white for low to red for
   max. Press ☢ Max, and the agent runs to the big red button in the corridor
   and slams it.
@@ -267,8 +270,18 @@ There's more to see while they work:
 - **Sound:** off, quiet or normal. A soft room tone, keys clicking while your
   agents type, the door, the coffee machine and the ping-pong table. It starts
   with your first tap, as browsers require.
+- **The desks** in wood, walnut, white or black, where no effort paints them,
+  and **the chairs** in teal, black, red, grey or green.
+- **Office staff:** a few, none, or lots of them in the lounge.
 
-It's kept with the layout, so each profile can have an office of its own.
+**Your team**, under the furnishing, has a card for each of your projects:
+choose its agent's skin, hair and hairstyle, something extra (glasses,
+sunglasses, headphones, a cap, a beanie, a beard, a moustache or a bow), an
+outfit and its colour, what's on their desk, and a nickname for their desk's
+label. Anything left on Auto stays as the office picks it, and clothes on Auto
+follow the model.
+
+It's all kept with the layout, so each profile can have an office of its own.
 
 **On your phone**, choose **Office** under *Sessions* in the setup page's
 Layout, or tap **OFFICE** above the keys to switch on the phone itself (and

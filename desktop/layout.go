@@ -57,7 +57,8 @@ func (k *KeyCount) UnmarshalJSON(data []byte) error {
 // each of the back wall's five places holds, the floor, the walls' paint, the
 // lounge's carpet and the piece in its corner, whether the sky keeps the
 // computer's time or it's always day, its pet, whether the windows follow the
-// seasons, how loud it is, and your team, as the Mac app's Room. office.js
+// seasons, how loud it is, the desks' finish and the chairs' colour, how many
+// of its own staff hang about, and your team, as the Mac app's Room. office.js
 // draws it, with the same choices. Anything unknown, or of the wrong kind, is
 // as standard: it only changes how the room looks.
 type Room struct {
@@ -71,14 +72,18 @@ type Room struct {
 	Pet    string   `json:"pet"`
 	Season string   `json:"season"`
 	Sound  string   `json:"sound"`
+	Desk   string   `json:"desk"`
+	Chair  string   `json:"chair"`
+	Staff  string   `json:"staff"`
 	// How each project's agent looks, by the project's name.
 	Team map[string]TeamMember `json:"team"`
 }
 
 // TeamMember is how one project's agent looks in the office: skin, hair, a
 // hairstyle, something extra such as glasses or a cap, an outfit and its
-// colour, and a nickname for its desk. "auto" is as the project's name picks
-// it, and the clothes as its model's, as the Mac app's TeamMember.
+// colour, what's on its desk, and a nickname for it. "auto" is as the
+// project's name picks it, and the clothes as its model's, as the Mac app's
+// TeamMember.
 type TeamMember struct {
 	Skin      string `json:"skin"`
 	Hair      string `json:"hair"`
@@ -86,6 +91,7 @@ type TeamMember struct {
 	Extra     string `json:"extra"`
 	Outfit    string `json:"outfit"`
 	Colour    string `json:"colour"`
+	Desk      string `json:"desk"`
 	Name      string `json:"name"`
 }
 
@@ -105,6 +111,7 @@ var teamChoices = map[string][]string{
 	"extra":     {"none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"},
 	"outfit":    {"auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat"},
 	"colour":    {"auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"},
+	"desk":      {"auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"},
 }
 
 // checked is the member with anything unknown as standard, and the nickname
@@ -118,7 +125,7 @@ func (m TeamMember) checked() TeamMember {
 	}
 	return TeamMember{Skin: choose("skin", m.Skin), Hair: choose("hair", m.Hair), Hairstyle: choose("hairstyle", m.Hairstyle),
 		Extra: choose("extra", m.Extra), Outfit: choose("outfit", m.Outfit), Colour: choose("colour", m.Colour),
-		Name: oneLine(m.Name, nicknameLimit)}
+		Desk: choose("desk", m.Desk), Name: oneLine(m.Name, nicknameLimit)}
 }
 
 var (
@@ -133,6 +140,9 @@ var (
 		"pet":    {"none", "cat", "dog", "lizard", "monkey"},
 		"season": {"calendar", "off"},
 		"sound":  {"off", "quiet", "normal"},
+		"desk":   {"wood", "walnut", "white", "black"},
+		"chair":  {"teal", "black", "red", "grey", "green"},
+		"staff":  {"some", "none", "many"},
 	}
 	wallChoices  = []string{"window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"}
 	standardWall = []string{"window", "whiteboard", "window", "pinboard", "window"}
@@ -150,7 +160,8 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 	var wall []json.RawMessage
 	json.Unmarshal(raw["wall"], &wall)
 	*r = Room{Mic: text(raw["mic"]), Floor: text(raw["floor"]), Paint: text(raw["paint"]), Lounge: text(raw["lounge"]),
-		Corner: text(raw["corner"]), Sky: text(raw["sky"]), Pet: text(raw["pet"]), Season: text(raw["season"]), Sound: text(raw["sound"])}
+		Corner: text(raw["corner"]), Sky: text(raw["sky"]), Pet: text(raw["pet"]), Season: text(raw["season"]), Sound: text(raw["sound"]),
+		Desk: text(raw["desk"]), Chair: text(raw["chair"]), Staff: text(raw["staff"])}
 	for _, place := range wall {
 		r.Wall = append(r.Wall, text(place))
 	}
@@ -161,7 +172,8 @@ func (r *Room) UnmarshalJSON(data []byte) error {
 		var parts map[string]json.RawMessage
 		json.Unmarshal(given, &parts)
 		r.Team[project] = TeamMember{Skin: text(parts["skin"]), Hair: text(parts["hair"]), Hairstyle: text(parts["hairstyle"]),
-			Extra: text(parts["extra"]), Outfit: text(parts["outfit"]), Colour: text(parts["colour"]), Name: text(parts["name"])}
+			Extra: text(parts["extra"]), Outfit: text(parts["outfit"]), Colour: text(parts["colour"]), Desk: text(parts["desk"]),
+			Name: text(parts["name"])}
 	}
 	*r = r.checked()
 	return nil
@@ -185,6 +197,7 @@ func (r Room) checked() Room {
 	checked := Room{Mic: choose("mic", r.Mic), Floor: choose("floor", r.Floor), Paint: choose("paint", r.Paint),
 		Lounge: choose("lounge", r.Lounge), Corner: choose("corner", r.Corner), Sky: choose("sky", r.Sky),
 		Pet: choose("pet", r.Pet), Season: choose("season", r.Season), Sound: choose("sound", r.Sound),
+		Desk: choose("desk", r.Desk), Chair: choose("chair", r.Chair), Staff: choose("staff", r.Staff),
 		Wall: slices.Clone(standardWall)}
 	for i := range checked.Wall {
 		if i < len(r.Wall) && slices.Contains(wallChoices, r.Wall[i]) {

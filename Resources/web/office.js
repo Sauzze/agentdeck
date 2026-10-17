@@ -123,7 +123,29 @@
     pet: ['none', 'cat', 'dog', 'lizard', 'monkey'],
     season: ['calendar', 'off'],
     sound: ['off', 'quiet', 'normal'],
+    desk: ['wood', 'walnut', 'white', 'black'],
+    chair: ['teal', 'black', 'red', 'grey', 'green'],
+    staff: ['some', 'none', 'many'],
   };
+  /**
+   * The desks' finish when no effort paints them, from the edge catching the
+   * light to the drawer; the chairs' colour, its back and its top; and how
+   * many of the office's own staff hang about in the lounge with no sessions
+   * running, one fewer for each that is.
+   */
+  const DESK_FINISHES = {
+    wood: { edge: 0xdcb78c, top: 0xc49a6c, front: 0x8c6744, lip: 0x76573a, drawer: 0x9b7550 },
+    walnut: { edge: 0xa87a56, top: 0x7e5536, front: 0x5a3b25, lip: 0x4a301e, drawer: 0x6a4630 },
+    white: { edge: 0xfbfaf6, top: 0xe9e6de, front: 0xc9c4b8, lip: 0xb3ad9f, drawer: 0xd8d3c8 },
+    black: { edge: 0x5a5f6c, top: 0x3c404a, front: 0x272a31, lip: 0x1f2228, drawer: 0x30333b },
+  };
+  const CHAIRS = {
+    teal: [0x2f5560, 0x3f7080], black: [0x23252c, 0x353842], red: [0x7a2e2e, 0x9a3c3a], grey: [0x5a5f6c, 0x737987],
+    green: [0x2f5a3a, 0x3f7a4c],
+  };
+  const STAFF_COUNTS = { none: 0, some: 4, many: 6 };
+  /** The colours of what can sit on a desk besides a plant, papers and a lamp. */
+  const DESK_THINGS = { cactus: 0x5a9a4a, duck: 0xf2cf3a, beak: 0xe8823a, sky: 0x8fc0e8, coffee: 0x5a3a24 };
   /** What each of the back wall's five places can hold, and what it holds unless set up otherwise. */
   const WALL_CHOICES = ['window', 'whiteboard', 'pinboard', 'poster', 'shelf', 'plant', 'bare'];
   const STANDARD_WALL = ['window', 'whiteboard', 'window', 'pinboard', 'window'];
@@ -236,9 +258,9 @@
     wall: 0x2f3446, wallTop: 0x252a3a, loungeWall: 0x353447, wainscot: 0x272b3b, rail: 0x3d4359,
     baseboard: 0x1b1e2a, frame: 0x1b1e2a, sill: 0x8a90a6,
     wood: 0x6f5440, plankSeam: 0x624a38, carpet: 0x3f4a5c, carpetEdge: 0x353e4e, rug: 0x3f6b6b, rugEdge: 0x4f8080,
-    deskEdge: 0xdcb78c, deskTop: 0xc49a6c, deskFront: 0x8c6744, deskLip: 0x76573a, drawer: 0x9b7550, handle: 0x3a2a1c,
+    deskEdge: 0xdcb78c, deskTop: 0xc49a6c, deskFront: 0x8c6744, handle: 0x3a2a1c,
     monitor: 0x262a35, monitorPanel: 0x2f3442, monitorStand: 0x3d4250, monitorOn: 0x4a5266,
-    keyboard: 0x4a5060, keys: 0x5f6678, chair: 0x2f5560, chairTop: 0x3f7080,
+    keyboard: 0x4a5060, keys: 0x5f6678,
     paper: 0xeae6dc, mug: 0xf1ede4, leaf: 0x4f9a5a, leafDark: 0x3b7a46, pot: 0xa0603e,
     door: 0x6b4e37, doorPanel: 0x5c422e, doorway: 0x0d0f14, brass: 0xd6b25e, mat: 0x7a3b3b,
     whiteboard: 0xe9edf2, cork: 0xb08a5a,
@@ -360,6 +382,7 @@
     extra: ['none', 'glasses', 'sunglasses', 'headphones', 'cap', 'beanie', 'beard', 'moustache', 'bow'],
     outfit: ['auto', 'tee', 'hoodie', 'collar', 'sweater', 'jacket', 'suit', 'labcoat'],
     colour: ['auto', 'orange', 'red', 'pink', 'purple', 'blue', 'teal', 'green', 'yellow', 'grey', 'black', 'white'],
+    desk: ['auto', 'plant', 'papers', 'lamp', 'cactus', 'duck', 'trophy', 'photo', 'mug', 'none'],
   };
   /** The most a nickname can be, in characters, and the most projects a team remembers. */
   const NICKNAME_LIMIT = 16;
@@ -879,7 +902,7 @@
     /* Staff */
 
     get staffWanted() {
-      return Math.max(0, STAFF_WHEN_EMPTY - this.people.filter((p) => !p.isStaff && !p.isLeaving).length);
+      return Math.max(0, STAFF_COUNTS[decor.staff] - this.people.filter((p) => !p.isStaff && !p.isLeaving).length);
     }
 
     hireStaff() {
@@ -1068,8 +1091,6 @@
   const WIND_UP = 0.45;
   /** How long they stay to watch, after pressing, before heading back. */
   const AFTERGLOW = 1.6;
-  /** Staff in the lounge with no sessions running; one fewer for each that is. */
-  const STAFF_WHEN_EMPTY = 4;
   /** Staff arrive and leave one at a time, this many seconds apart. */
   const STAFF_INTERVAL = [3, 6];
   /** Only a tool that's been running this long gets its agent up from the desk, so nobody jitters back and forth. */
@@ -1716,29 +1737,53 @@
         ctx.fillRect(ox + px * scale, oy + py * scale, w * scale, h * scale);
       };
 
-      paintFill(x, y, DESK_WIDTH, 1, PALETTE.deskEdge, 1);
-      paintFill(x, y + 1, DESK_WIDTH, 4, PALETTE.deskTop, 0.9);
+      const finish = DESK_FINISHES[decor.desk];
+      paintFill(x, y, DESK_WIDTH, 1, finish.edge, 1);
+      paintFill(x, y + 1, DESK_WIDTH, 4, finish.top, 0.9);
       fill(x + 9, y + 1, 7, 1, PALETTE.monitorStand);
-      paintFill(x, y + 5, DESK_WIDTH, 11, PALETTE.deskFront, 0.72);
-      paintFill(x, y + 5, DESK_WIDTH, 1, PALETTE.deskLip, 0.62);
-      paintFill(x + 30, y + 8, 10, 6, PALETTE.drawer, 0.82);
+      paintFill(x, y + 5, DESK_WIDTH, 11, finish.front, 0.72);
+      paintFill(x, y + 5, DESK_WIDTH, 1, finish.lip, 0.62);
+      paintFill(x + 30, y + 8, 10, 6, finish.drawer, 0.82);
       fill(x + 34, y + 10, 2, 1, PALETTE.handle);
       fill(x + 1, y + 16, DESK_WIDTH - 2, 1, SHADOW);
       fill(s.x - 5, y + 2, 10, 2, PALETTE.keyboard);
       fill(s.x - 4, y + 2, 8, 1, PALETTE.keys);
 
-      // Something different on each desk
-      if (desk % 3 === 0) {
+      // Something different on each desk, or what you've put on it
+      const member = memberOf(sessionAt(desk));
+      const thing = member && member.desk !== 'auto' ? member.desk : ['plant', 'papers', 'lamp'][desk % 3];
+      if (thing === 'plant') {
         fill(x + 38, y - 2, 3, 3, PALETTE.pot);
         fill(x + 37, y - 5, 5, 3, PALETTE.leaf);
         dot(x + 39, y - 6, PALETTE.leafDark);
-      } else if (desk % 3 === 1) {
+      } else if (thing === 'papers') {
         fill(x + 35, y + 1, 6, 3, PALETTE.paper);
         fill(x + 36, y + 2, 4, 1, PALETTE.counterTop);
-      } else {
+      } else if (thing === 'lamp') {
         fill(x + 39, y - 6, 1, 6, PALETTE.frame);
         fill(x + 36, y - 7, 5, 2, PALETTE.brass);
         fill(x + 37, y, 5, 1, PALETTE.frame);
+      } else if (thing === 'cactus') {
+        fill(x + 38, y - 2, 3, 3, PALETTE.pot);
+        fill(x + 39, y - 7, 1, 5, DESK_THINGS.cactus);
+        dot(x + 38, y - 5, DESK_THINGS.cactus);
+        dot(x + 40, y - 4, DESK_THINGS.cactus);
+      } else if (thing === 'duck') {
+        fill(x + 36, y - 2, 4, 2, DESK_THINGS.duck);
+        fill(x + 38, y - 4, 2, 2, DESK_THINGS.duck);
+        dot(x + 40, y - 3, DESK_THINGS.beak);
+      } else if (thing === 'trophy') {
+        fill(x + 36, y - 6, 5, 3, PALETTE.brass);
+        dot(x + 38, y - 3, PALETTE.brass);
+        fill(x + 37, y - 2, 3, 2, darker(PALETTE.brass));
+      } else if (thing === 'photo') {
+        fill(x + 36, y - 6, 5, 6, PALETTE.frame);
+        fill(x + 37, y - 5, 3, 3, DESK_THINGS.sky);
+        fill(x + 37, y - 3, 3, 1, PALETTE.leaf);
+      } else if (thing === 'mug') {
+        fill(x + 37, y - 3, 3, 3, PALETTE.mug);
+        dot(x + 40, y - 2, PALETTE.mug);
+        fill(x + 37, y - 3, 3, 1, DESK_THINGS.coffee);
       }
 
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
@@ -1781,9 +1826,10 @@
     function drawChair(desk) {
       const s = seat(desk), y = DESKS[desk].y;
       // A rounded back, lower than the monitor beside it
-      fill(s.x - 3, y - 7, 7, 1, PALETTE.chairTop);
-      fill(s.x - 4, y - 6, 9, 6, PALETTE.chair);
-      fill(s.x - 4, y - 6, 1, 6, PALETTE.chairTop);
+      const [chair, chairTop] = CHAIRS[decor.chair];
+      fill(s.x - 3, y - 7, 7, 1, chairTop);
+      fill(s.x - 4, y - 6, 9, 6, chair);
+      fill(s.x - 4, y - 6, 1, 6, chairTop);
     }
 
     function drawCounter() {
@@ -2751,9 +2797,10 @@
       });
       drawPerson(lifted);
       const top = topOf(lifted, poseOf(lifted, now));
-      fill(lifted.position.x - 4, top - 5, 9, 2, PALETTE.chairTop);
-      fill(lifted.position.x - 3, top - 3, 1, 2, PALETTE.chair);
-      fill(lifted.position.x + 3, top - 3, 1, 2, PALETTE.chair);
+      const [chair, chairTop] = CHAIRS[decor.chair];
+      fill(lifted.position.x - 4, top - 5, 9, 2, chairTop);
+      fill(lifted.position.x - 3, top - 3, 1, 2, chair);
+      fill(lifted.position.x + 3, top - 3, 1, 2, chair);
     }
 
     /** Sound waves from the mic while it's held, spreading across the room. */

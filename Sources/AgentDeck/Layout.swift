@@ -84,8 +84,9 @@ struct Layout: Codable, Equatable {
 /// the back wall's five places holds, the floor, the walls' paint, the
 /// lounge's carpet and the piece in its corner, whether the sky keeps the
 /// computer's time or it's always day, its pet, whether the windows follow
-/// the seasons, how loud it is, and your team. office.js draws it, with the
-/// same choices. Anything unknown, or of the wrong kind, is as standard: it
+/// the seasons, how loud it is, the desks' finish and the chairs' colour, how
+/// many of its own staff hang about, and your team. office.js draws it, with
+/// the same choices. Anything unknown, or of the wrong kind, is as standard: it
 /// only changes how the room looks.
 struct Room: Codable, Equatable {
     var mic = "mic"
@@ -98,6 +99,9 @@ struct Room: Codable, Equatable {
     var pet = "none"
     var season = "calendar"
     var sound = "off"
+    var desk = "wood"
+    var chair = "teal"
+    var staff = "some"
     /// How each project's agent looks, by the project's name.
     var team: [String: TeamMember] = [:]
 
@@ -115,6 +119,9 @@ struct Room: Codable, Equatable {
         "pet": ["none", "cat", "dog", "lizard", "monkey"],
         "season": ["calendar", "off"],
         "sound": ["off", "quiet", "normal"],
+        "desk": ["wood", "walnut", "white", "black"],
+        "chair": ["teal", "black", "red", "grey", "green"],
+        "staff": ["some", "none", "many"],
     ]
     static let wallChoices = ["window", "whiteboard", "pinboard", "poster", "shelf", "plant", "bare"]
     static let standardWall = ["window", "whiteboard", "window", "pinboard", "window"]
@@ -136,6 +143,9 @@ struct Room: Codable, Equatable {
         pet = choice(.pet) ?? pet
         season = choice(.season) ?? season
         sound = choice(.sound) ?? sound
+        desk = choice(.desk) ?? desk
+        chair = choice(.chair) ?? chair
+        staff = choice(.staff) ?? staff
         let given = ((try? c?.decodeIfPresent([Loose].self, forKey: .wall)) ?? nil) ?? []
         wall = Room.standardWall.enumerated().map { i, standard in
             i < given.count ? given[i].text.flatMap { Room.wallChoices.contains($0) ? $0 : nil } ?? standard : standard
@@ -153,9 +163,10 @@ struct Room: Codable, Equatable {
 }
 
 /// How one project's agent looks in the office: skin, hair, a hairstyle,
-/// something extra such as glasses or a cap, an outfit and its colour, and a
-/// nickname for its desk. "auto" is as the project's name picks it, and the
-/// clothes as its model's. office.js draws it, with the same choices.
+/// something extra such as glasses or a cap, an outfit and its colour, what's
+/// on its desk, and a nickname for it. "auto" is as the project's name picks
+/// it, and the clothes as its model's. office.js draws it, with the same
+/// choices.
 struct TeamMember: Codable, Equatable {
     var skin = "auto"
     var hair = "auto"
@@ -163,6 +174,7 @@ struct TeamMember: Codable, Equatable {
     var extra = "none"
     var outfit = "auto"
     var colour = "auto"
+    var desk = "auto"
     var name = ""
 
     /// Each part's choices; the first is the standard one.
@@ -174,6 +186,7 @@ struct TeamMember: Codable, Equatable {
         "extra": ["none", "glasses", "sunglasses", "headphones", "cap", "beanie", "beard", "moustache", "bow"],
         "outfit": ["auto", "tee", "hoodie", "collar", "sweater", "jacket", "suit", "labcoat"],
         "colour": ["auto", "orange", "red", "pink", "purple", "blue", "teal", "green", "yellow", "grey", "black", "white"],
+        "desk": ["auto", "plant", "papers", "lamp", "cactus", "duck", "trophy", "photo", "mug", "none"],
     ]
     /// The most a nickname can be, in characters.
     static let nicknameLimit = 16
@@ -190,6 +203,7 @@ struct TeamMember: Codable, Equatable {
         extra = choice(.extra) ?? extra
         outfit = choice(.outfit) ?? outfit
         colour = choice(.colour) ?? colour
+        desk = choice(.desk) ?? desk
         name = (((try? c?.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? "").oneLine(TeamMember.nicknameLimit)
     }
 }

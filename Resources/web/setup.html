@@ -343,6 +343,9 @@
         <div class="field"><span>Seasons in the windows</span><div class="choices" id="room-season"></div></div>
         <div class="field"><span>Pet</span><div class="choices" id="room-pet"></div></div>
         <div class="field"><span>Sound</span><div class="choices" id="room-sound"></div></div>
+        <div class="field"><span>Desks</span><div class="choices" id="room-desk"></div></div>
+        <div class="field"><span>Chairs</span><div class="choices" id="room-chair"></div></div>
+        <div class="field"><span>Office staff</span><div class="choices" id="room-staff"></div></div>
         <p class="hint">How the office looks and sounds on your phone and on a screen of its own. Sound starts with your first tap. The preview shows the office while you change it.</p>
         <h3>Your team</h3>
         <div class="team" id="room-team"></div>
@@ -809,11 +812,16 @@
     season: [['calendar', 'Follow the calendar'], ['off', 'Off']],
     pet: [['none', 'None'], ['cat', 'Cat'], ['dog', 'Dog'], ['lizard', 'Lizard'], ['monkey', 'Monkey']],
     sound: [['off', 'Off'], ['quiet', 'Quiet'], ['normal', 'Normal']],
+    desk: [['wood', 'Wood', '#c49a6c'], ['walnut', 'Walnut', '#7e5536'], ['white', 'White', '#e9e6de'], ['black', 'Black', '#3c404a']],
+    chair: [['teal', 'Teal', '#3f7080'], ['black', 'Black', '#353842'], ['red', 'Red', '#9a3c3a'], ['grey', 'Grey', '#737987'],
+      ['green', 'Green', '#3f7a4c']],
+    staff: [['some', 'A few'], ['none', 'None'], ['many', 'Lots']],
   };
   const WALL_CHOICES = [['window', 'Window'], ['whiteboard', 'Whiteboard'], ['pinboard', 'Pinboard'], ['poster', 'Poster'],
     ['shelf', 'Bookshelf'], ['plant', 'Plant'], ['bare', 'Bare wall']];
   const STANDARD_ROOM = { mic: 'mic', wall: ['window', 'whiteboard', 'window', 'pinboard', 'window'], floor: 'wood', paint: 'slate',
-    lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off' };
+    lounge: 'navy', corner: 'arcade', sky: 'live', pet: 'none', season: 'calendar', sound: 'off', desk: 'wood', chair: 'teal',
+    staff: 'some' };
   let peekOffice = false; // the preview shows the office while it's being furnished
 
   /* Your team: how each project's agent looks, the choices office.js draws
@@ -832,6 +840,8 @@
       ['sweater', 'Sweater'], ['jacket', 'Jacket'], ['suit', 'Suit and tie'], ['labcoat', 'Lab coat']]],
     colour: ['Colour', [['auto', 'Auto'], ['orange', 'Orange'], ['red', 'Red'], ['pink', 'Pink'], ['purple', 'Purple'], ['blue', 'Blue'],
       ['teal', 'Teal'], ['green', 'Green'], ['yellow', 'Yellow'], ['grey', 'Grey'], ['black', 'Black'], ['white', 'White']]],
+    desk: ['On the desk', [['auto', 'Auto'], ['plant', 'A plant'], ['papers', 'Papers'], ['lamp', 'A lamp'], ['cactus', 'A cactus'],
+      ['duck', 'A rubber duck'], ['trophy', 'A trophy'], ['photo', 'A photo'], ['mug', 'A mug'], ['none', 'Nothing']]],
   };
   const NICKNAME_LIMIT = 16;
   let teamShown = ''; // the projects the team's cards were drawn for
@@ -903,7 +913,7 @@
   function drawRoom() {
     const room = layout.room || (layout.room = structuredClone(STANDARD_ROOM));
     const furnish = (edit) => change(edit, true);
-    for (const part of ['mic', 'floor', 'paint', 'lounge', 'sky', 'season', 'pet', 'sound']) {
+    for (const part of ['mic', 'floor', 'paint', 'lounge', 'sky', 'season', 'pet', 'sound', 'desk', 'chair', 'staff']) {
       $(`room-${part}`).replaceChildren(...ROOM_CHOICES[part].map(([id, label, swatch]) =>
         choice(label, room[part] === id, () => furnish(() => { room[part] = id; }), swatch)));
     }
