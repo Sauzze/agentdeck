@@ -65,41 +65,70 @@
 
   /** The microphone on its stand, in the lounge's bottom-right corner: where its base meets the floor. */
   const MIC = { x: 311, y: 176 };
-  /** The plant, moved to the lounge's bottom-left to make room for it: its pot's left edge. */
+  /** The plant, moved to the lounge's bottom-left to make room for it: its leaves' left edge. */
   const PLANT_X = 226;
 
-  // Where a person is, or is heading: 'desk:n', 'spot:n', 'door', 'button'
-  // or 'queue', the spot beside it.
+  /** In front of the whiteboard, where a to-do list gets written up. */
+  const BOARD_SPOTS = [{ x: 72, y: 44 }, { x: 83, y: 44 }];
+  /** Under the clock by the door, where a rate-limited agent waits. */
+  const CLOCK_SPOTS = [{ x: 202, y: 47 }, { x: 193, y: 47 }, { x: 184, y: 47 }];
+  /** Where a desk's subagents stand round it: two on each side. */
+  const INTERN_SLOTS = [{ dx: -6, dy: 4 }, { dx: DESK_WIDTH + 5, dy: 4 }, { dx: -6, dy: 15 }, { dx: DESK_WIDTH + 5, dy: 15 }];
+  /** The shredder beside a desk, on the floor to its right, and where its feeder stands. */
+  const SHREDDER = { dx: DESK_WIDTH + 2 };
+  const SHREDDING = { dx: DESK_WIDTH + 13, dy: 15 };
+
+  // Where a person is, or is heading: 'desk:n', 'spot:n', 'door', 'button',
+  // 'queue' (the spot beside it), 'board:n', 'clock:n', 'shred:desk', or for
+  // a subagent, 'near:desk:slot'.
   const deskPlace = (desk) => `desk:${desk}`;
   const spotPlace = (spot) => `spot:${spot}`;
-  const deskOf = (place) => (place.startsWith('desk:') ? Number(place.slice(5)) : null);
-  const spotOf = (place) => (place.startsWith('spot:') ? Number(place.slice(5)) : null);
+  const numberAfter = (prefix, place) => (place.startsWith(prefix) ? Number(place.split(':')[1]) : null);
+  const deskOf = (place) => numberAfter('desk:', place);
+  const spotOf = (place) => numberAfter('spot:', place);
 
   function pointOf(place) {
-    if (deskOf(place) !== null) return seat(deskOf(place));
-    if (spotOf(place) !== null) return SPOTS[spotOf(place)];
-    return { door: DOOR, button: PRESSER, queue: NEXT_IN_LINE }[place];
+    const [kind, a, b] = place.split(':');
+    const desk = DESKS[Number(a)];
+    switch (kind) {
+      case 'desk': return seat(Number(a));
+      case 'spot': return SPOTS[Number(a)];
+      case 'board': return BOARD_SPOTS[Number(a)];
+      case 'clock': return CLOCK_SPOTS[Number(a)];
+      case 'shred': return { x: desk.x + SHREDDING.dx, y: desk.y + SHREDDING.dy };
+      case 'near': return { x: desk.x + INTERN_SLOTS[Number(b)].dx, y: desk.y + INTERN_SLOTS[Number(b)].dy };
+      default: return { door: DOOR, button: PRESSER, queue: NEXT_IN_LINE }[place];
+    }
+  }
+
+  /** The walkway a place is reached by: a desk's own row, or the first row's for the back wall. */
+  function laneTo(place) {
+    const [kind, a] = place.split(':');
+    if (kind === 'desk' || kind === 'shred' || kind === 'near') return lane(Number(a));
+    if (kind === 'board' || kind === 'clock') return lane(0);
+    return null;
   }
 
   /**
-   * The way from where someone stands to a place. Desks are reached along
-   * the walkway behind their row, from the corridor; the lounge is open
-   * floor, crossed in a straight line.
+   * The way from where someone stands to a place. Desks, and what's round
+   * them or on the back wall, are reached along the walkway behind their
+   * row, from the corridor; the lounge is open floor, crossed in a straight
+   * line.
    */
   function route(from, place) {
     const target = pointOf(place);
-    const desk = deskOf(place);
+    const walkway = laneTo(place);
     const amongDesks = from.x < CORRIDOR_X - 1 && from.y > WALL_BOTTOM;
     const current = laneNearest(from.y);
     const path = [];
-    if (desk !== null && amongDesks && lane(desk) === current) {
+    if (walkway !== null && amongDesks && walkway === current) {
       path.push({ x: from.x, y: current });
     } else {
       if (amongDesks) path.push({ x: from.x, y: current }, { x: CORRIDOR_X, y: current });
-      if (desk !== null) path.push({ x: CORRIDOR_X, y: lane(desk) });
+      if (walkway !== null) path.push({ x: CORRIDOR_X, y: walkway });
       else if (place === 'door') path.push({ x: CORRIDOR_X, y: WALL_BOTTOM + 8 });
     }
-    if (desk !== null) path.push({ x: target.x, y: lane(desk) });
+    if (walkway !== null) path.push({ x: target.x, y: walkway });
     path.push({ x: target.x, y: target.y });
     return path.filter((p) => p.x !== from.x || p.y !== from.y);
   }
@@ -121,6 +150,7 @@
     pants: 0x2e3550, shoes: 0x1a1a1f, eye: 0x1f1a1a, bubble: 0xf4f1ea, bubbleEdge: 0x1b1e2a, smoke: 0x9a9aa0, night: 0x0a1030,
     hazard: 0xf2c200, dome: 0xd4140b, domeLight: 0xff7a6b, domeDark: 0x7d0602, alarm: 0xff2a1a, alarmOff: 0x5a1a1a,
     shockwave: 0xffb04a,
+    terminal: 0x3ddc84, sea: 0x3f7fc0, sweat: 0x8fc6f0, marker: 0x3d4359, shredder: 0x4a4e5a, shredderTop: 0x5f6678,
   };
   const BLACK = 0x000000, WHITE = 0xffffff;
   /** The deck's text colour, for a theme that leaves it out: it marks the picked desk. */
@@ -175,6 +205,38 @@
 
   /* ----------------------------------------------------------- the people */
 
+  /**
+   * What a tool has its agent do: 'read' (leafing through papers), 'shell'
+   * (a terminal on screen), 'web' (a globe on the desk), 'todo' (the
+   * whiteboard) or 'type'. Each agent names its tools its own way.
+   */
+  function toolKind(tool) {
+    const name = (tool || '').toLowerCase();
+    if (!name) return null;
+    if (['read', 'notebookread', 'read_file', 'read_many_files', 'grep', 'glob', 'search_file_content'].includes(name)) return 'read';
+    if (['bash', 'shell', 'run_shell_command'].includes(name)) return 'shell';
+    if (['webfetch', 'web_fetch', 'websearch', 'web_search', 'google_web_search'].includes(name)) return 'web';
+    if (name === 'todowrite') return 'todo';
+    return 'type';
+  }
+
+  /** One of an agent's subagents: a smaller person who comes to help at their desk. */
+  class Intern {
+    constructor(subagent, session) {
+      this.id = subagent.id;
+      this.agentId = session.id;
+      this.agent = session.agent; // they wear their agent's colour
+      this.look = lookOf(`${subagent.type} ${subagent.id}`);
+      this.position = { ...DOOR };
+      this.path = [];
+      this.place = 'door';
+      this.slot = null;       // where round the desk they stand; none while it's crowded
+      this.isLeaving = false; // their subagent has stopped
+    }
+
+    get isWalking() { return this.path.length > 0; }
+  }
+
   /** One session, as a person in the office, or one of the office's own staff. */
   class Person {
     constructor(session, desk) {
@@ -195,6 +257,7 @@
       this.isFacingAway = false;
       this.nextMove = Infinity; // when an idle person next decides where to go
       this.arrivedAt = 0;
+      this.toolSince = 0; // when their session's current tool started
     }
 
     get isWalking() { return this.path.length > 0; }
@@ -229,6 +292,7 @@
       this.lastStep = null;
       this.nextStaffChange = 0;
       this.staffHired = 0; // numbers each new member of staff, for a face of their own
+      this.interns = [];
     }
 
     apply(seats, colours, now) {
@@ -285,7 +349,72 @@
         }
         this.nextStaffChange = now + random(...STAFF_INTERVAL);
       }
+      this.hireInterns();
       this.isOpen = true;
+    }
+
+    /**
+     * Each running subagent gets an intern: new ones walk in through the
+     * door (or are there already, in the first snapshot), and those whose
+     * subagent has stopped walk out.
+     */
+    hireInterns() {
+      const wanted = new Map();
+      for (const s of this.seats) {
+        if (s.session) for (const subagent of s.session.subagents || []) wanted.set(subagent.id, { subagent, session: s.session });
+      }
+      for (const intern of this.interns) {
+        if (intern.isLeaving || wanted.has(intern.id)) continue;
+        intern.isLeaving = true;
+        // One that never got in just goes.
+        if (intern.slot === null) intern.path = [];
+        else intern.path = route(intern.position, 'door');
+        intern.slot = null;
+        intern.place = 'door';
+      }
+      const known = new Set(this.interns.map((i) => i.id));
+      for (const [id, { subagent, session }] of wanted) {
+        if (known.has(id)) continue;
+        const intern = new Intern(subagent, session);
+        intern.arrives = this.isOpen;
+        this.interns.push(intern);
+      }
+    }
+
+    /** The desk an agent's session is at, or null once it's gone. */
+    deskOfSession(id) {
+      const desk = this.seats.findIndex((s) => s.session && s.session.id === id);
+      return desk < 0 ? null : desk;
+    }
+
+    /** Interns take free places round their agent's desk, at most four to a desk; the rest wait their turn. */
+    placeInterns(now) {
+      for (const intern of this.interns) {
+        if (intern.isLeaving) continue;
+        const desk = this.deskOfSession(intern.agentId);
+        if (intern.slot !== null && intern.desk === desk) continue;
+        intern.slot = null;
+        const taken = new Set(this.interns.filter((i) => i !== intern && !i.isLeaving && i.desk === desk && i.slot !== null).map((i) => i.slot));
+        const slot = INTERN_SLOTS.findIndex((_, i) => !taken.has(i));
+        if (desk === null || slot < 0) continue;
+        intern.desk = desk;
+        intern.slot = slot;
+        intern.place = `near:${desk}:${slot}`;
+        if (intern.arrives) {
+          intern.path = route(intern.position, intern.place);
+        } else {
+          intern.position = pointOf(intern.place);
+          intern.path = [];
+        }
+        intern.arrives = true;
+      }
+      for (const intern of this.interns) this.walk(intern, this.elapsed, now);
+      this.interns = this.interns.filter((i) => !(i.isLeaving && !i.isWalking));
+    }
+
+    /** Interns waiting for room at a desk, beyond the four round it. */
+    waitingAt(desk) {
+      return this.interns.filter((i) => !i.isLeaving && i.slot === null && this.deskOfSession(i.agentId) === desk).length;
     }
 
     /** The deck has gone: everyone leaves at once. */
@@ -296,6 +425,7 @@
       this.detonation = null;
       this.isOpen = false;
       this.nextStaffChange = 0;
+      this.interns = [];
     }
 
     /** The effort a desk is painted for, if its session has one. */
@@ -305,15 +435,16 @@
     }
 
     step(now) {
-      const elapsed = Math.min(now - (this.lastStep ?? now), 0.1);
+      this.elapsed = Math.min(now - (this.lastStep ?? now), 0.1);
       this.lastStep = now;
       this.changeStaff(now);
       for (const person of this.people) {
         this.decide(person, now);
-        this.walk(person, elapsed, now);
+        this.walk(person, this.elapsed, now);
       }
       this.press(now);
       this.people = this.people.filter((p) => !(p.isLeaving && !p.isWalking));
+      this.placeInterns(now);
     }
 
     /**
@@ -382,6 +513,7 @@
     update(person, placement, now) {
       const wasIdle = person.session.state === 'idle';
       const session = placement.session;
+      if (session.tool !== person.session.tool) person.toolSince = now;
       person.session = session;
 
       // Only a press of ☢ Max sends them to the button; the dial reaching max
@@ -422,8 +554,14 @@
         if (person.place !== place) this.send(person, place);
         return;
       }
-      if (person.session.state !== 'idle') {
-        if (person.place !== desk) this.send(person, desk);
+      const duty = this.dutyOf(person, now);
+      if (duty) {
+        if (person.place !== duty) this.send(person, duty);
+        return;
+      }
+      // Nothing to do any more, away from the desk on a job: back to it first.
+      if (/^(board|clock|shred):/.test(person.place)) {
+        this.send(person, desk);
         return;
       }
       if (person.isWalking || now < person.nextMove) return;
@@ -440,6 +578,32 @@
       } else {
         person.nextMove = now + random(8, 20);
       }
+    }
+
+    /**
+     * Where a session's work takes its agent, or null when it has none and
+     * they're free to wander: the shredder while it compacts, the clock while
+     * it waits out a rate limit, the whiteboard for a to-do list that takes a
+     * while, and otherwise their desk.
+     */
+    dutyOf(person, now) {
+      const s = person.session, desk = deskPlace(person.desk);
+      if (s.compacting) return `shred:${person.desk}`;
+      if (s.state === 'error' && s.errorKind === 'rate_limit') return this.wallSpot(person, 'clock', CLOCK_SPOTS.length) || desk;
+      if (s.state === 'thinking' && toolKind(s.tool) === 'todo' && now - person.toolSince >= LONG_TOOL) {
+        return this.wallSpot(person, 'board', BOARD_SPOTS.length) || desk;
+      }
+      return s.state === 'idle' ? null : desk;
+    }
+
+    /** One of the spots along the back wall nobody else has taken. */
+    wallSpot(person, kind, count) {
+      if (person.place.startsWith(`${kind}:`)) return person.place;
+      for (let i = 0; i < count; i++) {
+        const place = `${kind}:${i}`;
+        if (!this.people.some((p) => p !== person && !p.isLeaving && p.place === place)) return place;
+      }
+      return null;
     }
 
     send(person, place) {
@@ -469,7 +633,7 @@
         person.isFacingAway = SPOTS[spot].pose === 'away';
         person.nextMove = now + random(12, 30);
       } else {
-        person.isFacingAway = false;
+        person.isFacingAway = person.place.startsWith('board:');
         person.nextMove = now + random(8, 20);
       }
     }
@@ -487,6 +651,8 @@
   const STAFF_WHEN_EMPTY = 4;
   /** Staff arrive and leave one at a time, this many seconds apart. */
   const STAFF_INTERVAL = [3, 6];
+  /** Only a tool that's been running this long gets its agent up from the desk, so nobody jitters back and forth. */
+  const LONG_TOOL = 1.5;
 
   /* ------------------------------------------------------------ drawing */
 
@@ -499,6 +665,15 @@
   const LABEL_SIZE = 3.4;
   /** …and never smaller than this on screen, in CSS pixels, so a phone can read it. */
   const LABEL_SMALLEST = 8;
+  /** After this long, a turn's timer shows its agent sweating, in seconds. */
+  const LONG_TURN = 600;
+  /** Digits and a few marks, three art pixels wide and five tall, for timers and counts. */
+  const GLYPHS = {
+    0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'], 2: ['111', '001', '111', '100', '111'],
+    3: ['111', '001', '111', '001', '111'], 4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
+    6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '001', '001', '001'], 8: ['111', '101', '111', '101', '111'],
+    9: ['111', '101', '111', '001', '111'], ':': ['0', '1', '0', '1', '0'], '+': ['000', '010', '111', '010', '000'],
+  };
   /** How long everyone looks up when the mic goes on, as if the boss were shouting. */
   const LOOK_UP_LENGTH = 1;
   /** The listener's nod, once the mic is let go. */
@@ -513,6 +688,9 @@
   function poseOf(person, now) {
     if (person.isWalking) return { kind: 'walk', step: Math.floor(now * 6) % 2 };
     if (person.isGoingNuclear && person.place === 'button') return { kind: 'press', raised: person.pressedAt === null };
+    if (person.place.startsWith('board:')) return { kind: 'write', stroke: Math.floor(now * 3) % 2 };
+    if (person.place.startsWith('clock:')) return { kind: 'tap', beat: Math.floor(now * 4) % 2 };
+    if (person.place.startsWith('shred:')) return { kind: 'shred' };
     if (deskOf(person.place) !== null) {
       if (person.session.state === 'asking') return { kind: 'wave', frame: Math.floor(now * 4) % 2 };
       if (person.session.state === 'error') return { kind: 'slump' };
@@ -572,6 +750,19 @@
     const dot = (x, y, color, alpha) => fill(x, y, 1, 1, color, alpha);
     /** Where an art pixel lands on the canvas, for what's drawn at the screen's own resolution. */
     const screen = (x, y) => ({ x: ox + x * scale, y: oy + y * scale });
+
+    /** How wide `text` is in the pixel font. */
+    const pixelWidth = (text) => [...text].reduce((w, c) => w + GLYPHS[c][0].length + 1, -1);
+
+    /** A few digits in art pixels, on a dark backing unless what's under them is dark already. */
+    function pixelText(text, x, y, color, backing = true) {
+      if (backing) fill(x - 1, y - 1, pixelWidth(text) + 2, 7, PALETTE.frame, 0.75);
+      let at = x;
+      for (const c of text) {
+        GLYPHS[c].forEach((row, r) => [...row].forEach((on, column) => { if (on === '1') dot(at + column, y + r, color); }));
+        at += GLYPHS[c][0].length + 1;
+      }
+    }
 
     const isNight = hour >= 20 || hour < 5;
     const alarm = sinceBlast >= 0 && sinceBlast < ALARM_LENGTH ? sinceBlast : null;
@@ -666,6 +857,13 @@
       fill(68, 15, 14, 1, 0xd96a5a);
       fill(68, 18, 8, 1, 0x4f9a5a);
       fill(80, 18, 5, 1, 0x4c8bf5);
+      // A to-do list, written up line by line while someone stands at it
+      for (const person of office.people) {
+        const spot = numberAfter('board:', person.place);
+        if (spot === null || person.isWalking) continue;
+        const length = 1 + (Math.floor((now - person.arrivedAt) * 3) % 9);
+        fill(spot === 0 ? 67 : 78, 21, length, 1, PALETTE.marker);
+      }
       fill(65, 25, 24, 1, PALETTE.frame);
       fill(133, 10, 20, 16, PALETTE.doorPanel);
       fill(134, 11, 18, 14, PALETTE.cork);
@@ -748,7 +946,24 @@
       const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
       if (!occupant) return;
       const skin = occupant.look.skin;
-      if (occupant.session.state === 'thinking') {
+      const tool = occupant.session.state === 'thinking' ? toolKind(occupant.session.tool) : null;
+      if (tool === 'web') {
+        // A little globe at the end of the desk, turning
+        const turn = Math.floor(now * 4) % 5;
+        fill(x + 2, y - 5, 3, 1, PALETTE.sea);
+        fill(x + 1, y - 4, 5, 3, PALETTE.sea);
+        fill(x + 2, y - 1, 3, 1, PALETTE.sea);
+        fill(x + 1 + turn, y - 4, 1, 2, PALETTE.leaf);
+        dot(x + 1 + ((turn + 2) % 5), y - 2, PALETTE.leaf);
+        dot(x + 3, y, PALETTE.frame);
+      }
+      if (tool === 'read') {
+        // Leafing through papers, a page lifting now and then
+        fill(s.x - 4, y + 1, 8, 2, PALETTE.paper);
+        if (Math.floor(now * 2 + occupant.look.phase * 2) % 2 === 0) fill(s.x - 3, y, 6, 1, PALETTE.paper);
+        dot(s.x - 5, y + 2, skin);
+        dot(s.x + 4, y + 2, skin);
+      } else if (occupant.session.state === 'thinking') {
         // Typing: one hand, then the other.
         const beat = Math.floor(now * 8 + occupant.look.phase * 8) % 2;
         dot(s.x - 3, y + 1 + beat, skin);
@@ -933,7 +1148,7 @@
 
       // Legs, for anyone not sitting down
       if (pose.kind !== 'sit' && pose.kind !== 'slump') {
-        const lift = pose.kind === 'walk' ? (pose.step === 0 ? [1, 0] : [0, 1]) : [0, 0];
+        const lift = pose.kind === 'walk' ? (pose.step === 0 ? [1, 0] : [0, 1]) : pose.kind === 'tap' ? [0, pose.beat] : [0, 0];
         fill(x - 3, top + 17, 7, 1, SHADOW);
         fill(x - 3, top + 13, 7, 1, PALETTE.pants);
         fill(x - 2, top + 14 - lift[0], 2, 2, PALETTE.pants);
@@ -952,6 +1167,21 @@
       } else if (pose.kind === 'slump') {
         sleeve(x - 4, top + 6, 1, 3);
         sleeve(x + 4, top + 6, 1, 3);
+      } else if (pose.kind === 'write') {
+        // Back to us, writing on the whiteboard
+        sleeve(x - 4, top + 8, 1, 4);
+        dot(x - 4, top + 12, look.skin);
+        sleeve(x + 4, top + 3, 1, 5);
+        dot(x + 4 + pose.stroke, top + 2, look.skin);
+      } else if (pose.kind === 'shred') {
+        // Feeding a sheet into the shredder on their left
+        const feed = (now * 1.2 + look.phase) % 1;
+        sleeve(x - 4, top + 8, 1, 2);
+        sleeve(x - 5, top + 9, 1, 1);
+        dot(x - 6, top + 10, look.skin);
+        fill(x - 9, top + 8 + Math.round(feed * 2), 3, 2, PALETTE.paper);
+        sleeve(x + 4, top + 8, 1, 4);
+        dot(x + 4, top + 12, look.skin);
       } else if (pose.kind === 'press') {
         // Hand high, then down on the dome
         sleeve(x - 4, top + 8, 1, 4);
@@ -996,7 +1226,7 @@
       if (isListener(person) && mic.held && pose.kind !== 'slump') {
         dot(x - 1, top + 4, PALETTE.eye);
         dot(x + 3, top + 4, PALETTE.eye);
-      } else if (lookingUp && pose.kind !== 'slump') {
+      } else if ((lookingUp || pose.kind === 'tap') && pose.kind !== 'slump') {
         dot(x - 2, top + 3, PALETTE.eye);
         dot(x + 2, top + 3, PALETTE.eye);
       } else if (pose.kind === 'slump') {
@@ -1055,14 +1285,23 @@
       if (!session) return;
       const { x, y } = DESKS[desk];
       const blinkedOff = session.state === 'asking' && Math.floor(now * 2) % 2 === 1;
-      const light = session.state === 'idle' || blinkedOff ? PALETTE.monitorOn : colour(session.state);
+      // A command running turns the screen terminal-green.
+      const shell = session.state === 'thinking' && toolKind(session.tool) === 'shell';
+      const light = shell ? PALETTE.terminal
+        : session.state === 'idle' || blinkedOff ? PALETTE.monitorOn : colour(session.state);
 
       if (session.state !== 'idle') fill(x + 3, y - 13, 19, 14, light, 0.12);
       fill(x + 5, y - 11, 15, 1, light);
       fill(x + 5, y - 10, 1, 9, light);
       fill(x + 19, y - 10, 1, 9, light);
 
-      if (session.state === 'thinking') {
+      if (shell) {
+        // Lines of output, scrolling up
+        for (let k = 0; k < 4; k++) {
+          const rise = (now * 1.4 + k / 4) % 1;
+          fill(x + 7 + (k % 2) * 2, y - 12 - Math.round(rise * 9), 5 + (k % 3) * 2, 1, light, 1 - rise);
+        }
+      } else if (session.state === 'thinking') {
         for (let k = 0; k < 3; k++) {
           const rise = (now * 0.8 + k / 3 + desk * 0.17) % 1;
           dot(x + 8 + k * 4, y - 12 - Math.round(rise * 9), light, 1 - rise);
@@ -1133,8 +1372,13 @@
     }
 
     /**
-     * The project's name under each desk, with its state's colour beside it.
-     * A key pinned to a project with nothing running keeps its name, dimmed.
+     * The project's name under each desk, with its state's colour beside it,
+     * and under it, what the agent is doing, tinted with that colour. A key
+     * pinned to a project with nothing running keeps its name, dimmed.
+     *
+     * Where the text is bigger than the art, as on a phone, only the picked
+     * desk says what its agent is doing: every desk's would cover the row
+     * below.
      */
     function drawLabel(desk) {
       if (desk >= office.seats.length) return;
@@ -1142,8 +1386,10 @@
       const name = s.session ? s.session.name : s.pin;
       if (!name) return;
 
-      const size = Math.max(LABEL_SIZE * scale, LABEL_SMALLEST * ratio);
-      ctx.font = `600 ${size}px ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif`;
+      const roomy = LABEL_SIZE * scale >= LABEL_SMALLEST * ratio;
+      const size = roomy ? LABEL_SIZE * scale : LABEL_SMALLEST * ratio;
+      const font = (weight, px) => `${weight} ${px}px ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif`;
+      ctx.font = font(600, size);
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       const dotSize = s.session ? size * 0.55 : 0;
@@ -1152,22 +1398,106 @@
       // Cut to the space between desks, so labels never run into each other.
       const room = (DESK_COLUMNS[1] - DESK_COLUMNS[0] - 2) * scale - dotSize - gap - padding * 2;
       const shown = fitText(ctx, name, room);
-      const measured = ctx.measureText(shown).width;
+      const nameWidth = ctx.measureText(shown).width + dotSize + gap + padding * 2;
+
+      const activity = s.session && s.session.activity && (roomy || desk === selectedDesk) ? s.session.activity : null;
+      const small = size * 0.82;
+      let doing = '', doingWidth = 0;
+      if (activity) {
+        ctx.font = font(500, small);
+        doing = fitText(ctx, activity, DESK_WIDTH * scale - padding * 2);
+        doingWidth = ctx.measureText(doing).width + padding * 2;
+      }
 
       const center = screen(DESKS[desk].x + DESK_WIDTH / 2, DESKS[desk].y + 20.5);
-      const w = measured + dotSize + gap + padding * 2, h = size * 1.25;
+      const h = size * 1.25, extra = activity ? small * 1.4 : 0;
+      const w = Math.max(nameWidth, doingWidth);
       const left = center.x - w / 2;
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      roundedRect(ctx, left, center.y - h / 2, w, h, h / 2);
+      roundedRect(ctx, left, center.y - h / 2, w, h + extra, h / 2);
       ctx.fill();
+      const nameLeft = center.x - nameWidth / 2;
       if (s.session) {
         ctx.fillStyle = css(colour(s.session.state));
         ctx.beginPath();
-        ctx.arc(left + padding + dotSize / 2, center.y, dotSize / 2, 0, Math.PI * 2);
+        ctx.arc(nameLeft + padding + dotSize / 2, center.y, dotSize / 2, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.font = font(600, size);
       ctx.fillStyle = `rgba(255,255,255,${s.session ? 0.92 : 0.45})`;
-      ctx.fillText(shown, left + padding + dotSize + gap, center.y);
+      ctx.fillText(shown, nameLeft + padding + dotSize + gap, center.y);
+      if (activity) {
+        ctx.font = font(500, small);
+        ctx.fillStyle = css(colour(s.session.state));
+        ctx.fillText(doing, center.x - doingWidth / 2 + padding, center.y + h / 2 + extra / 2 - small * 0.2);
+      }
+    }
+
+    /** The shredder a compacting session's agent feeds, beside its desk. */
+    function drawShredder(desk) {
+      const { x, y } = DESKS[desk], sx = x + SHREDDER.dx;
+      // The cutting head, its slot on top
+      fill(sx, y + 8, 6, 1, PALETTE.shredderTop);
+      fill(sx + 1, y + 8, 4, 1, PALETTE.frame);
+      fill(sx, y + 9, 6, 2, PALETTE.shredder);
+      // The bin under it, filling with strips, one falling
+      fill(sx, y + 11, 6, 5, PALETTE.sill);
+      for (const [dx, height] of [[1, 2], [2, 3], [4, 2]]) fill(sx + dx, y + 16 - height, 1, height, PALETTE.paper);
+      dot(sx + 3, y + 11 + (Math.floor(now * 6) % 3), PALETTE.paper);
+      fill(sx, y + 16, 6, 1, SHADOW);
+    }
+
+    /**
+     * A subagent, as an intern: 13 art pixels tall, in their agent's colour,
+     * with a badge.
+     */
+    function drawIntern(intern) {
+      const x = Math.round(intern.position.x), feet = Math.round(intern.position.y), top = feet - 13;
+      const { look } = intern, shirt = SHIRTS[intern.agent] ?? SHIRTS.claude;
+      const step = intern.isWalking ? Math.floor(now * 7) % 2 : null;
+      const lift = step === null ? [0, 0] : step === 0 ? [1, 0] : [0, 1];
+      fill(x - 2, feet, 5, 1, SHADOW);
+      fill(x - 2, top + 9, 5, 1, PALETTE.pants);
+      fill(x - 1, top + 10 - lift[0], 1, 2, PALETTE.pants);
+      fill(x + 1, top + 10 - lift[1], 1, 2, PALETTE.pants);
+      dot(x - 1, top + 12 - lift[0], PALETTE.shoes);
+      dot(x + 1, top + 12 - lift[1], PALETTE.shoes);
+      fill(x - 2, top + 5, 5, 4, shirt);
+      dot(x, top + 6, PALETTE.bubble);
+      ctx.fillStyle = css(shirt, 1, 0.78);
+      for (const side of [-3, 3]) ctx.fillRect(ox + (x + side) * scale, oy + (top + 6) * scale, scale, 2 * scale);
+      dot(x - 3, top + 8, look.skin);
+      dot(x + 3, top + 8, look.skin);
+      fill(x - 2, top + 1, 5, 4, look.skin);
+      fill(x - 1, top, 3, 1, look.hair);
+      fill(x - 2, top + 1, 5, 1, look.hair);
+      if ((now + look.phase * 5) % 4 >= 0.15) {
+        dot(x - 1, top + 3, PALETTE.eye);
+        dot(x + 1, top + 3, PALETTE.eye);
+      }
+    }
+
+    /**
+     * How long the turn has run, on the back of the monitor while the agent
+     * works, and sweat once it's been a long one. Beside the desk, how many
+     * interns are waiting for room round it.
+     */
+    function drawTimer(desk) {
+      const { x, y } = DESKS[desk];
+      const waiting = office.waitingAt(desk);
+      if (waiting) pixelText(`+${waiting}`, x - 9, y - 16, PALETTE.bubble);
+
+      const session = sessionAt(desk);
+      if (!session || !session.turnStartedAt || (session.state !== 'thinking' && session.state !== 'asking')) return;
+      const seconds = Math.max(0, Math.floor((Date.now() - session.turnStartedAt) / 1000));
+      const text = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      pixelText(text, x + 13 - Math.floor(pixelWidth(text) / 2), y - 8, PALETTE.bubble, false);
+
+      const occupant = office.people.find((p) => p.desk === desk && p.isAtDesk);
+      if (seconds < LONG_TURN || !occupant) return;
+      const s = seat(desk), top = topOf(occupant, poseOf(occupant, now));
+      const run = (now * 1.5 + occupant.look.phase) % 1;
+      dot(s.x + 4, top + 2 + Math.round(run * 4), PALETTE.sweat, 1 - run * 0.6);
     }
 
     /**
@@ -1227,6 +1557,11 @@
       items.push([d.y + 3.5, () => drawChair(desk)]); // just behind whoever sits in it
     });
     for (const person of office.people) items.push([person.position.y, () => drawPerson(person)]);
+    office.seats.forEach((s, desk) => { if (s.session && s.session.compacting) items.push([DESKS[desk].y + 16, () => drawShredder(desk)]); });
+    for (const intern of office.interns) {
+      // One still waiting for room hasn't come in yet.
+      if (intern.slot !== null || intern.isLeaving) items.push([intern.position.y, () => drawIntern(intern)]);
+    }
     items.sort((a, b) => a[0] - b[0]).forEach(([, draw]) => draw());
 
     if (isNight) fill(0, 0, WIDTH, HEIGHT, PALETTE.night, 0.3);
@@ -1234,6 +1569,7 @@
     drawDetonation();
     drawMicWaves();
     DESKS.forEach((_, desk) => drawScreenLight(desk));
+    DESKS.forEach((_, desk) => drawTimer(desk));
     office.people.forEach(drawBubble);
     DESKS.forEach((_, desk) => drawLabel(desk));
   }

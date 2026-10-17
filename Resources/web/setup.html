@@ -616,8 +616,9 @@
   const AGENTS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode', grok: 'Grok' };
   /** Who the preview shows on its keys, as many as you choose under it. */
   const SAMPLES = [
-    { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true },
-    { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking' },
+    { name: 'api-server', agent: 'claude', agentName: 'Claude Code', state: 'asking', effort: 'high', dial: true, mic: true,
+      activity: 'Waiting for you: Bash' },
+    { name: 'web-app', agent: 'codex', agentName: 'Codex', state: 'thinking', tool: 'Bash', activity: 'Run the tests' },
     { name: 'docs', agent: 'gemini', agentName: 'Gemini CLI', state: 'unread' },
     { name: 'infra', agent: 'opencode', agentName: 'OpenCode', state: 'idle' },
     { name: 'mobile', agent: 'grok', agentName: 'Grok', state: 'thinking' },
