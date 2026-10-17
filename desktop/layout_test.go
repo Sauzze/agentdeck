@@ -429,3 +429,44 @@ func TestOnlyMaxSaysItWasPressed(t *testing.T) {
 		t.Fatal("a press of ☢ Max wasn't kept")
 	}
 }
+
+func TestTheRoomKeepsOnlyChoicesItHas(t *testing.T) {
+	var room Room
+	if err := json.Unmarshal([]byte(`{"floor": "lava", "pet": "cat", "sky": 5, "team": {
+		"api": {"skin": "green", "hair": "blue", "extra": "monocle", "name": "  a nickname far longer than sixteen\n"},
+		"web": "a person", "": {"hair": "pink"}}}`), &room); err != nil {
+		t.Fatal(err)
+	}
+	if room.Floor != "wood" || room.Pet != "cat" || room.Sky != "live" {
+		t.Errorf("floor %q, pet %q, sky %q; want wood, cat and live", room.Floor, room.Pet, room.Sky)
+	}
+	want := TeamMember{Skin: "auto", Hair: "blue", Hairstyle: "auto", Extra: "none", Outfit: "auto", Colour: "auto", Desk: "auto",
+		Name: "a nickname far l"}
+	if got := room.Team["api"]; got != want {
+		t.Errorf("api's agent is %+v, want %+v", got, want)
+	}
+	// A member that isn't an object looks as standard; one with no project is dropped.
+	if got := room.Team["web"]; got != (TeamMember{}.checked()) || len(room.Team) != 2 {
+		t.Errorf("team %+v, want api, and web as standard", room.Team)
+	}
+	for _, team := range []string{`"everyone"`, `[{"skin": "fair"}]`, `5`, `null`} {
+		var room Room
+		if err := json.Unmarshal([]byte(`{"team": `+team+`}`), &room); err != nil || room.Team == nil || len(room.Team) != 0 {
+			t.Errorf("a team of %s gave %v, %v; want an empty team", team, room.Team, err)
+		}
+	}
+}
+
+func TestATeamRemembersFiftyProjectsAtMost(t *testing.T) {
+	team := map[string]TeamMember{}
+	for i := range 60 {
+		team[fmt.Sprintf("p%02d", i)] = TeamMember{Hair: "blue"}
+	}
+	checked := Room{Team: team}.checked().Team
+	if len(checked) != teamLimit || checked["p00"].Hair != "blue" || checked["p49"].Hair != "blue" {
+		t.Fatalf("kept %d projects, want the first %d by name", len(checked), teamLimit)
+	}
+	if _, kept := checked["p50"]; kept {
+		t.Fatal("kept p50, past the first fifty by name")
+	}
+}

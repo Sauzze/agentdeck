@@ -201,16 +201,23 @@ final class DeckRouter: Router {
             deck.refresh()
             respond(.json(setupState()))
 
+        // Every part is checked before any is kept, so a wrong one changes
+        // nothing. An empty folder clears it.
         case ("POST", "/setup/hiring"):
+            var folder = request.query["folder"]
+            if let given = folder {
+                if given.trimmingCharacters(in: .whitespaces).isEmpty {
+                    folder = ""
+                } else {
+                    guard let checked = Deck.folder(given) else { return respond(.status(400, "There's no folder at \(given).")) }
+                    folder = checked
+                }
+            }
+            let agent = request.query["agent"]
+            if let agent, Agent(rawValue: agent) == nil { return respond(.status(400, "Unknown agent")) }
             if let enabled = request.query["enabled"] { config.hiringEnabled = enabled == "1" }
-            if let folder = request.query["folder"] {
-                guard let checked = Deck.folder(folder) else { return respond(.status(400, "There's no folder at \(folder).")) }
-                config.hireFolder = checked
-            }
-            if let agent = request.query["agent"] {
-                guard Agent(rawValue: agent) != nil else { return respond(.status(400, "Unknown agent")) }
-                config.hireAgent = agent
-            }
+            if let folder { config.hireFolder = folder }
+            if let agent { config.hireAgent = agent }
             config.save()
             deck.refresh()
             respond(.json(setupState()))

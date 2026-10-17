@@ -228,7 +228,7 @@ final class Deck {
         // selected now — and even if that session has since gone.
         if action == "mic" && query["phase"] != "down" { return releaseMic(done: done) }
         // A new hire has no session yet, and a swap is of two desks.
-        if action == "hire" { return hire(done: done) }
+        if action == "hire" { return hire(at: query["desk"], done: done) }
         if action == "swap" { return done(swapKeys(query)) }
         guard let session = sessions[id], !session.tty.isEmpty else { return done(.status(404, "Session not found")) }
         let tty = session.tty
@@ -259,7 +259,16 @@ final class Deck {
             pressMic(session, done: done)
         case "fire":
             guard Config.shared.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
-            onTerminal(done) { Terminal.close(tty: tty) }
+            Terminal.queue.async {
+                let fired = Terminal.fire(tty: tty, agent: agent)
+                DispatchQueue.main.async {
+                    switch fired {
+                    case .fired: done(.status(204))
+                    case .notStopped: done(.status(409, "Couldn't stop the agent, so its tab is left open."))
+                    case .gone: done(.status(404, "That agent's tab has gone."))
+                    }
+                }
+            }
         case "clear":
             guard !session.isBusy else { return done(.status(409, "Busy — clear it when \(agent.name) is done")) }
             onTerminal(done) { Terminal.type(agent.newConversation, tty: tty) }
@@ -312,19 +321,41 @@ final class Deck {
         return .status(204)
     }
 
-    /// A new Terminal window in the folder set up for new hires, with the
-    /// agent set up for them at work in it. Its hooks bring it to the deck,
-    /// and the office, as for any session.
-    private func hire(done: @escaping (Response) -> Void) {
+    /// How long after a hire the next is refused. A second tap, or a second
+    /// phone, would otherwise open a second window before the first new hire
+    /// has reached the deck.
+    private static let hireCooldown: TimeInterval = 5
+    private var lastHire: Date?
+
+    /// A new Terminal window with the agent set up for new hires at work in
+    /// it. Hired at a desk whose key is pinned to a project, it starts in that
+    /// project's folder, so it sits down at that desk; otherwise in the folder
+    /// set up for new hires. Its hooks bring it to the deck, and the office,
+    /// as for any session.
+    private func hire(at desk: String?, done: @escaping (Response) -> Void) {
         let config = Config.shared
         guard config.hiringEnabled else { return done(.status(403, Deck.hiringOff)) }
-        guard let folder = Deck.folder(config.hireFolder) else {
+        var pinned: String?
+        if let desk {
+            let (keys, _) = layout()
+            guard let index = Int(desk), keys.indices.contains(index) else { return done(.status(400, "Unknown desk")) }
+            pinned = keys[index].pin.flatMap(Deck.folder)
+        }
+        guard let folder = pinned ?? Deck.folder(config.hireFolder) else {
             return done(.status(409, "Choose a folder for new hires in setup, on your Mac."))
         }
+        if let last = lastHire, Date().timeIntervalSince(last) < Deck.hireCooldown {
+            return done(.status(429, "Hired a moment ago. Try again in a few seconds."))
+        }
+        lastHire = Date()
         let agent = Agent(rawValue: config.hireAgent) ?? .claude
         Terminal.queue.async {
             let ok = Terminal.open(agent.rawValue, in: folder)
-            DispatchQueue.main.async { done(ok ? .status(204) : .status(500, "Terminal didn't open")) }
+            DispatchQueue.main.async {
+                // Nobody was hired, so the next try needn't wait.
+                if !ok { self.lastHire = nil }
+                done(ok ? .status(204) : .status(500, "Terminal didn't open"))
+            }
         }
     }
 
@@ -337,9 +368,20 @@ final class Deck {
         return (expanded as NSString).standardizingPath
     }
 
-    /// Asks for the new hires' folder with the Mac's own panel, from the setup page.
+    /// The folder panel, while it's open.
+    private var hirePanel: NSOpenPanel?
+
+    /// Asks for the new hires' folder with the Mac's own panel, from the setup
+    /// page. Asked again while it's open, it brings that panel forward rather
+    /// than opening another, and answers at once.
     func chooseHireFolder(then done: @escaping () -> Void) {
+        if let open = hirePanel {
+            NSApp.activate(ignoringOtherApps: true)
+            open.makeKeyAndOrderFront(nil)
+            return done()
+        }
         let panel = NSOpenPanel()
+        hirePanel = panel
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
@@ -348,6 +390,7 @@ final class Deck {
         if let current = Deck.folder(Config.shared.hireFolder) { panel.directoryURL = URL(fileURLWithPath: current) }
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { response in
+            self.hirePanel = nil
             if response == .OK, let url = panel.url {
                 Config.shared.hireFolder = url.path
                 Config.shared.save()

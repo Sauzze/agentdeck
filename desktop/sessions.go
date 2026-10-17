@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 // SessionState is what a session is doing, as the keys show it.
@@ -73,6 +74,8 @@ type Subagent struct {
 	Type string `json:"type"`
 	// Its own model, from its own transcript, once it has replied.
 	Model string `json:"model"`
+	// When its transcript was last read for that model.
+	lookedForModelAt time.Time
 }
 
 func (s *Session) Name() string        { return lastPart(s.Folder) }
@@ -320,15 +323,22 @@ func followModel(name string, event map[string]any, session *Session) {
 	}
 }
 
+// modelLookInterval is how often a subagent's transcript may be read for its
+// model: a busy subagent raises several events a second, and each would read
+// the file.
+const modelLookInterval = time.Second
+
 // dressSubagent finds a subagent's model, which no hook names: it's in the
 // first reply of the subagent's own transcript, kept beside its agent's.
-// Looked for with each of its events until found.
+// Looked for with its events until found, at most once a second.
 func dressSubagent(event map[string]any, session *Session) bool {
 	id, _ := event["agent_id"].(string)
 	i := slices.IndexFunc(session.Subagents, func(s Subagent) bool { return s.ID == id })
-	if id == "" || session.Transcript == "" || i < 0 || session.Subagents[i].Model != "" {
+	if id == "" || session.Transcript == "" || i < 0 || session.Subagents[i].Model != "" ||
+		time.Since(session.Subagents[i].lookedForModelAt) < modelLookInterval {
 		return false
 	}
+	session.Subagents[i].lookedForModelAt = time.Now()
 	folder := strings.TrimSuffix(session.Transcript, filepath.Ext(session.Transcript))
 	model := firstModel(filepath.Join(folder, "subagents", "agent-"+id+".jsonl"))
 	if model == "" {

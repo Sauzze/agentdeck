@@ -24,7 +24,6 @@ enum Terminal {
         case pageDown = 121
         case end = 119
         case c = 8
-        case w = 13
         case tab = 48
     }
 
@@ -143,58 +142,91 @@ enum Terminal {
             """, arguments: [folder, command]) == "yes"
     }
 
-    /// Stops what runs in the tab on `tty` and closes it. The job in the
-    /// tab's foreground is asked to end, then made to; with only the shell
-    /// left, Terminal closes it without asking. A window of one tab is
-    /// closed; a tab among others gets ⌘W, which needs Accessibility. Either
-    /// way, the agent has stopped.
-    static func close(tty: String) -> Bool {
-        stopForeground(tty: tty)
-        let outcome = run("""
-            set target to item 1 of argv
-            if application "Terminal" is not running then return "no"
-            tell application "Terminal"
-                repeat with w in windows
-                    repeat with t in tabs of w
-                        if tty of t is target then
-                            if (count of tabs of w) is 1 then
-                                close w
-                                return "closed"
-                            end if
-                            set selected of t to true
-                            set index of w to 1
-                            activate
-                            return "tab"
-                        end if
-                    end repeat
-                end repeat
-            end tell
-            return "no"
-            """, arguments: [tty])
-        switch outcome {
-        case "closed": return true
-        case "tab":
-            if waitUntilFrontmost() { post(.w, modifiers: .maskCommand, times: 1) }
-            return true
-        default: return false
+    /// What firing came to: see `fire(tty:agent:)`.
+    enum Fired {
+        /// The agent has stopped, and its tab is closed, or left as the
+        /// terminal keeps it.
+        case fired
+        /// Something else is in the tab's foreground, or the agent would not
+        /// stop: the tab is left as it was.
+        case notStopped
+        /// No Terminal tab is on that tty.
+        case gone
+    }
+
+    /// Stops the agent in the tab on `tty`, then closes the tab. Only the
+    /// agent is stopped: a tab whose foreground job is something else, such as
+    /// a server started after the agent ended, is left alone. With only the
+    /// shell left, the agent has ended already and the tab just closes.
+    ///
+    /// The agent's job is asked to end, then made to, and the tab is closed
+    /// only once none of it is left, so Terminal closes it without asking.
+    static func fire(tty: String, agent: Agent) -> Fired {
+        // Unknown is not the same as none: nothing is touched.
+        guard let open = openTTYs() else { return .notStopped }
+        // A tab in another terminal app can't be closed from here, so its
+        // agent is not stopped either.
+        guard open.contains(tty) else { return .gone }
+        switch foreground(tty: tty) {
+        case nil:
+            return .notStopped
+        case .job(let job, let names)?:
+            guard names.contains(agent.foregroundName), stop(job) else { return .notStopped }
+            // The agent has gone, and if another job has taken its place, the
+            // tab is that job's now.
+            if case .job? = foreground(tty: tty) { return .fired }
+        case .shell?:
+            break
         }
+        closeTab(tty: tty)
+        return .fired
+    }
+
+    /// Closes the tab on `tty`, which only its shell is left in. Terminal
+    /// counts each tab of a window as a window of its own, which `close`
+    /// closes alone; it can't close a tab. A tab it counts among others is
+    /// sent `exit 0` instead: the shell ends, cleanly whatever the agent
+    /// ended with, and the profile's "When the shell exits" closes the tab
+    /// or keeps it as [Process completed].
+    private static func closeTab(tty: String) {
+        _ = withTab(tty, do: """
+            if (count of tabs of w) is 1 then
+                close w
+            else
+                do script "exit 0" in t
+            end if
+            """)
     }
 
     /// How long a job is given to end when asked, then when made to.
     private static let stopGrace: [(signal: Int32, wait: TimeInterval)] = [(SIGTERM, 3), (SIGKILL, 1)]
 
-    private static func stopForeground(tty: String) {
+    /// Stops the process group `job`, and whether none of it is left.
+    private static func stop(_ job: pid_t) -> Bool {
+        let isGone = { kill(-job, 0) == -1 && errno == ESRCH }
         for (signal, wait) in stopGrace {
-            guard let job = foregroundJob(tty: tty) else { return }
             kill(-job, signal)
             let deadline = Date().addingTimeInterval(wait)
-            while Date() < deadline, foregroundJob(tty: tty) == job { Thread.sleep(forTimeInterval: 0.1) }
+            while Date() < deadline {
+                if isGone() { return true }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
         }
+        return isGone()
     }
 
-    /// The process group in the foreground of the tab on `tty`, unless it's
-    /// the shell's own: Terminal starts each tab's shell under `login`.
-    private static func foregroundJob(tty: String) -> pid_t? {
+    /// What runs in the foreground of a tab.
+    private enum Foreground {
+        /// Nothing but the shell, or not even that once the shell has ended.
+        case shell
+        /// A job: its process group, and the names of the processes in it.
+        case job(pid_t, names: Set<String>)
+    }
+
+    /// The foreground of the tab on `tty`, or nil if `ps` couldn't be asked.
+    /// Terminal starts each tab's shell under `login`, and a job is any
+    /// process group in front of that shell.
+    private static func foreground(tty: String) -> Foreground? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-t", (tty as NSString).lastPathComponent, "-o", "pid=,ppid=,pgid=,tpgid=,comm="]
@@ -204,16 +236,20 @@ enum Terminal {
         do { try process.run() } catch { return nil }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        let rows = String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { line -> (pid: Int32, ppid: Int32, pgid: Int32, tpgid: Int32, command: String)? in
+        let rows = String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { line -> (pid: Int32, ppid: Int32, pgid: Int32, tpgid: Int32, name: String)? in
             let fields = line.split(separator: " ", maxSplits: 4, omittingEmptySubsequences: true)
             guard fields.count == 5, let pid = Int32(fields[0]), let ppid = Int32(fields[1]), let pgid = Int32(fields[2]),
                   let tpgid = Int32(fields[3]) else { return nil }
-            return (pid, ppid, pgid, tpgid, String(fields[4]))
+            return (pid, ppid, pgid, tpgid, (String(fields[4]) as NSString).lastPathComponent)
         }
-        let logins = Set(rows.filter { ($0.command as NSString).lastPathComponent == "login" }.map(\.pid))
-        guard let shell = rows.first(where: { logins.contains($0.ppid) }), let tpgid = rows.first?.tpgid,
-              tpgid > 0, tpgid != shell.pgid else { return nil }
-        return tpgid
+        // Nothing left at all: the shell has ended too.
+        guard let tpgid = rows.first?.tpgid else { return .shell }
+        let logins = Set(rows.filter { $0.name == "login" }.map(\.pid))
+        // A tab with no shell of Terminal's own, such as a profile running a
+        // command of its own, can't be told apart from what runs in it.
+        guard let shell = rows.first(where: { logins.contains($0.ppid) }) else { return nil }
+        guard tpgid > 0, tpgid != shell.pgid else { return .shell }
+        return .job(tpgid, names: Set(rows.filter { $0.pgid == tpgid }.map(\.name)))
     }
 
     /// Keys go to whichever app is in front, so they wait until that is

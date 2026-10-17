@@ -263,7 +263,7 @@ func (d *Deck) snapshot() []byte {
 				"pending": s.PendingEffort != "", "agent": s.Agent, "agentName": s.Agent.Name(),
 				"dial": s.Agent.HasEffortDial(), "mic": s.Agent.HasVoice(),
 				"activity": orNull(s.Activity()), "tool": orNull(s.Tool), "model": orNull(s.Model),
-				"subagents": append([]Subagent{}, s.Subagents...),
+				"subagents":    append([]Subagent{}, s.Subagents...),
 				"maxPressedAt": millisOrNull(s.MaxPressedAt), "compacting": s.Compacting,
 				"turnStartedAt": millisOrNull(s.TurnStartedAt), "errorKind": orNull(s.ErrorKind),
 			}
@@ -480,6 +480,15 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 		if !hiring {
 			return http.StatusForbidden, hiringOff
 		}
+		// The desk is read as the Mac app reads it, though nobody is hired here.
+		if query.Has("desk") {
+			d.mu.Lock()
+			keys, _ := d.layout()
+			d.mu.Unlock()
+			if desk, err := strconv.Atoi(query.Get("desk")); err != nil || desk < 0 || desk >= len(keys) {
+				return http.StatusBadRequest, "Unknown desk"
+			}
+		}
 		return http.StatusNotImplemented, "Hiring from the office needs the Mac app, for now."
 	}
 	d.mu.Lock()
@@ -529,7 +538,10 @@ func (d *Deck) Perform(action, id string, query url.Values) (int, string) {
 		if !hiring {
 			return http.StatusForbidden, hiringOff
 		}
-		return d.inTab(tab, func(t Tab) error { return t.Close() })
+		if status, message := d.inTab(tab, func(t Tab) error { return t.Close() }); status != http.StatusNotFound {
+			return status, message
+		}
+		return http.StatusNotFound, "That agent's tab has gone."
 	case "clear":
 		if busy {
 			return http.StatusConflict, "Busy — clear it when " + agent.Name() + " is done"

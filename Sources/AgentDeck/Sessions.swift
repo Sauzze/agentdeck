@@ -59,6 +59,8 @@ final class Session {
         let type: String
         /// Its own model, from its own transcript, once it has replied.
         var model = ""
+        /// When its transcript was last read for that model.
+        var lookedForModelAt: Date?
     }
 
     init(id: String, agent: Agent, folder: String, project: String, startedAt: Double) {
@@ -241,12 +243,19 @@ final class Sessions {
         }
     }
 
+    /// How often a subagent's transcript may be read for its model: a busy
+    /// subagent raises several events a second, and each would read the file.
+    private static let modelLookInterval: TimeInterval = 1
+
     /// A subagent's model, which no hook names: it's in the first reply of the
-    /// subagent's own transcript, kept beside its agent's. Looked for with each
-    /// of its events until found.
+    /// subagent's own transcript, kept beside its agent's. Looked for with its
+    /// events until found, at most once a second.
     private func dressSubagent(_ event: [String: Any], of session: Session) -> Bool {
         guard let id = event["agent_id"] as? String, !session.transcript.isEmpty,
               let i = session.subagents.firstIndex(where: { $0.id == id }), session.subagents[i].model.isEmpty else { return false }
+        let now = Date()
+        if let last = session.subagents[i].lookedForModelAt, now.timeIntervalSince(last) < Sessions.modelLookInterval { return false }
+        session.subagents[i].lookedForModelAt = now
         let folder = (session.transcript as NSString).deletingPathExtension
         guard let model = Transcripts.firstModel(in: "\(folder)/subagents/agent-\(id).jsonl") else { return false }
         session.subagents[i].model = model

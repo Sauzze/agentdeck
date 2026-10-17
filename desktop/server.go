@@ -463,26 +463,30 @@ func (rt *router) setup(w http.ResponseWriter, r *request) {
 		d.mu.Unlock()
 		writeJSON(w, http.StatusOK, rt.setupState())
 
+	// Every part is checked before any is kept, so a wrong one changes
+	// nothing. An empty folder clears it.
 	case r.Method == http.MethodPost && path == "/setup/hiring":
+		folder := strings.TrimSpace(query.Get("folder"))
+		if folder != "" {
+			checked, ok := existingFolder(folder)
+			if !ok {
+				http.Error(w, "There's no folder at "+query.Get("folder")+".", http.StatusBadRequest)
+				return
+			}
+			folder = checked
+		}
+		if query.Has("agent") && !slices.Contains(agents, Agent(query.Get("agent"))) {
+			http.Error(w, "Unknown agent", http.StatusBadRequest)
+			return
+		}
 		d.mu.Lock()
 		if query.Has("enabled") {
 			config.HiringEnabled = query.Get("enabled") == "1"
 		}
 		if query.Has("folder") {
-			folder, ok := existingFolder(query.Get("folder"))
-			if !ok {
-				d.mu.Unlock()
-				http.Error(w, "There's no folder at "+query.Get("folder")+".", http.StatusBadRequest)
-				return
-			}
 			config.HireFolder = folder
 		}
 		if query.Has("agent") {
-			if !slices.Contains(agents, Agent(query.Get("agent"))) {
-				d.mu.Unlock()
-				http.Error(w, "Unknown agent", http.StatusBadRequest)
-				return
-			}
 			config.HireAgent = query.Get("agent")
 		}
 		config.save()
